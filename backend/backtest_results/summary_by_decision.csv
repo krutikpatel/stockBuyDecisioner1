@@ -1,0 +1,5 @@
+decision,count,avg_return_pct,median_return_pct,win_rate_pct,avg_excess_vs_spy_pct,best_return_pct,worst_return_pct
+BUY_STARTER,58,5.04,5.27,62.1,3.49,73.64,-14.24
+WAIT_FOR_PULLBACK,265,3.89,2.88,61.1,2.52,71.36,-27.48
+WATCHLIST,355,3.96,1.64,57.2,3.03,73.31,-33.09
+AVOID,222,4.05,2.36,56.3,2.02,47.81,-24.23
