@@ -1,8 +1,8 @@
 """Phase 2 unit tests: fundamental and valuation analysis."""
 import pytest
-from app.models.fundamentals import FundamentalData, ValuationData
+from app.models.fundamentals import FundamentalData, StockArchetype, ValuationData
 from app.services.fundamental_analysis_service import score_fundamentals
-from app.services.valuation_analysis_service import score_valuation
+from app.services.valuation_analysis_service import score_valuation, score_valuation_with_archetype
 
 
 # ---------------------------------------------------------------------------
@@ -232,3 +232,98 @@ class TestDerivedMetrics:
         market_cap = 1_000_000_000
         expected = free_cash_flow / market_cap * 100
         assert expected == pytest.approx(10.0, rel=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# US-003: Growth-Adjusted Valuation Tests
+# ---------------------------------------------------------------------------
+
+class TestArchetypeAwareValuation:
+
+    def test_hyper_growth_high_pe_not_heavily_penalised(self):
+        """NVDA/PLTR-like: forward P/E=80, 40% revenue growth → score > 50."""
+        vd = ValuationData(forward_pe=80.0, price_to_sales=25.0, peg_ratio=None)
+        score = score_valuation_with_archetype(
+            vd,
+            StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.40,
+            operating_margin=0.25,
+            gross_margin=0.75,
+        )
+        # Old scorer would give ~20–30 (heavily penalised). New one should be > 50.
+        assert score > 50
+        assert 0 <= score <= 100
+
+    def test_hyper_growth_rule_of_40_bonus(self):
+        """Rule of 40 ≥ 60 should give a meaningful bonus."""
+        vd = ValuationData(forward_pe=50.0, peg_ratio=None)
+        score_high_r40 = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.50, operating_margin=0.20,  # Rule of 40 = 70
+        )
+        score_low_r40 = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.10, operating_margin=0.05,  # Rule of 40 = 15
+        )
+        assert score_high_r40 > score_low_r40
+
+    def test_mature_value_cheap_pe_scores_high(self):
+        """MATURE_VALUE stock with P/E=12, FCF yield=5% → score > 70."""
+        vd = ValuationData(forward_pe=12.0, fcf_yield=5.5, price_to_sales=2.0)
+        score = score_valuation_with_archetype(
+            vd,
+            StockArchetype.MATURE_VALUE,
+            revenue_growth_yoy=0.04,
+        )
+        assert score > 70
+
+    def test_mature_value_expensive_pe_scores_lower_than_hyper_growth(self):
+        """For MATURE_VALUE, high P/E is a real penalty (unlike HYPER_GROWTH)."""
+        vd = ValuationData(forward_pe=45.0, fcf_yield=1.0)
+        score_mature = score_valuation_with_archetype(vd, StockArchetype.MATURE_VALUE)
+        score_hyper = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.35, operating_margin=0.20
+        )
+        assert score_mature < score_hyper
+
+    def test_hyper_growth_slowing_revenue_penalised(self):
+        """HYPER_GROWTH with low Rule of 40 should still score decently but less."""
+        vd = ValuationData(forward_pe=60.0, peg_ratio=None)
+        score_strong = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.50, operating_margin=0.25,
+        )
+        score_slowing = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            revenue_growth_yoy=0.05, operating_margin=-0.10,
+        )
+        assert score_strong > score_slowing
+
+    def test_cyclical_low_pe_not_strongly_rewarded(self):
+        """CYCLICAL stock at low P/E (potential peak earnings) → modest score."""
+        vd = ValuationData(forward_pe=8.0, ev_to_ebitda=6.0, fcf_yield=7.0)
+        score_cyclical = score_valuation_with_archetype(vd, StockArchetype.CYCLICAL_GROWTH)
+        score_mature = score_valuation_with_archetype(vd, StockArchetype.MATURE_VALUE)
+        # Cyclical deliberately doesn't reward ultra-low P/E as much
+        assert score_cyclical <= score_mature
+
+    def test_score_always_in_valid_range(self):
+        """All archetype scorers must return [0, 100]."""
+        vd = ValuationData(forward_pe=200.0, price_to_sales=100.0, fcf_yield=-5.0)
+        for archetype in StockArchetype.ALL:
+            score = score_valuation_with_archetype(vd, archetype)
+            assert 0 <= score <= 100, f"Out of range for {archetype}: {score}"
+
+    def test_high_ps_with_high_gross_margin_not_penalised_for_hyper_growth(self):
+        """High P/S is forgiven for HYPER_GROWTH if gross margin > 60%."""
+        vd = ValuationData(price_to_sales=30.0, forward_pe=70.0, peg_ratio=None)
+        score_high_gm = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            gross_margin=0.75, revenue_growth_yoy=0.35, operating_margin=0.15
+        )
+        score_low_gm = score_valuation_with_archetype(
+            vd, StockArchetype.HYPER_GROWTH,
+            gross_margin=0.30, revenue_growth_yoy=0.35, operating_margin=0.15
+        )
+        assert score_high_gm >= score_low_gm

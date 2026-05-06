@@ -3,6 +3,30 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class MarketRegime:
+    BULL_RISK_ON = "BULL_RISK_ON"
+    BULL_NARROW_LEADERSHIP = "BULL_NARROW_LEADERSHIP"
+    SIDEWAYS_CHOPPY = "SIDEWAYS_CHOPPY"
+    BEAR_RISK_OFF = "BEAR_RISK_OFF"
+    SECTOR_ROTATION = "SECTOR_ROTATION"
+    LIQUIDITY_RALLY = "LIQUIDITY_RALLY"
+
+    ALL = [
+        BULL_RISK_ON, BULL_NARROW_LEADERSHIP, SIDEWAYS_CHOPPY,
+        BEAR_RISK_OFF, SECTOR_ROTATION, LIQUIDITY_RALLY,
+    ]
+
+
+class MarketRegimeAssessment(BaseModel):
+    regime: str = MarketRegime.SIDEWAYS_CHOPPY
+    confidence: float = 0.0
+    implication: str = ""
+    spy_above_50dma: Optional[bool] = None
+    spy_above_200dma: Optional[bool] = None
+    qqq_above_200dma: Optional[bool] = None
+    vix_level: Optional[float] = None
+
+
 class OHLCVBar(BaseModel):
     date: str
     open: float

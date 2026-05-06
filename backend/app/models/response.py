@@ -38,6 +38,8 @@ class HorizonRecommendation(BaseModel):
     decision: str
     score: float
     confidence: str
+    confidence_score: float = 100.0     # 0–100; reduced when data is missing
+    data_completeness_score: float = 100.0  # 0–100; tracks how much data was available
     summary: str
     bullish_factors: list[str] = []
     bearish_factors: list[str] = []
@@ -53,6 +55,22 @@ class DataQualityReport(BaseModel):
     warnings: list[str] = []
 
 
+# Valid label sets for SignalProfile fields
+_MOMENTUM_LABELS = {"VERY_BULLISH", "BULLISH", "NEUTRAL", "BEARISH", "VERY_BEARISH"}
+_VALUATION_LABELS = {"ATTRACTIVE", "FAIR", "ELEVATED", "RISKY"}
+_ENTRY_LABELS = {"IDEAL", "ACCEPTABLE", "EXTENDED", "VERY_EXTENDED"}
+_RISK_LABELS = {"EXCELLENT", "GOOD", "ACCEPTABLE", "POOR"}
+
+
+class SignalProfile(BaseModel):
+    momentum: str       # VERY_BULLISH | BULLISH | NEUTRAL | BEARISH | VERY_BEARISH
+    growth: str         # VERY_BULLISH | BULLISH | NEUTRAL | BEARISH | VERY_BEARISH
+    valuation: str      # ATTRACTIVE | FAIR | ELEVATED | RISKY
+    entry_timing: str   # IDEAL | ACCEPTABLE | EXTENDED | VERY_EXTENDED
+    sentiment: str      # VERY_BULLISH | BULLISH | NEUTRAL | BEARISH | VERY_BEARISH
+    risk_reward: str    # EXCELLENT | GOOD | ACCEPTABLE | POOR
+
+
 class StockAnalysisResult(BaseModel):
     ticker: str
     generated_at: str
@@ -66,6 +84,11 @@ class StockAnalysisResult(BaseModel):
     news: NewsSummary
     recommendations: list[HorizonRecommendation]
     markdown_report: str
+    archetype: str = "PROFITABLE_GROWTH"
+    archetype_confidence: float = 0.0
+    market_regime: str = "SIDEWAYS_CHOPPY"
+    regime_confidence: float = 0.0
+    signal_profile: Optional[SignalProfile] = None
     disclaimer: str = (
         "This is a decision-support tool, not financial advice. "
         "The recommendation is based only on available data. "

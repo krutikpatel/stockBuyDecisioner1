@@ -12,13 +12,16 @@ from app.providers.fundamental_provider import get_fundamental_data, get_valuati
 from app.providers.earnings_provider import get_earnings_data, score_earnings
 from app.providers.news_provider import get_news_items
 from app.providers.options_provider import get_options_snapshot
-from app.services.technical_analysis_service import compute_technicals
+from app.services.technical_analysis_service import compute_technicals, compute_relative_strength
 from app.services.fundamental_analysis_service import score_fundamentals
-from app.services.valuation_analysis_service import score_valuation
+from app.services.valuation_analysis_service import score_valuation, score_valuation_with_archetype
 from app.services.news_sentiment_service import classify_news
 from app.services.scoring_service import compute_scores
 from app.services.recommendation_service import build_recommendations
 from app.services.markdown_report_service import generate_markdown
+from app.services.stock_archetype_service import classify_and_attach
+from app.services.market_regime_service import classify_regime
+from app.services.signal_profile_service import build_signal_profile
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 logger = logging.getLogger(__name__)
@@ -78,12 +81,13 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
         # 2. Technical analysis
         hist_1y = get_history(ticker, "1y", "1d")
         spy_hist = get_history("SPY", "1y", "1d")
+        qqq_hist = get_history("QQQ", "1y", "1d")
 
         sector_etf = get_sector_etf(ticker)
         sector_hist = None
         if sector_etf:
             try:
-                sector_hist = get_history(sector_etf, "1y", "1d")
+                sector_hist = get_history(sector_etf, "6mo", "1d")
             except Exception:
                 pass
 
@@ -96,6 +100,16 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
         valuation = get_valuation_data(ticker, market_cap=market_data.market_cap)
         valuation.valuation_score = score_valuation(valuation)
 
+        # 3a. Classify archetype and compute growth-adjusted valuation
+        fundamentals = classify_and_attach(fundamentals, valuation)
+        valuation.archetype_adjusted_score = score_valuation_with_archetype(
+            valuation,
+            fundamentals.archetype,
+            revenue_growth_yoy=fundamentals.revenue_growth_yoy,
+            operating_margin=fundamentals.operating_margin,
+            gross_margin=fundamentals.gross_margin,
+        )
+
         # 4. Earnings
         earnings = get_earnings_data(ticker)
         earnings.earnings_score = score_earnings(earnings)
@@ -106,7 +120,6 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
 
         # 6. Options (for short-term catalyst score proxy)
         options = get_options_snapshot(ticker)
-        # Use put/call ratio as a mild catalyst/sentiment signal
         catalyst_score = 50.0
         if options.available and options.put_call_ratio is not None:
             pcr = options.put_call_ratio
@@ -114,6 +127,29 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
                 catalyst_score = 65.0  # bullish options flow
             elif pcr > 1.3:
                 catalyst_score = 35.0  # bearish options flow
+
+        # 6a. Sector macro score — real relative strength vs SPY over 6 months
+        sector_macro_score = 50.0
+        if sector_hist is not None and len(sector_hist) >= 63:
+            spy_6m = get_history("SPY", "6mo", "1d")
+            rs = compute_relative_strength(sector_hist["Close"], spy_6m["Close"], period=63)
+            if rs is not None:
+                sector_macro_score = 65.0 if rs > 1.05 else 35.0 if rs < 0.95 else 50.0
+
+        # 6b. Market regime
+        vix_level: float = 20.0
+        try:
+            vix_hist = get_history("^VIX", "1mo", "1d")
+            if len(vix_hist) > 0:
+                vix_level = float(vix_hist["Close"].iloc[-1])
+        except Exception:
+            pass
+
+        regime_assessment = None
+        try:
+            regime_assessment = classify_regime(spy_hist, qqq_hist, vix_level)
+        except Exception:
+            pass
 
         # 7. Aggregate scores
         scores = compute_scores(
@@ -123,6 +159,8 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             earnings=earnings,
             news=news_summary,
             catalyst_score=catalyst_score,
+            sector_macro_score=sector_macro_score,
+            regime_assessment=regime_assessment,
         )
 
         # 8. Recommendations
@@ -136,6 +174,8 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             horizons=request.horizons,
             risk_profile=request.risk_profile,
             current_price=price,
+            regime_assessment=regime_assessment,
+            has_options_data=options.available,
         )
 
         # 9. Data quality
@@ -144,7 +184,10 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             options.available, technicals,
         )
 
-        # 10. Build result (without markdown first — needs the result object)
+        # 10. Signal profile
+        signal_profile = build_signal_profile(technicals, fundamentals, valuation, earnings, news_summary)
+
+        # 11. Build result (without markdown first — needs the result object)
         result = StockAnalysisResult(
             ticker=ticker,
             generated_at=datetime.now(timezone.utc).isoformat(),
@@ -158,6 +201,11 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             news=news_summary,
             recommendations=recommendations,
             markdown_report="",
+            archetype=fundamentals.archetype,
+            archetype_confidence=fundamentals.archetype_confidence,
+            market_regime=regime_assessment.regime if regime_assessment else "SIDEWAYS_CHOPPY",
+            regime_confidence=regime_assessment.confidence if regime_assessment else 0.0,
+            signal_profile=signal_profile,
         )
         result.markdown_report = generate_markdown(result)
 

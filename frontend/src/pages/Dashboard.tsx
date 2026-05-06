@@ -7,6 +7,8 @@ import { ScoreBreakdown } from '../components/ScoreBreakdown';
 import { NewsSection } from '../components/NewsSection';
 import { DataWarnings } from '../components/DataWarnings';
 import { MarkdownReport } from '../components/MarkdownReport';
+import { SignalProfileCard } from '../components/SignalProfileCard';
+import { RegimeArchetypeBar } from '../components/RegimeArchetypeBar';
 
 const RISK_PROFILES = ['conservative', 'moderate', 'aggressive'];
 
@@ -104,6 +106,14 @@ export function Dashboard() {
                 <div>
                   <h2 className="text-3xl font-bold text-white">{result.ticker}</h2>
                   <p className="text-slate-400 text-sm mt-0.5">Generated {new Date(result.generated_at).toLocaleString()}</p>
+                  <div className="mt-2">
+                    <RegimeArchetypeBar
+                      archetype={result.archetype}
+                      archetypeConfidence={result.archetype_confidence}
+                      marketRegime={result.market_regime}
+                      regimeConfidence={result.regime_confidence}
+                    />
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-bold font-mono text-white">${result.current_price.toFixed(2)}</div>
@@ -124,6 +134,11 @@ export function Dashboard() {
 
             {/* Data warnings */}
             <DataWarnings quality={result.data_quality} />
+
+            {/* Signal profile */}
+            {result.signal_profile && (
+              <SignalProfileCard profile={result.signal_profile} />
+            )}
 
             {/* Recommendation cards */}
             <div>

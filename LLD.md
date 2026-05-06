@@ -14,19 +14,23 @@
 5. [Technical Analysis Service](#5-technical-analysis-service)
 6. [Fundamental Analysis Service](#6-fundamental-analysis-service)
 7. [Valuation Analysis Service](#7-valuation-analysis-service)
-8. [Earnings Analysis](#8-earnings-analysis)
-9. [News Sentiment Service](#9-news-sentiment-service)
-10. [Scoring Service](#10-scoring-service)
-11. [Recommendation Service](#11-recommendation-service)
-12. [Risk Management Service](#12-risk-management-service)
-13. [Markdown Report Service](#13-markdown-report-service)
-14. [API Router](#14-api-router)
-15. [Pydantic Models (Full Schema)](#15-pydantic-models-full-schema)
-16. [Frontend Internals](#16-frontend-internals)
-17. [Backtest Engine Internals](#17-backtest-engine-internals)
-18. [Error Handling Map](#18-error-handling-map)
-19. [Test Coverage Map](#19-test-coverage-map)
-20. [Extension Guide](#20-extension-guide)
+8. [Stock Archetype Service](#8-stock-archetype-service)
+9. [Market Regime Service](#9-market-regime-service)
+10. [Earnings Analysis](#10-earnings-analysis)
+11. [News Sentiment Service](#11-news-sentiment-service)
+12. [Scoring Service](#12-scoring-service)
+13. [Recommendation Service](#13-recommendation-service)
+14. [Data Completeness Service](#14-data-completeness-service)
+15. [Signal Profile Service](#15-signal-profile-service)
+16. [Risk Management Service](#16-risk-management-service)
+17. [Markdown Report Service](#17-markdown-report-service)
+18. [API Router](#18-api-router)
+19. [Pydantic Models (Full Schema)](#19-pydantic-models-full-schema)
+20. [Frontend Internals](#20-frontend-internals)
+21. [Backtest Engine Internals](#21-backtest-engine-internals)
+22. [Error Handling Map](#22-error-handling-map)
+23. [Test Coverage Map](#23-test-coverage-map)
+24. [Extension Guide](#24-extension-guide)
 
 ---
 
@@ -42,9 +46,9 @@ usingGptStrategy/
 │   │   │   └── cache_manager.py             # TTLCache singleton + helpers
 │   │   ├── models/
 │   │   │   ├── request.py                   # StockAnalysisRequest
-│   │   │   ├── response.py                  # StockAnalysisResult + sub-models
-│   │   │   ├── market.py                    # MarketData, TechnicalIndicators, S/R
-│   │   │   ├── fundamentals.py              # FundamentalData, ValuationData
+│   │   │   ├── response.py                  # StockAnalysisResult, HorizonRecommendation, SignalProfile
+│   │   │   ├── market.py                    # MarketData, TechnicalIndicators, MarketRegime, MarketRegimeAssessment
+│   │   │   ├── fundamentals.py              # FundamentalData, ValuationData, StockArchetype
 │   │   │   ├── earnings.py                  # EarningsData, EarningsRecord
 │   │   │   └── news.py                      # NewsItem, NewsSummary
 │   │   ├── providers/
@@ -56,8 +60,12 @@ usingGptStrategy/
 │   │   ├── services/
 │   │   │   ├── technical_analysis_service.py
 │   │   │   ├── fundamental_analysis_service.py
-│   │   │   ├── valuation_analysis_service.py
+│   │   │   ├── valuation_analysis_service.py  # score_valuation + score_valuation_with_archetype
+│   │   │   ├── stock_archetype_service.py     # classify_archetype, classify_and_attach
+│   │   │   ├── market_regime_service.py       # classify_regime, REGIME_WEIGHT_ADJUSTMENTS
 │   │   │   ├── news_sentiment_service.py
+│   │   │   ├── data_completeness_service.py   # compute_completeness
+│   │   │   ├── signal_profile_service.py      # build_signal_profile
 │   │   │   ├── scoring_service.py
 │   │   │   ├── recommendation_service.py
 │   │   │   ├── risk_management_service.py
@@ -65,19 +73,24 @@ usingGptStrategy/
 │   │   └── routers/
 │   │       └── stock.py                     # All REST endpoints
 │   ├── backtest/
-│   │   ├── config.py                        # Ticker list, date range, holding periods
+│   │   ├── config.py                        # Ticker list, date range, BENCHMARK_TICKERS
 │   │   ├── data_loader.py                   # Fetch + pickle-cache 3yr history
 │   │   ├── snapshot.py                      # Time-sliced inputs for a test date
-│   │   ├── runner.py                        # Weekly backtest loop
-│   │   ├── outcome.py                       # Forward return computation
-│   │   ├── metrics.py                       # Aggregation: win rate, score correlation
+│   │   ├── runner.py                        # Weekly backtest loop (archetype + regime per snapshot)
+│   │   ├── outcome.py                       # Forward return + QQQ benchmark computation
+│   │   ├── metrics.py                       # Aggregation: win rate, by_regime, by_archetype
 │   │   ├── report.py                        # CSV + self-contained HTML
 │   │   └── run_backtest.py                  # CLI entry point
 │   ├── tests/
 │   │   ├── test_technical_analysis.py       # 38 tests
-│   │   ├── test_fundamental_analysis.py     # 24 tests
+│   │   ├── test_fundamental_analysis.py     # 32 tests (incl. 8 growth-adj valuation tests)
 │   │   ├── test_earnings_analysis.py        # 29 tests
-│   │   └── test_scoring_recommendation.py   # 34 tests
+│   │   ├── test_scoring_recommendation.py   # 53 tests (incl. US-004 + US-005 tests)
+│   │   ├── test_stock_archetype.py          # 19 tests
+│   │   ├── test_market_regime.py            # 18 tests
+│   │   ├── test_data_completeness.py        # 16 tests
+│   │   ├── test_signal_profile.py           # 22 tests
+│   │   └── test_backtest_metrics.py         # 14 tests
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -85,7 +98,9 @@ usingGptStrategy/
 │       ├── App.tsx
 │       ├── pages/Dashboard.tsx
 │       ├── components/
-│       │   ├── RecommendationCard.tsx
+│       │   ├── RecommendationCard.tsx        # 14-label badge colors, completeness/confidence bars
+│       │   ├── SignalProfileCard.tsx         # 6-cell signal grid (new)
+│       │   ├── RegimeArchetypeBar.tsx        # Archetype + regime pill badges (new)
 │       │   ├── ScoreBreakdown.tsx
 │       │   ├── TechnicalChart.tsx
 │       │   ├── NewsSection.tsx
@@ -267,7 +282,7 @@ flowchart LR
 
     GVD -->|"get_ticker_info()"| INFO
 
-    INFO --> FD["FundamentalData\n─────────────────\nrevenue_ttm ← totalRevenue\nrevenue_growth_yoy ← revenueGrowth\neps_ttm ← trailingEps\neps_growth_yoy ← earningsGrowth\ngross_margin ← grossMargins\noperating_margin ← operatingMargins\nnet_margin ← profitMargins\nfree_cash_flow ← freeCashflow\ncash ← totalCash\ntotal_debt ← totalDebt\nnet_debt = totalDebt - totalCash\ncurrent_ratio ← currentRatio\ndebt_to_equity ← debtToEquity\nshares_outstanding ← sharesOutstanding\nroe ← returnOnEquity\nroic ← returnOnAssets (proxy)"]
+    INFO --> FD["FundamentalData\n─────────────────\nrevenue_ttm ← totalRevenue\nrevenue_growth_yoy ← revenueGrowth\neps_ttm ← trailingEps\neps_growth_yoy ← earningsGrowth\ngross_margin ← grossMargins\noperating_margin ← operatingMargins\nnet_margin ← profitMargins\nfree_cash_flow ← freeCashflow\ncash ← totalCash\ntotal_debt ← totalDebt\nnet_debt = totalDebt - totalCash\ncurrent_ratio ← currentRatio\ndebt_to_equity ← debtToEquity\nshares_outstanding ← sharesOutstanding\nroe ← returnOnEquity\nroic ← returnOnAssets (proxy)\nsector ← sector\nbeta ← beta"]
 
     INFO --> VD["ValuationData\n─────────────────\ntrailing_pe ← trailingPE\nforward_pe ← forwardPE\npeg_ratio ← pegRatio (or calculated)\nprice_to_sales ← priceToSalesTrailing12Months\nev_to_ebitda ← enterpriseToEbitda\nprice_to_fcf = marketCap / freeCashflow\nfcf_yield = freeCashflow / marketCap × 100\npeer_comparison_available = False (always)"]
 ```
@@ -278,6 +293,7 @@ flowchart LR
 - `peg_ratio`: uses yfinance `pegRatio`; falls back to `forward_PE / (earningsGrowth × 100)` if missing
 - `price_to_fcf = market_cap / free_cash_flow` (only when FCF > 0)
 - `revenue_growth_qoq`: computed from `quarterly_income_stmt` — `(Q0 - Q1) / |Q1|`
+- `sector` and `beta` are now fetched and stored on `FundamentalData` (used by archetype classifier)
 
 ---
 
@@ -493,7 +509,9 @@ Clamped to [0, 100]
 
 **File:** `backend/app/services/valuation_analysis_service.py`
 
-### Score Formula (starts at 50)
+This service contains two scoring functions: the original archetype-neutral `score_valuation()` (kept for backward compatibility and used in the backtest engine) and the new `score_valuation_with_archetype()` which is called in the live pipeline after archetype classification.
+
+### 7.1 score_valuation (baseline, archetype-neutral)
 
 ```
 Forward P/E:                  PEG Ratio:
@@ -518,11 +536,188 @@ FCF Yield:                    Trailing P/E (sanity check):
 Clamped to [0, 100]
 ```
 
-**Why valuation scores are low for high-growth tech:** Forward P/E > 40 = -20 points alone. NVDA, PLTR, AVGO all had P/E > 40 throughout 2024–2025, so their valuation scores consistently sat at 23–45. This is a known calibration issue for growth stocks — see [Extension Guide](#20-extension-guide).
+### 7.2 score_valuation_with_archetype (growth-adjusted)
+
+Called in the live pipeline after `classify_and_attach()`. Returns `ValuationData.archetype_adjusted_score`. The scoring service prefers this score over the raw `valuation_score` when it is > 0.
+
+```mermaid
+flowchart TD
+    SVA["score_valuation_with_archetype(data, archetype, revenue_growth_yoy, operating_margin, gross_margin)"]
+
+    SVA --> HG{"archetype ==\nHYPER_GROWTH or\nSPECULATIVE_STORY?"}
+    HG -->|Yes| RULE40["Rule of 40 = rev_growth_pct + op_margin_pct\n≥ 60 → +15\n≥ 40 → +8\n≥ 20 → 0\n< 20 → -10\n\nPEG primary (softer: ≤ 2.5 → 0, ≤ 4.0 → -8)\nP/E soft (≤ 50 → 0, ≤ 80 → -5, >80 → -10)\nP/S: exempt if gross_margin > 60%\nFCF yield bonus if ≥ 3%"]
+
+    SVA --> MV{"archetype ==\nMATURE_VALUE?"}
+    MV -->|Yes| STRICT["Stricter thresholds\nP/E: ≤ 12 → +20, ≤ 18 → +12, > 35 → -20\nFCF yield: ≥ 6% → +15 (primary signal)\nP/S: > 10 → -8\nEV/EBITDA: > 25 → -10"]
+
+    SVA --> CYC{"archetype ==\nCYCLICAL_GROWTH?"}
+    CYC -->|Yes| CYCL["EV/EBITDA is primary (avoid P/E peak trap)\nP/E: ≤ 10 → +3 only (may be peak earnings)\nP/E: ≤ 20 → +8"]
+
+    SVA --> DEF{"archetype ==\nDEFENSIVE or\nCOMMODITY_CYCLICAL?"}
+    DEF -->|Yes| DEFL["Standard + stability bias\nFCF yield: ≥ 5% → +12\nP/E: > 40 → -18 (stricter than growth)"]
+
+    SVA --> PROF{"else (PROFITABLE_GROWTH\nor TURNAROUND)"}
+    PROF -->|Yes| ORIG["Fall through to score_valuation()\n(original formula)"]
+```
+
+**Key principle:** HYPER_GROWTH stocks with forward P/E > 40 but Rule of 40 ≥ 60 receive a positive adjustment instead of the -20 penalty from the baseline scorer. This corrects the systematic underscoring of NVDA, PLTR, and similar stocks.
 
 ---
 
-## 8. Earnings Analysis
+## 8. Stock Archetype Service
+
+**File:** `backend/app/services/stock_archetype_service.py`
+
+### Archetype Enum
+
+```python
+class StockArchetype:
+    HYPER_GROWTH       = "HYPER_GROWTH"       # rev growth > 30% or > 20% with high P/E
+    PROFITABLE_GROWTH  = "PROFITABLE_GROWTH"  # rev > 15%, positive margins, FCF
+    CYCLICAL_GROWTH    = "CYCLICAL_GROWTH"     # high beta, cyclical sector
+    MATURE_VALUE       = "MATURE_VALUE"        # slow growth, stable earnings, FCF
+    TURNAROUND         = "TURNAROUND"          # recovering from decline
+    SPECULATIVE_STORY  = "SPECULATIVE_STORY"  # high P/S + unprofitable + fast growth
+    DEFENSIVE          = "DEFENSIVE"           # low beta, Healthcare/Utilities/Consumer Def
+    COMMODITY_CYCLICAL = "COMMODITY_CYCLICAL" # Energy/Basic Materials
+```
+
+### Classification Priority (first match wins)
+
+```mermaid
+flowchart TD
+    C["classify_archetype(fundamentals, valuation)"]
+
+    C --> P1{"P/S > 20 AND\nunprofitable AND\nrev_growth > 20%?\nOR P/S > 40?"}
+    P1 -->|Yes| SS["SPECULATIVE_STORY\nconf 70–80%"]
+
+    P1 -->|No| P2{"rev_growth_yoy > 30%?\nOR (> 20% AND fwd_pe > 40)?"}
+    P2 -->|Yes| HG["HYPER_GROWTH\nconf 70–95% (scales with growth)"]
+
+    P2 -->|No| P3{"sector in Defensive\nAND beta < 0.8?"}
+    P3 -->|Yes| DF["DEFENSIVE conf 80%\n(65% if sector match only)"]
+
+    P3 -->|No| P4{"sector in Energy\nor Basic Materials?"}
+    P4 -->|Yes| CC["COMMODITY_CYCLICAL\nconf 78%"]
+
+    P4 -->|No| P5{"beta > 1.3 AND\nsector in Cyclical?"}
+    P5 -->|Yes| CG["CYCLICAL_GROWTH\nconf 72%"]
+
+    P5 -->|No| P6{"rev_growth > 15% AND\n(op_margin > 0 OR FCF > 0)?"}
+    P6 -->|Yes| PG["PROFITABLE_GROWTH\nconf 65–85%"]
+
+    P6 -->|No| P7{"eps recovering OR\nrev QoQ recovering\nAND eps > 0?"}
+    P7 -->|Yes| TA["TURNAROUND\nconf 60%"]
+
+    P7 -->|No| P8{"slow growth AND profitable?"}
+    P8 -->|Yes| MV["MATURE_VALUE\nconf 68%"]
+
+    P8 -->|No| FB["PROFITABLE_GROWTH (fallback)\nconf 40%"]
+```
+
+### Public API
+
+```python
+classify_archetype(fundamentals: FundamentalData, valuation: ValuationData) -> tuple[str, float]
+    # Returns (archetype_string, confidence_0_to_100)
+
+classify_and_attach(fundamentals: FundamentalData, valuation: ValuationData) -> FundamentalData
+    # Mutates fundamentals.archetype and fundamentals.archetype_confidence in place, returns fundamentals
+```
+
+**Sector sets used:**
+```python
+_DEFENSIVE_SECTORS  = {"Healthcare", "Consumer Defensive", "Utilities"}
+_COMMODITY_SECTORS  = {"Energy", "Basic Materials"}
+_CYCLICAL_SECTORS   = {"Energy", "Basic Materials", "Industrials", "Consumer Cyclical"}
+```
+
+---
+
+## 9. Market Regime Service
+
+**File:** `backend/app/services/market_regime_service.py`
+
+### Regime Enum
+
+```python
+class MarketRegime:
+    BULL_RISK_ON           = "BULL_RISK_ON"           # SPY+QQQ above 200DMA, VIX < 20
+    BULL_NARROW_LEADERSHIP = "BULL_NARROW_LEADERSHIP" # QQQ up, SPY equal-weight lagging
+    SIDEWAYS_CHOPPY        = "SIDEWAYS_CHOPPY"        # SPY near 200DMA, indeterminate
+    BEAR_RISK_OFF          = "BEAR_RISK_OFF"          # SPY below 200DMA, VIX > 25
+    SECTOR_ROTATION        = "SECTOR_ROTATION"        # SPY stable, sector ETFs diverging
+    LIQUIDITY_RALLY        = "LIQUIDITY_RALLY"        # SPY above 200DMA, VIX falling from >25
+```
+
+### Classification Decision Tree
+
+```mermaid
+flowchart TD
+    CR["classify_regime(spy_df, qqq_df, vix_level)"]
+
+    CR --> NODATA{"spy_df empty\nor < 50 bars?"}
+    NODATA -->|Yes| SIDC["SIDEWAYS_CHOPPY\nconf=20 (fallback)"]
+
+    NODATA -->|No| CALCDMA["Compute SPY 50DMA, 200DMA\nQQQ 200DMA (if ≥ 200 bars)"]
+
+    CALCDMA --> BEAR{"spy_above_200 == False\nAND vix > 20?"}
+    BEAR -->|"vix > 25"| BRO["BEAR_RISK_OFF conf=82"]
+    BEAR -->|"qqq_above_200 == False"| BRO70["BEAR_RISK_OFF conf=70"]
+    BEAR -->|"QQQ still above"| SID55["SIDEWAYS_CHOPPY conf=55"]
+
+    CALCDMA --> BULL{"spy_above_200 == True\nAND spy_above_50 == True?"}
+    BULL -->|"vix < 20 AND qqq_above_200"| BUL85["BULL_RISK_ON conf=85"]
+    BULL -->|"vix < 20, no QQQ above 200"| BNL68["BULL_NARROW_LEADERSHIP conf=68"]
+    BULL -->|"vix < 25"| LIQ62["LIQUIDITY_RALLY conf=62"]
+    BULL -->|"no vix, qqq_above_200"| BUL70["BULL_RISK_ON conf=70"]
+    BULL -->|"no vix, no qqq"| BNL58["BULL_NARROW_LEADERSHIP conf=58"]
+
+    CALCDMA --> CHOP{"spy_above_200 True\nspy_above_50 False?"}
+    CHOP -->|Yes| SID60["SIDEWAYS_CHOPPY conf=60"]
+```
+
+### Regime Weight Adjustments (`REGIME_WEIGHT_ADJUSTMENTS`)
+
+Multipliers applied **per intermediate score key** in `_apply_regime_multipliers()`. Keys must match the weight dict key names in scoring_service.py.
+
+| Regime | Key | Multiplier |
+|--------|-----|-----------|
+| BULL_RISK_ON | technical_momentum | 1.20 |
+| BULL_RISK_ON | relative_strength | 1.15 |
+| BULL_RISK_ON | growth_acceleration | 1.15 |
+| BULL_RISK_ON | valuation_relative_growth | 0.70 |
+| BULL_RISK_ON | fcf_quality | 0.90 |
+| BEAR_RISK_OFF | valuation_relative_growth | 1.30 |
+| BEAR_RISK_OFF | balance_sheet_strength | 1.25 |
+| BEAR_RISK_OFF | fcf_quality | 1.20 |
+| BEAR_RISK_OFF | technical_momentum | 0.90 |
+| BEAR_RISK_OFF | catalyst_news | 0.90 |
+| SIDEWAYS_CHOPPY | risk_reward | 1.25 |
+| SIDEWAYS_CHOPPY | relative_strength | 1.10 |
+| SIDEWAYS_CHOPPY | technical_momentum | 0.85 |
+| BULL_NARROW_LEADERSHIP | technical_momentum | 1.15 |
+| BULL_NARROW_LEADERSHIP | relative_strength | 1.20 |
+| BULL_NARROW_LEADERSHIP | sector_strength | 1.15 |
+| LIQUIDITY_RALLY | technical_momentum | 1.10 |
+| LIQUIDITY_RALLY | catalyst_news | 1.10 |
+| LIQUIDITY_RALLY | valuation_relative_growth | 0.80 |
+| SECTOR_ROTATION | sector_strength | 1.30 |
+| SECTOR_ROTATION | relative_strength | 1.15 |
+
+### Public API
+
+```python
+classify_regime(spy_df, qqq_df, vix_level=None) -> MarketRegimeAssessment
+    # Returns regime assessment with confidence + diagnostic flags
+
+REGIME_WEIGHT_ADJUSTMENTS: dict[str, dict[str, float]]
+    # Imported by scoring_service to apply per-key multipliers
+```
+
+---
+
+## 10. Earnings Analysis
 
 **File:** `backend/app/providers/earnings_provider.py`
 
@@ -556,7 +751,7 @@ Clamped to [0, 100]
 
 ---
 
-## 9. News Sentiment Service
+## 11. News Sentiment Service
 
 **File:** `backend/app/services/news_sentiment_service.py`
 
@@ -614,7 +809,7 @@ score = 50 + ratio × 40   → range [10, 90] in practice
 
 ---
 
-## 10. Scoring Service
+## 12. Scoring Service
 
 **File:** `backend/app/services/scoring_service.py`
 
@@ -622,18 +817,81 @@ score = 50 + ratio × 40   → range [10, 90] in practice
 
 ```python
 SHORT_TERM_WEIGHTS = {
-    "technical": 35, "catalyst": 20, "news_sentiment": 15,
-    "risk_reward": 15, "sector_macro": 10, "fundamental": 5,
+    "technical_momentum": 30,   # technicals.technical_score
+    "relative_strength":  20,   # technicals.technical_score (RS component)
+    "catalyst_news":      20,   # avg(catalyst_score, news_score)
+    "options_flow":       10,   # catalyst_score (PCR-derived)
+    "market_regime":      10,   # _regime_score(assessment)
+    "risk_reward":        10,   # risk_reward_score (default 50)
 }
+
 MEDIUM_TERM_WEIGHTS = {
-    "fundamental": 25, "earnings": 25, "technical": 20,
-    "valuation": 15, "catalyst": 10, "risk_reward": 5,
+    "earnings_revision":          25,   # earnings.earnings_score
+    "growth_acceleration":        20,   # fundamentals.fundamental_score
+    "technical_trend":            20,   # technicals.technical_score
+    "sector_strength":            15,   # sector_macro_score
+    "valuation_relative_growth":  10,   # archetype_adjusted_score (or valuation_score)
+    "catalyst_news":              10,   # avg(catalyst_score, news_score)
 }
+
 LONG_TERM_WEIGHTS = {
-    "fundamental": 35, "valuation": 20, "earnings": 15,
-    "risk_reward": 10, "sector_macro": 10, "technical": 5, "news_sentiment": 5,
+    "business_quality":           25,   # fundamentals.fundamental_score
+    "growth_durability":          20,   # fundamentals.fundamental_score
+    "fcf_quality":                15,   # fundamentals.fundamental_score
+    "balance_sheet_strength":     15,   # fundamentals.fundamental_score
+    "valuation_relative_growth":  15,   # archetype_adjusted_score (or valuation_score)
+    "competitive_moat":           10,   # fundamentals.fundamental_score
 }
+
 # _verify_weights() called at module load — AssertionError if any sum ≠ 100
+```
+
+### Intermediate Score Mapping
+
+Many LONG_TERM keys currently map to `fundamental_score` — they are deliberately split to allow future specialization (e.g. separate FCF score, moat score) without changing the weight structure.
+
+```python
+# SHORT_TERM intermediate scores (short_base dict)
+{
+    "technical_momentum": technicals.technical_score,
+    "relative_strength":  technicals.technical_score,
+    "catalyst_news":      avg(catalyst_score, news.news_score),
+    "options_flow":       catalyst_score,
+    "market_regime":      _regime_score(regime_assessment),
+    "risk_reward":        risk_reward_score,
+}
+
+# MEDIUM_TERM intermediate scores (medium_base dict)
+{
+    "earnings_revision":         earnings.earnings_score,
+    "growth_acceleration":       fundamentals.fundamental_score,
+    "technical_trend":           technicals.technical_score,
+    "sector_strength":           sector_macro_score,
+    "valuation_relative_growth": val_score,   # archetype-adjusted if > 0
+    "catalyst_news":             avg(catalyst_score, news.news_score),
+}
+```
+
+### `_regime_score` — Converts regime + confidence to a 0–100 score
+
+```python
+def _regime_score(assessment: Optional[MarketRegimeAssessment]) -> float:
+    # BULL_RISK_ON:            50 + conf × 0.35  → 50–85 range
+    # BEAR_RISK_OFF:           50 - conf × 0.35  → 15–50 range
+    # BULL_NARROW_LEADERSHIP,
+    # LIQUIDITY_RALLY:         50 + conf × 0.15
+    # SIDEWAYS_CHOPPY:         50.0
+    # None:                    50.0
+```
+
+### `_apply_regime_multipliers` — Adjusts per-key scores
+
+```python
+def _apply_regime_multipliers(scores, assessment) -> dict[str, float]:
+    # Reads REGIME_WEIGHT_ADJUSTMENTS[assessment.regime]
+    # Multiplies each matching key's score by its multiplier
+    # Clamps result to [0, 100]
+    # Keys not in the multiplier map pass through unchanged
 ```
 
 ### `compute_scores` Signature
@@ -645,16 +903,18 @@ def compute_scores(
     valuation: ValuationData,
     earnings: EarningsData,
     news: NewsSummary,
-    catalyst_score: float = 50.0,     # derived from put/call ratio
-    sector_macro_score: float = 50.0, # always 50 (static)
-    risk_reward_score: float = 50.0,  # always 50 (default; not computed separately)
+    catalyst_score: float = 50.0,
+    sector_macro_score: float = 50.0,
+    risk_reward_score: float = 50.0,
+    regime_assessment: Optional[MarketRegimeAssessment] = None,
 ) -> dict[str, dict[str, float]]:
 ```
 
 **Return structure:**
 ```python
 {
-    "short_term":  {"composite": 62.5, "technical": 70.0, "fundamental": 85.0, ...},
+    "short_term":  {"composite": 62.5, "technical": 70.0, "fundamental": 85.0, ...
+                    # all raw sub-scores + all adjusted intermediate scores},
     "medium_term": {"composite": 58.3, ...},
     "long_term":   {"composite": 61.1, ...},
 }
@@ -668,34 +928,80 @@ composite = Σ(score[key] * weight[key]) / Σ(weights)
 
 ---
 
-## 11. Recommendation Service
+## 13. Recommendation Service
 
 **File:** `backend/app/services/recommendation_service.py`
 
-### Decision Thresholds by Horizon
+### 14 Decision Labels
+
+```python
+ALL_DECISIONS = {
+    "BUY_NOW",                  # ≥ 80, not extended, support visible
+    "BUY_STARTER",              # 70–80 or ≥ 80 + no support
+    "BUY_STARTER_EXTENDED",     # strong but extended in BULL regime — smaller size
+    "BUY_ON_PULLBACK",          # extended + non-bull regime, or 65–70
+    "BUY_ON_BREAKOUT",          # long-term: strong but extended
+    "BUY_AFTER_EARNINGS",       # short-term: earnings < 30d and score 55–70
+    "WATCHLIST",                # 50–65 (short) or 55–68 (medium) or 60–75 (long)
+    "WATCHLIST_NEEDS_CATALYST", # (reserved for future use)
+    "HOLD_EXISTING_DO_NOT_ADD", # (reserved for future use)
+    "AVOID",                    # generic low score fallback
+    "AVOID_BAD_BUSINESS",       # revenue declining + margin or beat-rate deterioration
+    "AVOID_BAD_CHART",          # downtrend + rs_vs_spy < 0.8
+    "AVOID_BAD_RISK_REWARD",    # (reserved for future use)
+    "AVOID_LOW_CONFIDENCE",     # data_completeness < 55.0 (forced override)
+}
+```
+
+### Helper Functions
+
+```python
+def _is_bull_regime(regime) -> bool:
+    # regime.regime in (BULL_RISK_ON, LIQUIDITY_RALLY)
+
+def _is_bear_regime(regime) -> bool:
+    # regime.regime == BEAR_RISK_OFF
+
+def _chart_is_weak(technicals) -> bool:
+    # trend.label == "downtrend" AND rs_vs_spy < 0.8
+    # Both conditions required — weak RS alone is not enough
+
+def _business_deteriorating(fundamentals, earnings) -> bool:
+    # revenue_growth_yoy < 0
+    # AND (operating_margin < -0.05 OR beat_rate < 0.40)
+    # Revenue decline + either margin compression OR earnings miss history
+```
+
+### Decision Logic by Horizon
 
 ```mermaid
-flowchart LR
-    subgraph ST["Short-Term Thresholds"]
-        ST1["score ≥ 80 AND NOT extended\nAND nearest_support exists → BUY_NOW"]
-        ST2["score ≥ 80 AND NOT extended\nno nearest_support → BUY_STARTER"]
-        ST3["extended AND score ≥ 65 → WAIT_FOR_PULLBACK\n(§8.2 — extension overrides BUY_STARTER)"]
-        ST4["70 ≤ score < 80 → BUY_STARTER"]
-        ST5["score ≥ 65 → WAIT_FOR_PULLBACK"]
-        ST6["score < 50 → AVOID"]
-        ST7["50 ≤ score < 65 → WATCHLIST"]
+flowchart TD
+    subgraph ST["_decide_short_term(score, technicals, fundamentals, earnings, regime)"]
+        ST0["chart_is_weak AND score < 55\n→ AVOID_BAD_CHART"]
+        ST0b["business_deteriorating AND score < 55\n→ AVOID_BAD_BUSINESS"]
+        ST0c["within_30_days AND 55 ≤ score < 70\n→ BUY_AFTER_EARNINGS"]
+        ST1["score ≥ 80 AND NOT extended:\n  nearest_support exists → BUY_NOW\n  else → BUY_STARTER"]
+        ST2["extended AND score ≥ 65:\n  bull regime → BUY_STARTER_EXTENDED\n  else → BUY_ON_PULLBACK"]
+        ST3["70 ≤ score < 80 → BUY_STARTER"]
+        ST4["score ≥ 65 → BUY_ON_PULLBACK"]
+        ST5["score < 50:\n  bear + chart weak → AVOID_BAD_CHART\n  else → AVOID"]
+        ST6["50 ≤ score < 65 → WATCHLIST"]
     end
 
-    subgraph MT["Medium-Term Thresholds"]
+    subgraph MT["_decide_medium_term(score, technicals, earnings, fundamentals, regime)"]
+        MT0["business_deteriorating AND score < 65\n→ AVOID_BAD_BUSINESS"]
+        MT0b["chart_is_weak AND score < 55\n→ AVOID_BAD_CHART"]
         MT1["score ≥ 82 AND NOT extended → BUY_NOW"]
-        MT2["72 ≤ score < 82 → BUY_STARTER"]
-        MT3["score ≥ 82 AND extended → BUY_STARTER"]
-        MT4["score ≥ 68 (with or without extension) → WAIT_FOR_PULLBACK"]
+        MT2["72 ≤ score < 82 OR (≥ 82 AND extended) → BUY_STARTER"]
+        MT3["score ≥ 68 AND extended:\n  bull → BUY_STARTER_EXTENDED\n  else → BUY_ON_PULLBACK"]
+        MT4["score ≥ 68 → BUY_ON_PULLBACK"]
         MT5["55 ≤ score < 68 → WATCHLIST"]
         MT6["score < 55 → AVOID"]
     end
 
-    subgraph LT["Long-Term Thresholds"]
+    subgraph LT["_decide_long_term(score, technicals, fundamentals, earnings, regime)"]
+        LT0["business_deteriorating AND score < 65\n→ AVOID_BAD_BUSINESS"]
+        LT0b["chart_is_weak AND score < 60\n→ AVOID_BAD_CHART"]
         LT1["score ≥ 85 AND NOT extended → BUY_NOW"]
         LT2["75 ≤ score < 85 → BUY_STARTER"]
         LT3["score ≥ 75 AND extended → BUY_ON_BREAKOUT"]
@@ -703,6 +1009,33 @@ flowchart LR
         LT5["score < 60 → AVOID"]
     end
 ```
+
+**Key regime rule:** In BULL_RISK_ON, valuation-driven low scores alone cannot trigger AVOID. Expensive + strong chart → `BUY_STARTER_EXTENDED`.
+
+### `build_recommendations` Signature
+
+```python
+def build_recommendations(
+    technicals: TechnicalIndicators,
+    fundamentals: FundamentalData,
+    valuation: ValuationData,
+    earnings: EarningsData,
+    news: NewsSummary,
+    scores: dict[str, dict[str, float]],
+    horizons: list[str],
+    risk_profile: str,
+    current_price: float,
+    regime_assessment: Optional[MarketRegimeAssessment] = None,
+    has_options_data: bool = False,
+    has_sufficient_price_history: bool = True,
+) -> list[HorizonRecommendation]:
+```
+
+**Flow:**
+1. Call `compute_completeness()` once before the horizon loop
+2. For each horizon: if `completeness < 55.0` → force `AVOID_LOW_CONFIDENCE` (skip normal decision logic)
+3. Otherwise call horizon-specific `_decide_*` function
+4. Populate `HorizonRecommendation` with `confidence_score` and `data_completeness_score`
 
 ### Confidence Mapping
 
@@ -713,42 +1046,143 @@ score ≥ 50 → "medium"
 score < 50 → "low"
 ```
 
-### Bullish/Bearish Factor Rules
+---
 
-Each factor is generated by inspecting the computed indicators against fixed thresholds. Up to 5 bullish and 5 bearish factors are returned per horizon. Medium/long-term horizons additionally check fundamental and valuation factors.
+## 14. Data Completeness Service
 
+**File:** `backend/app/services/data_completeness_service.py`
+
+### Deduction Table
+
+| Gap Category | Deduction | Warning Message |
+|---|---|---|
+| No news items | -15 | "No recent news found — sentiment signal unavailable." |
+| No next earnings date | -10 | "Next earnings date could not be determined." |
+| No peer comparison | -5 | "Peer valuation comparison unavailable." |
+| No options data | -15 | "Options flow data unavailable — catalyst signal is estimated." |
+| Insufficient price history | -5 | "Less than 6 months of price history available." |
+
+**Maximum deductions: -50 → minimum completeness = 50**
+
+### Constants
+
+```python
+_CONFIDENCE_CAP_THRESHOLD = 60.0   # completeness below this → cap confidence
+_CONFIDENCE_CAP_VALUE     = 60.0   # confidence capped to this value
+AVOID_LOW_CONFIDENCE_THRESHOLD = 55.0
+# Rationale: min completeness = 50 (all 5 deductions). 55.0 is reachable when
+# options + news + (earnings date OR insufficient history) all missing.
 ```
-Technical factors (all horizons):
-  trend == strong_uptrend        → bullish: "Strong uptrend..."
-  trend == downtrend             → bearish: "Downtrend..."
-  50 ≤ RSI ≤ 70                  → bullish: "RSI at X — healthy momentum"
-  RSI > 75                       → bearish: "RSI at X — overbought"
-  RSI < 35                       → bearish: "RSI at X — oversold"
-  MACD histogram > 0             → bullish
-  is_extended                    → bearish
-  volume == above_average        → bullish
-  volume == below_average        → bearish
-  rs_vs_spy > 1.2                → bullish: "Strong relative strength vs SPY"
-  rs_vs_spy < 0.8                → bearish: "Underperforming SPY"
 
-Medium/Long-term additional:
-  revenue_growth_yoy ≥ 15%       → bullish
-  revenue_growth_yoy < 0%        → bearish
-  free_cash_flow > 0             → bullish
-  net_debt < 0 (net cash)        → bullish
-  forward_pe ≤ 20                → bullish: "Forward P/E of Xx — reasonable"
-  forward_pe > 40                → bearish: "Forward P/E of Xx — extended"
-  peg_ratio ≤ 1.5                → bullish: "PEG ratio X — GARP"
-  beat_rate ≥ 75%                → bullish: "Consistent earnings beats"
-  beat_rate < 40%                → bearish: "Poor beat history"
-  within_30_days                 → bearish: "Earnings within 30 days"
-  positive_count > negative_count → bullish
-  negative_count > positive_count → bearish
+### `compute_completeness` Signature
+
+```python
+def compute_completeness(
+    news: NewsSummary,
+    earnings: EarningsData,
+    valuation: ValuationData,
+    has_options_data: bool = False,
+    has_sufficient_price_history: bool = True,
+) -> tuple[float, float, list[str]]:
+    # Returns: (data_completeness_score, confidence_score, warnings)
+```
+
+```mermaid
+flowchart TD
+    CC["compute_completeness(news, earnings, valuation, has_options, has_history)"]
+    CC --> D1{"no news items?"}
+    D1 -->|Yes| W1["-15 + warning"]
+    CC --> D2{"next_earnings_date is None?"}
+    D2 -->|Yes| W2["-10 + warning"]
+    CC --> D3{"peer_comparison_available == False?"}
+    D3 -->|Yes| W3["-5 + warning"]
+    CC --> D4{"not has_options_data?"}
+    D4 -->|Yes| W4["-15 + warning"]
+    CC --> D5{"not has_sufficient_price_history?"}
+    D5 -->|Yes| W5["-5 + warning"]
+    W1 --> CLAMP["completeness = max(0, sum)\nconfidence = 60 if completeness < 60 else 100"]
+    W2 --> CLAMP
+    W3 --> CLAMP
+    W4 --> CLAMP
+    W5 --> CLAMP
+    CLAMP --> RETURN["return (completeness, confidence_score, warnings)"]
 ```
 
 ---
 
-## 12. Risk Management Service
+## 15. Signal Profile Service
+
+**File:** `backend/app/services/signal_profile_service.py`
+
+### Label Domains
+
+| Field | Possible Values | Source |
+|-------|----------------|--------|
+| `momentum` | VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH | technicals.technical_score + is_extended |
+| `growth` | VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH | fundamentals.fundamental_score |
+| `valuation` | ATTRACTIVE / FAIR / ELEVATED / RISKY | archetype_adjusted_score (fallback: valuation_score) |
+| `entry_timing` | IDEAL / ACCEPTABLE / EXTENDED / VERY_EXTENDED | is_extended + extension_pct_above_20ma + trend |
+| `sentiment` | VERY_BULLISH / BULLISH / NEUTRAL / BEARISH / VERY_BEARISH | news.news_score |
+| `risk_reward` | EXCELLENT / GOOD / ACCEPTABLE / POOR | avg(earnings_score, technical_score) |
+
+### Score → Label Mapping
+
+```python
+def _momentum_label(technical_score, is_extended) -> str:
+    # ≥ 80 AND not extended → VERY_BULLISH
+    # ≥ 65                  → BULLISH
+    # ≥ 50                  → NEUTRAL
+    # ≥ 35                  → BEARISH
+    # < 35                  → VERY_BEARISH
+
+def _growth_label(fundamental_score) -> str:
+    # Same thresholds as momentum (80/65/50/35)
+
+def _valuation_label(valuation_score) -> str:
+    # ≥ 70 → ATTRACTIVE
+    # ≥ 55 → FAIR
+    # ≥ 40 → ELEVATED
+    # < 40 → RISKY
+    # Note: uses archetype_adjusted_score if > 0, else raw valuation_score
+
+def _entry_label(technicals) -> str:
+    # is_extended AND ext_20ma ≥ 15% → VERY_EXTENDED
+    # is_extended                    → EXTENDED
+    # strong_uptrend AND not extended → IDEAL
+    # else                           → ACCEPTABLE
+
+def _sentiment_label(news_score) -> str:
+    # ≥ 75 → VERY_BULLISH
+    # ≥ 60 → BULLISH
+    # ≥ 40 → NEUTRAL
+    # ≥ 25 → BEARISH
+    # < 25 → VERY_BEARISH
+
+def _risk_reward_label(earnings_score, technical_score) -> str:
+    # combined = (earnings_score + technical_score) / 2
+    # ≥ 75 → EXCELLENT
+    # ≥ 60 → GOOD
+    # ≥ 45 → ACCEPTABLE
+    # < 45 → POOR
+```
+
+### `build_signal_profile` Signature
+
+```python
+def build_signal_profile(
+    technicals: TechnicalIndicators,
+    fundamentals: FundamentalData,
+    valuation: ValuationData,
+    earnings: EarningsData,
+    news: NewsSummary,
+) -> SignalProfile:
+```
+
+**Key design principle:** Signal profile dimensions are independent — NVDA-like stocks legitimately show `momentum=VERY_BULLISH` alongside `valuation=RISKY`. The composite score would average these; the signal profile preserves the nuance.
+
+---
+
+## 16. Risk Management Service
 
 **File:** `backend/app/services/risk_management_service.py`
 
@@ -773,13 +1207,13 @@ flowchart TD
 
     DEC -->|BUY_NOW| BN["preferred_entry = price\nstarter_entry = price × 1.005\nbreakout_entry = None\navoid_above = price × 1.08"]
 
-    DEC -->|BUY_STARTER| BS["preferred_entry = price\nstarter_entry = price × 1.01\nbreakout_entry = None\navoid_above = price × 1.06"]
+    DEC -->|"BUY_STARTER\nBUY_STARTER_EXTENDED"| BS["preferred_entry = price\nstarter_entry = price × 1.01\nbreakout_entry = None\navoid_above = price × 1.06"]
 
-    DEC -->|WAIT_FOR_PULLBACK| WP["preferred_entry = nearest_support\n  (fallback: price × 0.95)\nstarter_entry = price × 0.98\nbreakout_entry = None\navoid_above = price × 1.05"]
+    DEC -->|"BUY_ON_PULLBACK\nBUY_AFTER_EARNINGS"| WP["preferred_entry = nearest_support\n  (fallback: price × 0.95)\nstarter_entry = price × 0.98\nbreakout_entry = None\navoid_above = price × 1.05"]
 
     DEC -->|BUY_ON_BREAKOUT| BOB["preferred_entry = nearest_resistance\n  (fallback: price × 1.03)\nstarter_entry = price × 1.01\nbreakout_entry = nearest_resistance\navoid_above = breakout_entry × 1.03"]
 
-    DEC -->|"WATCHLIST / AVOID"| WL["preferred_entry = nearest_support\n  (fallback: price × 0.90)\nstarter_entry = None\nbreakout_entry = None\navoid_above = None"]
+    DEC -->|"WATCHLIST\nWATCHLIST_NEEDS_CATALYST\nHOLD_EXISTING_DO_NOT_ADD\nAVOID_*"| WL["preferred_entry = nearest_support\n  (fallback: price × 0.90)\nstarter_entry = None\nbreakout_entry = None\navoid_above = None"]
 ```
 
 ### Stop-Loss & Target Logic
@@ -804,27 +1238,28 @@ Risk/Reward:
 
 ---
 
-## 13. Markdown Report Service
+## 17. Markdown Report Service
 
 **File:** `backend/app/services/markdown_report_service.py`
 
 Generates a structured Markdown string from a completed `StockAnalysisResult`. Sections:
 
-1. Header (ticker, price, date, disclaimer)
-2. Data Quality Warnings
-3. Per-horizon recommendation (decision, score, confidence, entry/exit plan, factors)
-4. Technical Analysis summary
-5. Fundamental Quality
-6. Valuation
-7. Earnings
-8. News & Sentiment
-9. Risk Management notes
+1. Header (ticker, price, date, archetype, regime, disclaimer)
+2. Signal Profile (6-dimension summary)
+3. Data Quality Warnings
+4. Per-horizon recommendation (decision, score, confidence, entry/exit plan, factors)
+5. Technical Analysis summary
+6. Fundamental Quality
+7. Valuation
+8. Earnings
+9. News & Sentiment
+10. Risk Management notes
 
 The markdown is stored in `StockAnalysisResult.markdown_report` and rendered by `react-markdown` in the frontend's `MarkdownReport.tsx` collapsible panel.
 
 ---
 
-## 14. API Router
+## 18. API Router
 
 **File:** `backend/app/routers/stock.py`
 
@@ -845,21 +1280,34 @@ flowchart LR
 
 ```python
 # Step 1 — Market data
-market_data = get_market_data(ticker)      # MarketData
+market_data = get_market_data(ticker)
 price = market_data.current_price
 
-# Step 2 — Technical analysis
-hist_1y   = get_history(ticker, "1y")
-spy_hist  = get_history("SPY", "1y")
-sector_etf = get_sector_etf(ticker)        # e.g. "XLK"
-sector_hist = get_history(sector_etf, "1y") if sector_etf else None
+# Step 2 — Historical data (fetched once, reused)
+hist_1y    = get_history(ticker, "1y", "1d")
+spy_hist   = get_history("SPY", "1y", "1d")
+qqq_hist   = get_history("QQQ", "1y", "1d")     # NEW: for regime classification
+sector_etf = get_sector_etf(ticker)               # e.g. "XLK"
+sector_hist = get_history(sector_etf, "6mo", "1d") if sector_etf else None  # 6mo for RS
+
+# Step 2a — Technical analysis
 technicals = compute_technicals(hist_1y, spy_df=spy_hist, sector_df=sector_hist)
 
-# Step 3 — Fundamentals & valuation
+# Step 3 — Fundamentals & valuation (baseline scores)
 fundamentals = get_fundamental_data(ticker)
 fundamentals.fundamental_score = score_fundamentals(fundamentals)
 valuation = get_valuation_data(ticker, market_cap=market_data.market_cap)
 valuation.valuation_score = score_valuation(valuation)
+
+# Step 3a — Archetype classification + growth-adjusted valuation  NEW
+fundamentals = classify_and_attach(fundamentals, valuation)
+valuation.archetype_adjusted_score = score_valuation_with_archetype(
+    valuation,
+    archetype=fundamentals.archetype,
+    revenue_growth_yoy=fundamentals.revenue_growth_yoy,
+    operating_margin=fundamentals.operating_margin,
+    gross_margin=fundamentals.gross_margin,
+)
 
 # Step 4 — Earnings
 earnings = get_earnings_data(ticker)
@@ -871,25 +1319,57 @@ news = classify_news(news_items)
 
 # Step 6 — Options catalyst
 options = get_options_snapshot(ticker)
-catalyst_score = 65.0 if options.put_call_ratio < 0.7 else \
-                 35.0 if options.put_call_ratio > 1.3 else 50.0
+catalyst_score = 65.0 if (options.put_call_ratio or 1.0) < 0.7 else \
+                 35.0 if (options.put_call_ratio or 1.0) > 1.3 else 50.0
 
-# Step 7 — Aggregate scores
-scores = compute_scores(technicals, fundamentals, valuation, earnings, news,
-                        catalyst_score=catalyst_score)
+# Step 6a — Real sector macro score  NEW
+sector_macro_score = 50.0
+if sector_etf and sector_hist is not None:
+    spy_6m = get_history("SPY", "6mo", "1d")
+    sector_rs = compute_relative_strength(sector_hist["Close"], spy_6m["Close"], period=63)
+    if sector_rs and sector_rs > 1.05:
+        sector_macro_score = 65.0
+    elif sector_rs and sector_rs < 0.95:
+        sector_macro_score = 35.0
 
-# Step 8 — Recommendations (includes risk management internally)
+# Step 6b — Market regime classification  NEW
+vix_hist = get_history("^VIX", "1mo", "1d")
+vix_level = float(vix_hist["Close"].iloc[-1]) if not vix_hist.empty else None
+regime_assessment = classify_regime(spy_hist, qqq_hist, vix_level)
+
+# Step 7 — Aggregate scores (regime-aware)
+scores = compute_scores(
+    technicals, fundamentals, valuation, earnings, news,
+    catalyst_score=catalyst_score,
+    sector_macro_score=sector_macro_score,
+    regime_assessment=regime_assessment,
+)
+
+# Step 8 — Recommendations (data completeness + regime-aware decisions)
 recommendations = build_recommendations(
     technicals, fundamentals, valuation, earnings, news,
-    scores, request.horizons, request.risk_profile, price
+    scores, request.horizons, request.risk_profile, price,
+    regime_assessment=regime_assessment,
+    has_options_data=options.available,
+    has_sufficient_price_history=(len(hist_1y) >= 126),
 )
 
 # Step 9 — Data quality
 data_quality = _build_data_quality(fundamentals, valuation, earnings,
                                    news, options.available, technicals)
 
-# Step 10 — Assemble result + generate markdown
-result = StockAnalysisResult(...)
+# Step 10 — Signal profile  NEW
+signal_profile = build_signal_profile(technicals, fundamentals, valuation, earnings, news)
+
+# Step 11 — Assemble result + generate markdown
+result = StockAnalysisResult(
+    ...,
+    archetype=fundamentals.archetype,
+    archetype_confidence=fundamentals.archetype_confidence,
+    market_regime=regime_assessment.regime,
+    regime_confidence=regime_assessment.confidence,
+    signal_profile=signal_profile,
+)
 result.markdown_report = generate_markdown(result)
 return result
 ```
@@ -908,9 +1388,11 @@ Start: 100
 -10 technicals.ma_200 is None           (< 200 bars of data)
 ```
 
+*Note: This is the legacy `DataQualityReport.score`, separate from `data_completeness_score` computed by the Data Completeness Service. Both appear in the API response.*
+
 ---
 
-## 15. Pydantic Models (Full Schema)
+## 19. Pydantic Models (Full Schema)
 
 ### Request
 
@@ -929,29 +1411,34 @@ class StockAnalysisRequest(BaseModel):
 
 ```mermaid
 classDiagram
-    class TrendClassification {
-        +str label
-        +str description
+    class StockArchetype {
+        +str HYPER_GROWTH
+        +str PROFITABLE_GROWTH
+        +str CYCLICAL_GROWTH
+        +str MATURE_VALUE
+        +str TURNAROUND
+        +str SPECULATIVE_STORY
+        +str DEFENSIVE
+        +str COMMODITY_CYCLICAL
+        +list ALL
     }
-    class SupportResistanceLevels {
-        +list~float~ supports
-        +list~float~ resistances
-        +Optional~float~ nearest_support
-        +Optional~float~ nearest_resistance
+    class MarketRegime {
+        +str BULL_RISK_ON
+        +str BULL_NARROW_LEADERSHIP
+        +str SIDEWAYS_CHOPPY
+        +str BEAR_RISK_OFF
+        +str SECTOR_ROTATION
+        +str LIQUIDITY_RALLY
+        +list ALL
     }
-    class TechnicalIndicators {
-        +Optional~float~ ma_10, ma_20, ma_50, ma_100, ma_200
-        +Optional~float~ rsi_14
-        +Optional~float~ macd, macd_signal, macd_histogram
-        +Optional~float~ atr
-        +str volume_trend
-        +TrendClassification trend
-        +bool is_extended
-        +Optional~float~ extension_pct_above_20ma
-        +Optional~float~ extension_pct_above_50ma
-        +SupportResistanceLevels support_resistance
-        +Optional~float~ rs_vs_spy, rs_vs_sector
-        +float technical_score
+    class MarketRegimeAssessment {
+        +str regime
+        +float confidence
+        +str implication
+        +Optional~bool~ spy_above_50dma
+        +Optional~bool~ spy_above_200dma
+        +Optional~bool~ qqq_above_200dma
+        +Optional~float~ vix_level
     }
     class FundamentalData {
         +Optional~float~ revenue_ttm, revenue_growth_yoy, revenue_growth_qoq
@@ -960,49 +1447,34 @@ classDiagram
         +Optional~float~ free_cash_flow, free_cash_flow_margin
         +Optional~float~ cash, total_debt, net_debt, current_ratio
         +Optional~float~ debt_to_equity, shares_outstanding, roe, roic
+        +Optional~str~ sector
+        +Optional~float~ beta
         +float fundamental_score
+        +str archetype
+        +float archetype_confidence
     }
     class ValuationData {
         +Optional~float~ trailing_pe, forward_pe, peg_ratio
         +Optional~float~ price_to_sales, ev_to_ebitda, price_to_fcf, fcf_yield
         +bool peer_comparison_available
         +float valuation_score
+        +float archetype_adjusted_score
     }
-    class EarningsData {
-        +Optional~str~ last_earnings_date, next_earnings_date
-        +list~EarningsRecord~ history
-        +Optional~float~ avg_eps_surprise_pct
-        +int beat_count, miss_count
-        +Optional~float~ beat_rate
-        +bool within_30_days
-        +float earnings_score
-    }
-    class NewsSummary {
-        +list~NewsItem~ items
-        +int positive_count, negative_count, neutral_count
-        +float news_score
-        +bool coverage_limited
-    }
-    class EntryPlan {
-        +Optional~float~ preferred_entry, starter_entry
-        +Optional~float~ breakout_entry, avoid_above
-    }
-    class ExitPlan {
-        +Optional~float~ stop_loss, invalidation_level
-        +Optional~float~ first_target, second_target
-    }
-    class RiskReward {
-        +Optional~float~ downside_percent, upside_percent, ratio
-    }
-    class PositionSizing {
-        +int suggested_starter_pct_of_full
-        +float max_portfolio_allocation_pct
+    class SignalProfile {
+        +str momentum
+        +str growth
+        +str valuation
+        +str entry_timing
+        +str sentiment
+        +str risk_reward
     }
     class HorizonRecommendation {
         +str horizon
         +str decision
         +float score
         +str confidence
+        +float confidence_score
+        +float data_completeness_score
         +str summary
         +list~str~ bullish_factors
         +list~str~ bearish_factors
@@ -1012,17 +1484,30 @@ classDiagram
         +PositionSizing position_sizing
         +list~str~ data_warnings
     }
-    TechnicalIndicators --> TrendClassification
-    TechnicalIndicators --> SupportResistanceLevels
-    HorizonRecommendation --> EntryPlan
-    HorizonRecommendation --> ExitPlan
-    HorizonRecommendation --> RiskReward
-    HorizonRecommendation --> PositionSizing
+    class StockAnalysisResult {
+        +str ticker, generated_at
+        +float current_price
+        +DataQualityReport data_quality
+        +MarketData market_data
+        +TechnicalIndicators technicals
+        +FundamentalData fundamentals
+        +ValuationData valuation
+        +EarningsData earnings
+        +NewsSummary news
+        +list~HorizonRecommendation~ recommendations
+        +str markdown_report
+        +str archetype
+        +float archetype_confidence
+        +str market_regime
+        +float regime_confidence
+        +Optional~SignalProfile~ signal_profile
+        +str disclaimer
+    }
 ```
 
 ---
 
-## 16. Frontend Internals
+## 20. Frontend Internals
 
 ### State Management (Dashboard.tsx)
 
@@ -1068,18 +1553,74 @@ export async function analyzeStock(req: AnalysisRequest): Promise<StockAnalysisR
 }
 ```
 
+### TypeScript Types (stock.ts)
+
+```typescript
+export interface SignalProfile {
+    momentum: string;       // VERY_BULLISH | BULLISH | NEUTRAL | BEARISH | VERY_BEARISH
+    growth: string;
+    valuation: string;      // ATTRACTIVE | FAIR | ELEVATED | RISKY
+    entry_timing: string;   // IDEAL | ACCEPTABLE | EXTENDED | VERY_EXTENDED
+    sentiment: string;
+    risk_reward: string;    // EXCELLENT | GOOD | ACCEPTABLE | POOR
+}
+
+export interface HorizonRecommendation {
+    // ...existing fields...
+    confidence_score: number;       // 0–100
+    data_completeness_score: number; // 0–100
+}
+
+export interface StockAnalysisResult {
+    // ...existing fields...
+    archetype: string;
+    archetype_confidence: number;
+    market_regime: string;
+    regime_confidence: number;
+    signal_profile?: SignalProfile;
+}
+```
+
 ### Component Props
 
 ```typescript
 // RecommendationCard.tsx
 interface Props { rec: HorizonRecommendation }
-// Decision badge color map:
-// BUY_NOW        → bg-green-500
-// BUY_STARTER    → bg-emerald-500
-// BUY_ON_BREAKOUT→ bg-blue-500
-// WAIT_FOR_PULLBACK → bg-yellow-500
-// WATCHLIST      → bg-slate-500
-// AVOID          → bg-red-500
+// DECISION_STYLES — all 14 labels with distinct Tailwind colors:
+// BUY_NOW               → bg-green-500
+// BUY_STARTER           → bg-emerald-500
+// BUY_STARTER_EXTENDED  → bg-teal-600        (smaller size, still bullish)
+// BUY_ON_PULLBACK       → bg-cyan-600
+// BUY_ON_BREAKOUT       → bg-blue-500
+// BUY_AFTER_EARNINGS    → bg-indigo-600
+// WATCHLIST             → bg-slate-500
+// WATCHLIST_NEEDS_CATALYST → bg-slate-600
+// HOLD_EXISTING_DO_NOT_ADD → bg-orange-600
+// AVOID                 → bg-red-600
+// AVOID_BAD_BUSINESS    → bg-red-950/60 border-red-900
+// AVOID_BAD_CHART       → bg-rose-900/60
+// AVOID_BAD_RISK_REWARD → bg-pink-900/60
+// AVOID_LOW_CONFIDENCE  → bg-neutral-700
+//
+// Card footer: completeness bar + confidence bar rendered as progress bars
+
+// SignalProfileCard.tsx  (new)
+interface Props { profile: SignalProfile }
+// 6-cell grid using SignalCell component
+// SIGNAL_COLORS maps all label strings to Tailwind text classes:
+//   VERY_BULLISH → text-green-400, RISKY → text-red-400, EXTENDED → text-yellow-400, etc.
+// BG_COLORS maps to border+background classes for the card background
+
+// RegimeArchetypeBar.tsx  (new)
+interface Props {
+    archetype: string;
+    archetypeConfidence: number;
+    marketRegime: string;
+    regimeConfidence: number;
+}
+// Renders two pill-shaped badges (rounded-full)
+// ARCHETYPE_STYLES: 8 entries — HYPER_GROWTH→violet, DEFENSIVE→teal, MATURE_VALUE→slate, etc.
+// REGIME_STYLES: 6 entries with colored dot — BULL_RISK_ON→green dot, BEAR_RISK_OFF→red dot
 
 // ScoreBreakdown.tsx
 interface Props {
@@ -1105,6 +1646,19 @@ interface Props { markdown: string }
 // Uses react-markdown with no custom plugins
 ```
 
+### Dashboard Layout (result sections, top to bottom)
+
+1. Price header with `RegimeArchetypeBar`
+2. `DataWarnings` (completeness gaps)
+3. `SignalProfileCard` (6 signal dimensions)
+4. Recommendation cards (3 horizons)
+5. ScoreBreakdown + TechnicalChart (side by side)
+6. Fundamental Quality + Valuation (side by side)
+7. NewsSection
+8. Earnings table
+9. MarkdownReport (collapsible)
+10. Disclaimer
+
 ### Vite Proxy Configuration
 
 ```typescript
@@ -1117,25 +1671,23 @@ server: { proxy: { '/api': 'http://localhost:8000' } }
 
 ---
 
-## 17. Backtest Engine Internals
+## 21. Backtest Engine Internals
 
 ### Module Responsibilities
 
 ```mermaid
 flowchart TD
-    CFG["config.py\n─────────────────────────────\nBACKTEST_TICKERS: list[str] (20)\nSECTOR_ETF_MAP: dict[str, str|None]\nBACKTEST_START = '2024-05-06'\nBACKTEST_END   = '2026-05-04'\nHISTORY_START  = '2022-05-01'\nHOLDING_PERIODS = {short:20, med:65, long:252}\nMIN_ROWS_FOR_ANALYSIS = 252\nCACHE_DIR = 'backtest_results/cache'\nRESULTS_DIR = 'backtest_results'"]
+    CFG["config.py\n─────────────────────────────\nBACKTEST_TICKERS: list[str] (20)\nSECTOR_ETF_MAP: dict[str, str|None]\nBACKTEST_START = '2024-05-06'\nBACKTEST_END   = '2026-05-04'\nHISTORY_START  = '2022-05-01'\nHOLDING_PERIODS = {short:20, med:65, long:252}\nMIN_ROWS_FOR_ANALYSIS = 252\nCACHE_DIR = 'backtest_results/cache'\nRESULTS_DIR = 'backtest_results'\nBENCHMARK_TICKERS = {'SPY', 'QQQ'}"]
 
-    DL["data_loader.py\n─────────────────────────────\nload_all_data(force_refresh, extra_tickers)\n  → {prices: dict[str,DataFrame], quarterly: dict[str,dict]}\n\nPre-fetches ALL tickers in one batch:\n  set(BACKTEST_TICKERS) | {'SPY'} | {sector ETFs} | extra_tickers\nPersists to pickle:\n  backtest_results/cache/prices.pkl\n  backtest_results/cache/quarterly.pkl"]
+    DL["data_loader.py\n─────────────────────────────\nload_all_data(force_refresh, extra_tickers)\n  → {prices: dict[str,DataFrame], quarterly: dict[str,dict]}\n\nPre-fetches ALL tickers in one batch:\n  set(BACKTEST_TICKERS) | {'SPY','QQQ'} | {sector ETFs} | extra_tickers\nPersists to pickle:\n  backtest_results/cache/prices.pkl\n  backtest_results/cache/quarterly.pkl"]
 
     SN["snapshot.py\n─────────────────────────────\nbuild_historical_fundamentals(\n  ticker, test_date, quarterly_data, price_at_date\n) → (FundamentalData, ValuationData, EarningsData)\n\nget_price_slice(df, test_date) → df[df.index ≤ test_date]\nneutral_news() → NewsSummary(news_score=50, coverage_limited=True)\n_filter_stmt_cols(stmt, cutoff) → stmt with cols ≤ cutoff\n_normalize_ts(ts) → tz-naive Timestamp"]
 
-    RN["runner.py\n─────────────────────────────\n_generate_weekly_dates(start, end) → list[Timestamp]\n  → every Monday in range\nrun_backtest(data, tickers, start, end, risk_profile)\n  → list[dict]  (one per ticker×date×horizon)\n\nPer iteration:\n  price_slice = get_price_slice(full_df, test_date)\n  if len(price_slice) < 252: skip\n  technicals = compute_technicals(slice, spy_slice, sector_slice)\n  fund,val,earn = build_historical_fundamentals(...)\n  fund.fundamental_score = score_fundamentals(fund)\n  val.valuation_score = score_valuation(val)\n  scores = compute_scores(..., catalyst_score=50, news_score=50)\n  recs = build_recommendations(...)"]
+    RN["runner.py\n─────────────────────────────\nPer iteration:\n  price_slice = get_price_slice(full_df, test_date)\n  spy_slice, qqq_slice = sliced benchmark DFs\n  technicals = compute_technicals(slice, spy_slice, sector_slice)\n  fund,val,earn = build_historical_fundamentals(...)\n  fund = classify_and_attach(fund, val)          ← NEW\n  val.archetype_adjusted_score = score_valuation_with_archetype(...) ← NEW\n  fund.fundamental_score = score_fundamentals(fund)\n  real sector_macro_score from compute_relative_strength  ← NEW\n  vix_level = 20.0 (proxy — VIX history not pre-fetched)\n  regime = classify_regime(spy_slice, qqq_slice, vix_level)  ← NEW\n  scores = compute_scores(..., regime_assessment=regime)\n  recs = build_recommendations(...)"]
 
-    OT["outcome.py\n─────────────────────────────\nattach_outcomes(signals, prices) → signals (modified in place)\n_get_price_at_offset(df, from_date, N_trading_days)\n  → Close.iloc[N-1] of rows after from_date\n\nFor each signal:\n  forward_return = (exit_price - entry_price) / entry_price × 100\n  spy_return     = (spy_exit - spy_entry) / spy_entry × 100\n  excess_return  = forward_return - spy_return"]
+    OT["outcome.py\n─────────────────────────────\nattach_outcomes(signals, prices) → signals (modified in place)\n_get_price_at_offset(df, from_date, N_trading_days)\n  → Close.iloc[N-1] of rows after from_date\n\nFor each signal:\n  forward_return = (exit_price - entry_price) / entry_price × 100\n  spy_return     = (spy_exit - spy_entry) / spy_entry × 100\n  excess_return  = forward_return - spy_return\n  qqq_return     = (qqq_exit - qqq_entry) / qqq_entry × 100  ← NEW\n  excess_return_vs_qqq = forward_return - qqq_return          ← NEW"]
 
-    MT["metrics.py\n─────────────────────────────\nbuild_metrics(signals, horizon) → dict\n  by_decision: win rate, avg/median return, best/worst, vs SPY\n  by_score_bucket: [0-40, 40-55, 55-70, 70-85, 85-100]\n  by_ticker: sorted by avg_return desc\n  monthly_breakdown: by YYYY-MM period\n  portfolio_simulation: BUY_NOW+BUY_STARTER only\n  overall_stats: correlation, best/worst signal"]
-
-    RP["report.py\n─────────────────────────────\nsave_csvs(signals, metrics_by_horizon)\n  → raw_signals.csv, summary_by_decision.csv, summary_by_ticker.csv\ngenerate_html_report(signals, metrics_by_horizon) → str\n  Charts: matplotlib embedded as base64 PNG\n  _chart_win_rate_by_decision(by_decision)\n  _chart_score_bucket(by_score_bucket)\n  _chart_monthly(monthly_breakdown)\nsave_report(signals, metrics_by_horizon)\n  → report.html, report.json"]
+    MT["metrics.py\n─────────────────────────────\nbuild_metrics(signals, horizon) → dict\n  by_decision: win rate, avg/median return, best/worst, vs SPY\n  by_score_bucket: [0-40, 40-55, 55-70, 70-85, 85-100]\n  by_ticker: sorted by avg_return desc\n  monthly_breakdown: by YYYY-MM period\n  by_regime: win rate, avg_return, avg_excess_vs_qqq, n_signals ← NEW\n  by_archetype: win rate, avg_return, best_decision, avg_score  ← NEW\n  portfolio_simulation: BUY_NOW+BUY_STARTER only\n  overall_stats: correlation, best/worst signal"]
 ```
 
 ### Historical Fundamentals Construction (snapshot.py)
@@ -1168,7 +1720,7 @@ flowchart TD
     "ticker": str,
     "date": str,                    # YYYY-MM-DD
     "horizon": str,                 # short_term | medium_term | long_term
-    "decision": str,                # BUY_NOW | BUY_STARTER | ...
+    "decision": str,                # any of 14 labels in ALL_DECISIONS
     "score": float,                 # composite 0–100
     "confidence": str,
     "price": float,                 # entry price at signal date
@@ -1182,16 +1734,50 @@ flowchart TD
     "entry_preferred": Optional[float],
     "stop_loss": Optional[float],
     "first_target": Optional[float],
+    # NEW fields (US-009):
+    "archetype": str,               # StockArchetype value
+    "market_regime": str,           # MarketRegime value
     # Filled in by outcome.py:
-    "forward_return": Optional[float],   # None if outcome date in future
+    "forward_return": Optional[float],
     "spy_return": Optional[float],
     "excess_return": Optional[float],
+    "qqq_return": Optional[float],         # NEW
+    "excess_return_vs_qqq": Optional[float], # NEW
+}
+```
+
+### Backtest Metrics Structure (`by_regime`, `by_archetype`)
+
+```python
+# by_regime output structure
+{
+    "BULL_RISK_ON": {
+        "n_signals": int,
+        "win_rate": float,          # fraction of signals with forward_return > 0
+        "avg_return": float,
+        "avg_excess_vs_qqq": float, # avg(excess_return_vs_qqq) for this regime
+    },
+    "BEAR_RISK_OFF": { ... },
+    ...
+}
+
+# by_archetype output structure
+{
+    "HYPER_GROWTH": {
+        "n_signals": int,
+        "win_rate": float,
+        "avg_return": float,
+        "avg_score": float,
+        "best_decision": str,       # decision with highest avg_return for this archetype
+    },
+    "MATURE_VALUE": { ... },
+    ...
 }
 ```
 
 ---
 
-## 18. Error Handling Map
+## 22. Error Handling Map
 
 ```mermaid
 flowchart TD
@@ -1200,9 +1786,10 @@ flowchart TD
         E2["yfinance returns empty DataFrame\n→ ValueError → retry → HTTPException(503)"]
         E3["earnings_dates KeyError\n→ try/except → last_date=None, next_date=None"]
         E4["quarterly_income_stmt missing row labels\n→ _stmt_row() returns None → _ttm() returns None"]
-        E5["ticker.news returns []\n→ returns empty list → news_score=50, coverage_limited=True"]
-        E6["options_provider fails\n→ options.available=False, catalyst_score=50"]
-        E7["sector ETF not found\n→ get_sector_etf() returns None → sector_df=None → rs_sector=None"]
+        E5["ticker.news returns []\n→ returns empty list → news_score=50, coverage_limited=True\n→ DataCompletenessService deducts -15 and flags warning"]
+        E6["options_provider fails\n→ options.available=False, catalyst_score=50\n→ DataCompletenessService deducts -15 and flags warning"]
+        E7["sector ETF not found\n→ get_sector_etf() returns None → sector_macro_score=50"]
+        E8["VIX fetch fails (^VIX returns empty)\n→ vix_level=None → classify_regime defaults to SIDEWAYS_CHOPPY"]
     end
 
     subgraph Services["Service Layer — Null Safety"]
@@ -1210,6 +1797,8 @@ flowchart TD
         S2["score_fundamentals/valuation skip None fields\n→ partial scoring still works"]
         S3["OpenAI API failure\n→ falls back to keyword classifier automatically"]
         S4["JSON parse failure from OpenAI\n→ falls back to keyword classifier"]
+        S5["Missing sector/beta in fundamentals\n→ classify_archetype() falls back to PROFITABLE_GROWTH"]
+        S6["spy_df < 50 bars in classify_regime()\n→ returns SIDEWAYS_CHOPPY, confidence=20"]
     end
 
     subgraph API["API Layer"]
@@ -1222,12 +1811,15 @@ flowchart TD
         F1["HTTP 4xx/5xx\n→ extract error.response.data.detail\n→ display in red banner"]
         F2["Network failure\n→ error.message → display in red banner"]
         F3["Optional fields\n→ TypeScript ?. checks + 'N/A' fallback via fmt()"]
+        F4["signal_profile absent\n→ SignalProfileCard rendered conditionally (result.signal_profile &&)"]
     end
 ```
 
 ---
 
-## 19. Test Coverage Map
+## 23. Test Coverage Map
+
+**Total: 241 tests across 9 test files**
 
 ```mermaid
 flowchart LR
@@ -1245,14 +1837,22 @@ flowchart LR
         TA11["compute_technicals: integration with spy_df, sector_df"]
     end
 
-    subgraph FA["test_fundamental_analysis.py (24 tests)"]
+    subgraph FA["test_fundamental_analysis.py (32 tests)"]
         FA1["score_fundamentals: each +/- component isolated"]
         FA2["High-growth company → score > 80"]
         FA3["Declining company → score < 40"]
         FA4["score_valuation: forward P/E buckets"]
         FA5["score_valuation: PEG, P/S, EV/EBITDA, FCF yield"]
-        FA6["PEG calculation: forwardPE / (earningsGrowth × 100)"]
-        FA7["P/FCF calculation: marketCap / freeCashFlow"]
+        FA6["PEG calculation fallback"]
+        FA7["P/FCF calculation"]
+        FA8["score_valuation_with_archetype: HYPER_GROWTH + fwd_pe=80 + rev=40% → score > 60"]
+        FA9["score_valuation_with_archetype: MATURE_VALUE + pe=12 + FCF=5% → score > 70"]
+        FA10["score_valuation_with_archetype: CYCLICAL_GROWTH peak-PE handling"]
+        FA11["Rule of 40 bonus applied correctly (≥ 60 → +15)"]
+        FA12["HYPER_GROWTH P/S exempt if gross_margin > 60%"]
+        FA13["score_valuation_with_archetype: PROFITABLE_GROWTH falls through to baseline"]
+        FA14["score_valuation_with_archetype: revenue slowing → score penalized"]
+        FA15["score_valuation_with_archetype: SPECULATIVE_STORY treated like HYPER_GROWTH"]
     end
 
     subgraph EA["test_earnings_analysis.py (29 tests)"]
@@ -1266,19 +1866,94 @@ flowchart LR
         EA8["news_score: weighted formula correctness"]
     end
 
-    subgraph SR["test_scoring_recommendation.py (34 tests)"]
-        SR1["SHORT_TERM_WEIGHTS sum to 100"]
-        SR2["MEDIUM_TERM_WEIGHTS sum to 100"]
-        SR3["LONG_TERM_WEIGHTS sum to 100"]
-        SR4["compute_scores: all three horizons returned"]
-        SR5["_decide_short_term: BUY_NOW, BUY_STARTER, WAIT, AVOID, WATCHLIST"]
-        SR6["Extension overrides BUY_STARTER → WAIT_FOR_PULLBACK (§8.2)"]
-        SR7["_decide_medium_term: all 5 decisions"]
-        SR8["_decide_long_term: all 5 decisions"]
-        SR9["_confidence: all 4 levels"]
-        SR10["compute_risk_management: entry/exit/R/R/sizing per risk_profile"]
-        SR11["earnings halving: starter_pct/max_alloc reduced within_30_days"]
-        SR12["build_recommendations: integration, 3 HorizonRecommendation objects"]
+    subgraph SR["test_scoring_recommendation.py (53 tests)"]
+        SR1["SHORT/MEDIUM/LONG_TERM_WEIGHTS each sum to 100"]
+        SR2["compute_scores: all three horizons returned"]
+        SR3["Regime multipliers applied: BULL → momentum score increases"]
+        SR4["Regime multipliers applied: BEAR → valuation/balance-sheet increase"]
+        SR5["Missing score key defaults to 50"]
+        SR6["ALL_DECISIONS constant contains all 14 expected labels"]
+        SR7["_decide_short_term: BUY_NOW, BUY_STARTER, BUY_ON_PULLBACK, AVOID, WATCHLIST"]
+        SR8["Extension → BUY_STARTER_EXTENDED in bull regime"]
+        SR9["Extension → BUY_ON_PULLBACK in non-bull regime"]
+        SR10["AVOID_BAD_CHART: downtrend + weak RS required (both conditions)"]
+        SR11["AVOID_BAD_BUSINESS: revenue declining + secondary indicator required"]
+        SR12["BUY_AFTER_EARNINGS when earnings near and score 55–70"]
+        SR13["BULL regime + expensive + strong chart → NOT AVOID"]
+        SR14["_decide_medium_term: all decisions reachable"]
+        SR15["_decide_long_term: all decisions reachable"]
+        SR16["build_recommendations: integration, 3 HorizonRecommendation objects"]
+        SR17["earnings halving: starter_pct/max_alloc reduced within_30_days"]
+        SR18["compute_risk_management: entry/exit/R/R/sizing per risk_profile"]
+    end
+
+    subgraph SAR["test_stock_archetype.py (19 tests)"]
+        SA1["NVDA-like data → HYPER_GROWTH"]
+        SA2["JNJ-like data → DEFENSIVE"]
+        SA3["XOM-like data → COMMODITY_CYCLICAL"]
+        SA4["MSFT-like data → PROFITABLE_GROWTH"]
+        SA5["Turnaround scenario → TURNAROUND"]
+        SA6["Missing data → PROFITABLE_GROWTH fallback, conf=40"]
+        SA7["PLTR-like: high P/S + unprofitable + fast growth → SPECULATIVE_STORY"]
+        SA8["classify_and_attach mutates fundamentals in place"]
+        SA9["Priority order: SPECULATIVE_STORY before HYPER_GROWTH"]
+        SA10["confidence scales with rev_growth for HYPER_GROWTH"]
+    end
+
+    subgraph MR["test_market_regime.py (18 tests)"]
+        MR1["SPY above 50DMA+200DMA, VIX=16, QQQ above → BULL_RISK_ON conf=85"]
+        MR2["SPY below 200DMA, VIX=30 → BEAR_RISK_OFF conf=82"]
+        MR3["SPY near 200DMA (above 200, below 50) → SIDEWAYS_CHOPPY conf=60"]
+        MR4["Missing VIX data + bull MAs → BULL_RISK_ON conf=70"]
+        MR5["QQQ below 200DMA while SPY above → BULL_NARROW_LEADERSHIP"]
+        MR6["spy_df empty → SIDEWAYS_CHOPPY conf=20 (fallback)"]
+        MR7["REGIME_WEIGHT_ADJUSTMENTS has all 6 regimes as keys"]
+        MR8["BULL_RISK_ON multiplier for technical_momentum is 1.20"]
+        MR9["BEAR_RISK_OFF multiplier for balance_sheet_strength is 1.25"]
+    end
+
+    subgraph DC["test_data_completeness.py (16 tests)"]
+        DC1["No news → completeness = 85, warning contains 'news'"]
+        DC2["No options → completeness = 85, warning contains 'Options'"]
+        DC3["No next earnings → completeness = 90, warning contains 'earnings date'"]
+        DC4["All 5 deductions → completeness = 50, confidence = 60"]
+        DC5["Completeness < 60 → confidence capped at 60"]
+        DC6["Full data → completeness = 100, confidence = 100"]
+        DC7["Completeness < 55 → AVOID_LOW_CONFIDENCE decision forced"]
+        DC8["High score not overridden when completeness ≥ 55"]
+        DC9["Completeness never goes below 0"]
+    end
+
+    subgraph SP["test_signal_profile.py (22 tests)"]
+        SP1["technical_score≥80 + not extended → momentum=VERY_BULLISH"]
+        SP1b["technical_score≥80 + extended → momentum=BULLISH (extended penalty)"]
+        SP2["fundamental_score < 35 → growth=VERY_BEARISH"]
+        SP3["valuation_score ≥ 70 → valuation=ATTRACTIVE"]
+        SP4["valuation_score < 40 → valuation=RISKY"]
+        SP5["archetype_adjusted_score > 0 used instead of raw valuation_score"]
+        SP6["is_extended + ext_20ma ≥ 15 → entry=VERY_EXTENDED"]
+        SP7["strong_uptrend + not extended → entry=IDEAL"]
+        SP8["news_score ≥ 75 → sentiment=VERY_BULLISH"]
+        SP9["earnings+technical avg ≥ 75 → risk_reward=EXCELLENT"]
+        SP10["SignalProfile fields all valid enum values"]
+        SP11["NVDA-like: momentum=VERY_BULLISH + valuation=RISKY both coexist"]
+    end
+
+    subgraph BT["test_backtest_metrics.py (14 tests)"]
+        BT1["SPY and QQQ in BENCHMARK_TICKERS"]
+        BT2["by_regime groups signals correctly by regime column"]
+        BT3["by_regime win_rate computed correctly"]
+        BT4["by_regime avg_excess_vs_qqq computed correctly"]
+        BT5["by_regime returns empty dict when no 'market_regime' column"]
+        BT6["by_archetype groups by archetype column"]
+        BT7["by_archetype best_decision = decision with highest avg_return"]
+        BT8["by_archetype avg_score computed correctly"]
+        BT9["by_archetype returns empty dict when no 'archetype' column"]
+        BT10["build_metrics output contains 'by_regime' and 'by_archetype' keys"]
+        BT11["by_regime structure: has win_rate, avg_return, n_signals per regime"]
+        BT12["by_archetype structure: has best_decision per archetype"]
+        BT13["excess_return_vs_qqq = forward_return - qqq_return"]
+        BT14["portfolio_simulation still present in build_metrics output"]
     end
 ```
 
@@ -1286,10 +1961,12 @@ flowchart LR
 ```bash
 cd backend
 source .venv/bin/activate
-PYTHONPATH=. pytest tests/ -v                    # all 125 tests
-PYTHONPATH=. pytest tests/test_technical_analysis.py -v   # single suite
+PYTHONPATH=. pytest tests/ -v                    # all 241 tests
+PYTHONPATH=. pytest tests/test_stock_archetype.py -v   # single suite
 PYTHONPATH=. pytest tests/ -v --tb=short         # compact output
 ```
+
+**Regression gate:** All previously passing tests must still pass after each new story.
 
 **OpenAI test pattern** (module-level import required for patch to work):
 ```python
@@ -1303,7 +1980,7 @@ with patch("app.services.news_sentiment_service.OpenAI") as mock_openai:
 
 ---
 
-## 20. Extension Guide
+## 24. Extension Guide
 
 ### A. Swap the News Data Source
 
@@ -1345,7 +2022,7 @@ def get_sector_etf(ticker) -> Optional[str]: ...
 
 ### C. Add a New Scoring Dimension
 
-Example: add a `momentum_score` sub-component.
+Example: add a separate `momentum_score` sub-component distinct from `technical_score`.
 
 ```python
 # 1. Compute the score (0–100) in a new service or add to existing
@@ -1353,65 +2030,65 @@ momentum_score = compute_momentum_score(technicals)
 
 # 2. Pass to compute_scores() as a new kwarg:
 def compute_scores(..., momentum_score: float = 50.0) -> dict:
-    base_scores = {
+    short_base = {
         ...,
-        "momentum": momentum_score,   # add here
+        "momentum_quality": momentum_score,   # add here
     }
 
-# 3. Add "momentum" key to whichever horizon weights need it,
+# 3. Add "momentum_quality" key to whichever horizon weight dict needs it,
 #    and reduce another weight to keep sum = 100.
 # _verify_weights() will catch any sum ≠ 100 at import time.
 ```
 
 ---
 
-### D. Fix Valuation Scoring for High-Growth Names
+### D. Add a New Stock Archetype
 
-The current valuation scorer penalises any forward P/E > 40 by -20 points, which systematically underscores high-growth stocks (NVDA, PLTR, AVGO). Two approaches:
-
-**Option 1 — Growth-adjusted thresholds (recommended):**
 ```python
-# In score_valuation(), check if EPS growth is high before penalising P/E:
-def score_valuation(data: ValuationData) -> float:
-    # ... existing code ...
-    # Replace forward_pe block:
-    fpe = data.forward_pe
-    peg = data.peg_ratio   # already penalises expensive growth appropriately
-    if fpe is not None and peg is None:
-        # Only penalise high P/E when PEG is unavailable
-        if fpe <= 15: score += 20
-        elif fpe <= 25: score += 10
-        elif fpe <= 40: score += 0
-        else: score -= 10   # soften from -20 to -10
-    # When PEG is available, let PEG do the work — reduce P/E weight
-```
+# 1. Add constant to StockArchetype class in models/fundamentals.py
+class StockArchetype:
+    ...
+    BIOTECH_PIPELINE = "BIOTECH_PIPELINE"   # example: pre-revenue drug developer
+    ALL = [..., BIOTECH_PIPELINE]
 
-**Option 2 — Sector-relative P/E:**
-```python
-# Instead of absolute thresholds, compare to sector median P/E.
-# Requires a paid data source (Polygon sector snapshots, etc.)
-# Plug in via get_sector_pe(ticker, sector) in fundamental_provider.py
+# 2. Add classification rule in stock_archetype_service.py
+#    (insert at appropriate priority level in classify_archetype())
+if fundamentals.sector == "Healthcare" and fundamentals.revenue_ttm is None:
+    return StockArchetype.BIOTECH_PIPELINE, 75.0
+
+# 3. Add scoring rules in valuation_analysis_service.py
+elif archetype == StockArchetype.BIOTECH_PIPELINE:
+    # P/S and burn rate matter; P/E irrelevant for pre-revenue names
+    ...
+
+# 4. Add UI style in frontend/src/components/RegimeArchetypeBar.tsx
+ARCHETYPE_STYLES["BIOTECH_PIPELINE"] = { bg: 'bg-purple-900/50', text: 'text-purple-300' }
 ```
 
 ---
 
-### E. Add a Real Sector/Macro Score
-
-Currently `sector_macro_score = 50.0` (static). To wire it up:
+### E. Add a New Market Regime
 
 ```python
-# In routers/stock.py, after getting sector_etf:
-sector_macro_score = 50.0
-if sector_etf:
-    sector_hist_6m = get_history(sector_etf, "6mo")
-    spy_hist_6m    = get_history("SPY", "6mo")
-    sector_rs = compute_relative_strength(
-        sector_hist_6m["Close"], spy_hist_6m["Close"], period=126
-    )
-    # Map RS ratio to score: RS > 1.1 → 65, RS < 0.9 → 35, else 50
-    if sector_rs and sector_rs > 1.1: sector_macro_score = 65.0
-    elif sector_rs and sector_rs < 0.9: sector_macro_score = 35.0
-# Pass sector_macro_score to compute_scores(...)
+# 1. Add constant to MarketRegime class in models/market.py
+class MarketRegime:
+    ...
+    HIGH_INFLATION_STAGFLATION = "HIGH_INFLATION_STAGFLATION"
+    ALL = [..., HIGH_INFLATION_STAGFLATION]
+
+# 2. Add classification logic in market_regime_service.py
+#    (in _determine_regime() before the fallback)
+
+# 3. Add weight multipliers in REGIME_WEIGHT_ADJUSTMENTS
+REGIME_WEIGHT_ADJUSTMENTS[MarketRegime.HIGH_INFLATION_STAGFLATION] = {
+    "balance_sheet_strength": 1.30,
+    "fcf_quality": 1.20,
+    "technical_momentum": 0.80,
+}
+
+# 4. Add implication text in _REGIME_IMPLICATIONS
+
+# 5. Add UI style in RegimeArchetypeBar.tsx REGIME_STYLES
 ```
 
 ---
@@ -1445,6 +2122,8 @@ FastAPI pattern — add to `routers/stock.py`:
 async def get_fundamentals(ticker: str) -> FundamentalData:
     fundamentals = get_fundamental_data(ticker.upper())
     fundamentals.fundamental_score = score_fundamentals(fundamentals)
+    valuation = get_valuation_data(ticker.upper())
+    fundamentals = classify_and_attach(fundamentals, valuation)
     return fundamentals
 ```
 
@@ -1475,4 +2154,23 @@ def run_backtest(data, tickers, ...):
 
 ---
 
-*Last updated: 2026-05-04 | Corresponds to implementation at commit HEAD on this date*
+### I. Add VIX History to Backtest (improve regime accuracy)
+
+Currently the backtest uses `vix_level=20.0` (static proxy) because VIX history is not pre-fetched.
+
+```python
+# 1. In data_loader.py, add "^VIX" to the fetch set:
+all_tickers = set(BACKTEST_TICKERS) | {"SPY", "QQQ", "^VIX"} | {sector ETFs}
+
+# 2. In runner.py, retrieve actual VIX at each test date:
+vix_hist = prices.get("^VIX", pd.DataFrame())
+vix_slice = get_price_slice(vix_hist, test_date)
+vix_level = float(vix_slice["Close"].iloc[-1]) if not vix_slice.empty else 20.0
+
+# 3. Pass actual vix_level to classify_regime() — regime labels improve immediately.
+# This will cause the regime segmentation to differ from the static-VIX results.
+```
+
+---
+
+*Last updated: 2026-05-04 | Reflects US-001 through US-010. 241 Python tests passing · 0 TypeScript errors.*

@@ -11,11 +11,13 @@ from typing import Optional
 
 import pandas as pd
 
-from app.services.technical_analysis_service import compute_technicals
+from app.services.technical_analysis_service import compute_technicals, compute_relative_strength
 from app.services.fundamental_analysis_service import score_fundamentals
-from app.services.valuation_analysis_service import score_valuation
+from app.services.valuation_analysis_service import score_valuation, score_valuation_with_archetype
 from app.services.scoring_service import compute_scores
 from app.services.recommendation_service import build_recommendations
+from app.services.stock_archetype_service import classify_and_attach
+from app.services.market_regime_service import classify_regime
 
 from backtest.config import (
     BACKTEST_TICKERS,
@@ -72,6 +74,7 @@ def run_backtest(
 
     test_dates = _generate_weekly_dates(start, end)
     spy_full = prices.get("SPY", pd.DataFrame())
+    qqq_full = prices.get("QQQ", pd.DataFrame())
 
     signals: list[dict] = []
     total = len(tickers) * len(test_dates)
@@ -124,11 +127,35 @@ def run_backtest(
                     price_at_date=current_price,
                 )
 
-                # Compute scores
+                # Archetype classification + growth-adjusted valuation
                 fundamentals.fundamental_score = score_fundamentals(fundamentals)
                 valuation.valuation_score = score_valuation(valuation)
+                fundamentals = classify_and_attach(fundamentals, valuation)
+                valuation.archetype_adjusted_score = score_valuation_with_archetype(
+                    valuation,
+                    fundamentals.archetype,
+                    revenue_growth_yoy=fundamentals.revenue_growth_yoy,
+                    operating_margin=fundamentals.operating_margin,
+                    gross_margin=fundamentals.gross_margin,
+                )
 
                 news = neutral_news()
+
+                # Sector macro score from real RS
+                sector_macro_score = 50.0
+                if not sector_slice.empty and len(sector_slice) >= 63 and len(spy_slice) >= 63:
+                    rs = compute_relative_strength(sector_slice["Close"], spy_slice["Close"], period=63)
+                    if rs is not None:
+                        sector_macro_score = 65.0 if rs > 1.05 else 35.0 if rs < 0.95 else 50.0
+
+                # Market regime from SPY + QQQ slice
+                qqq_slice = get_price_slice(qqq_full, test_date) if not qqq_full.empty else pd.DataFrame()
+                regime_assessment = None
+                if not spy_slice.empty and not qqq_slice.empty:
+                    try:
+                        regime_assessment = classify_regime(spy_slice, qqq_slice, vix_level=20.0)
+                    except Exception:
+                        pass
 
                 scores = compute_scores(
                     technicals=technicals,
@@ -137,8 +164,9 @@ def run_backtest(
                     earnings=earnings,
                     news=news,
                     catalyst_score=50.0,
-                    sector_macro_score=50.0,
+                    sector_macro_score=sector_macro_score,
                     risk_reward_score=50.0,
+                    regime_assessment=regime_assessment,
                 )
 
                 recommendations = build_recommendations(
@@ -151,6 +179,7 @@ def run_backtest(
                     horizons=HORIZONS,
                     risk_profile=risk_profile,
                     current_price=current_price,
+                    regime_assessment=regime_assessment,
                 )
 
                 for rec in recommendations:
@@ -161,6 +190,8 @@ def run_backtest(
                         "decision": rec.decision,
                         "score": rec.score,
                         "confidence": rec.confidence,
+                        "archetype": fundamentals.archetype,
+                        "market_regime": regime_assessment.regime if regime_assessment else "SIDEWAYS_CHOPPY",
                         "price": current_price,
                         "technical_score": technicals.technical_score,
                         "fundamental_score": fundamentals.fundamental_score,
@@ -172,10 +203,12 @@ def run_backtest(
                         "entry_preferred": rec.entry_plan.preferred_entry if rec.entry_plan else None,
                         "stop_loss": rec.exit_plan.stop_loss if rec.exit_plan else None,
                         "first_target": rec.exit_plan.first_target if rec.exit_plan else None,
-                        # forward_return and excess_return filled in by outcome.py
+                        # forward_return, spy_return, qqq_return, excess_* filled by outcome.py
                         "forward_return": None,
                         "spy_return": None,
+                        "qqq_return": None,
                         "excess_return": None,
+                        "excess_return_vs_qqq": None,
                     })
 
             except Exception as e:

@@ -149,6 +149,8 @@ export interface HorizonRecommendation {
   decision: string;
   score: number;
   confidence: string;
+  confidence_score: number;
+  data_completeness_score: number;
   summary: string;
   bullish_factors: string[];
   bearish_factors: string[];
@@ -164,6 +166,15 @@ export interface DataQualityReport {
   warnings: string[];
 }
 
+export interface SignalProfile {
+  momentum: string;
+  growth: string;
+  valuation: string;
+  entry_timing: string;
+  sentiment: string;
+  risk_reward: string;
+}
+
 export interface StockAnalysisResult {
   ticker: string;
   generated_at: string;
@@ -177,6 +188,11 @@ export interface StockAnalysisResult {
   news: NewsSummary;
   recommendations: HorizonRecommendation[];
   markdown_report: string;
+  archetype: string;
+  archetype_confidence: number;
+  market_regime: string;
+  regime_confidence: number;
+  signal_profile?: SignalProfile;
   disclaimer: string;
 }
 

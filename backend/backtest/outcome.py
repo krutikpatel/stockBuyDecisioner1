@@ -51,6 +51,7 @@ def attach_outcomes(
     Modifies signals in-place and returns the list.
     """
     spy_df = prices.get("SPY", pd.DataFrame())
+    qqq_df = prices.get("QQQ", pd.DataFrame())
 
     for sig in signals:
         ticker = sig["ticker"]
@@ -67,6 +68,8 @@ def attach_outcomes(
         exit_price = _get_price_at_offset(price_df, signal_date, holding_days)
         spy_entry = _get_price_at_offset(spy_df, signal_date - pd.Timedelta(days=1), 1)
         spy_exit = _get_price_at_offset(spy_df, signal_date, holding_days)
+        qqq_entry = _get_price_at_offset(qqq_df, signal_date - pd.Timedelta(days=1), 1)
+        qqq_exit = _get_price_at_offset(qqq_df, signal_date, holding_days)
 
         if exit_price is not None:
             sig["forward_return"] = round((exit_price - entry_price) / entry_price * 100, 4)
@@ -81,6 +84,15 @@ def attach_outcomes(
         else:
             sig["spy_return"] = None
             sig["excess_return"] = None
+
+        if qqq_entry is not None and qqq_exit is not None:
+            qqq_ret = (qqq_exit - qqq_entry) / qqq_entry * 100
+            sig["qqq_return"] = round(qqq_ret, 4)
+            if sig["forward_return"] is not None:
+                sig["excess_return_vs_qqq"] = round(sig["forward_return"] - qqq_ret, 4)
+        else:
+            sig["qqq_return"] = None
+            sig["excess_return_vs_qqq"] = None
 
     resolved = sum(1 for s in signals if s["forward_return"] is not None)
     logger.info("Outcomes attached: %d/%d signals resolved", resolved, len(signals))

@@ -73,6 +73,8 @@ def get_fundamental_data(ticker: str) -> FundamentalData:
     shares = _safe_float(info.get("sharesOutstanding"))
     roe = _safe_float(info.get("returnOnEquity"))
     roic = _safe_float(info.get("returnOnAssets"))  # proxy; ROIC not directly available
+    sector = info.get("sector") or None
+    beta = _safe_float(info.get("beta"))
 
     return FundamentalData(
         revenue_ttm=revenue_ttm,
@@ -93,6 +95,8 @@ def get_fundamental_data(ticker: str) -> FundamentalData:
         shares_outstanding=shares,
         roe=roe,
         roic=roic,
+        sector=sector,
+        beta=beta,
     )
 
 

@@ -7,8 +7,11 @@ from typing import Optional
 import pandas as pd
 
 DECISION_ORDER = [
-    "BUY_NOW", "BUY_STARTER", "BUY_ON_BREAKOUT",
-    "WAIT_FOR_PULLBACK", "WATCHLIST", "AVOID",
+    "BUY_NOW", "BUY_STARTER", "BUY_STARTER_EXTENDED",
+    "BUY_ON_PULLBACK", "BUY_ON_BREAKOUT", "BUY_AFTER_EARNINGS",
+    "WATCHLIST", "WATCHLIST_NEEDS_CATALYST", "HOLD_EXISTING_DO_NOT_ADD",
+    "AVOID_BAD_BUSINESS", "AVOID_BAD_CHART", "AVOID_BAD_RISK_REWARD",
+    "AVOID_LOW_CONFIDENCE", "AVOID",
 ]
 
 SCORE_BUCKETS = [
@@ -43,6 +46,8 @@ def build_metrics(signals: list[dict], horizon: str = "short_term") -> dict:
         "by_decision": _by_decision(df_resolved),
         "by_score_bucket": _by_score_bucket(df_resolved),
         "by_ticker": _by_ticker(df_resolved),
+        "by_regime": _by_regime(df_resolved),
+        "by_archetype": _by_archetype(df_resolved),
         "monthly_breakdown": _monthly_breakdown(df_resolved),
         "portfolio_simulation": _portfolio_simulation(df_resolved),
         "overall_stats": _overall_stats(df_resolved),
@@ -104,6 +109,44 @@ def _by_ticker(df: pd.DataFrame) -> list[dict]:
         })
     rows.sort(key=lambda r: r["avg_return_pct"] or 0, reverse=True)
     return rows
+
+
+def _by_regime(df: pd.DataFrame) -> dict:
+    if "market_regime" not in df.columns or df.empty:
+        return {}
+    result = {}
+    for regime, group in df.groupby("market_regime"):
+        if group.empty:
+            continue
+        wins = (group["forward_return"] > 0).sum()
+        exc_qqq = group["excess_return_vs_qqq"].mean() if "excess_return_vs_qqq" in group.columns and group["excess_return_vs_qqq"].notna().any() else None
+        result[str(regime)] = {
+            "n_signals": len(group),
+            "win_rate_pct": round(wins / len(group) * 100, 1),
+            "avg_return_pct": round(group["forward_return"].mean(), 2),
+            "avg_excess_return_pct": round(group["excess_return"].mean(), 2) if group["excess_return"].notna().any() else None,
+            "avg_excess_vs_qqq_pct": round(exc_qqq, 2) if exc_qqq is not None else None,
+        }
+    return result
+
+
+def _by_archetype(df: pd.DataFrame) -> dict:
+    if "archetype" not in df.columns or df.empty:
+        return {}
+    result = {}
+    for archetype, group in df.groupby("archetype"):
+        if group.empty:
+            continue
+        wins = (group["forward_return"] > 0).sum()
+        best_decision = group["decision"].mode().iloc[0] if len(group) > 0 else None
+        result[str(archetype)] = {
+            "n_signals": len(group),
+            "win_rate_pct": round(wins / len(group) * 100, 1),
+            "avg_return_pct": round(group["forward_return"].mean(), 2),
+            "avg_score": round(group["score"].mean(), 1),
+            "best_decision": best_decision,
+        }
+    return result
 
 
 def _monthly_breakdown(df: pd.DataFrame) -> list[dict]:

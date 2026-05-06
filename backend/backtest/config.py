@@ -37,3 +37,5 @@ CACHE_DIR = "backtest_results/cache"
 RESULTS_DIR = "backtest_results"
 
 DEFAULT_RISK_PROFILE = "moderate"
+
+BENCHMARK_TICKERS = {"SPY", "QQQ"}
