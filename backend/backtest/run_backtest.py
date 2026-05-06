@@ -1,156 +1,141 @@
 """
-CLI entry point for the backtest engine.
+Backtest CLI entry point.
 
-Usage:
-    cd backend
-    source .venv/bin/activate
+Usage (from backend/ directory):
 
-    # Quick smoke test (2 tickers, 1 year)
-    python -m backtest.run_backtest --tickers AAPL SPY --start 2025-05-01
+  # Full run, all 20 tickers, Phase 3 (default)
+  python -m backtest.run_backtest
 
-    # Full 2-year backtest (all 20 tickers, ~15–30 min)
-    python -m backtest.run_backtest
+  # Quick smoke test — 2 tickers, 1 year, Phase 1
+  python -m backtest.run_backtest --tickers AAPL,MSFT --start 2022-01-01 --end 2023-01-01 --phase 1
 
-    # Custom config
-    python -m backtest.run_backtest --tickers AAPL MSFT NVDA --start 2024-05-01 --refresh-cache
+  # Force re-download of all cached data
+  python -m backtest.run_backtest --force-refresh
+
+Options:
+  --tickers        Comma-separated ticker list (default: all 20 in config)
+  --start          Backtest start date  YYYY-MM-DD (default: config.BACKTEST_START)
+  --end            Backtest end date    YYYY-MM-DD (default: config.BACKTEST_END)
+  --phase          1, 2, or 3 (default: 3)
+  --risk-profile   conservative | moderate | aggressive (default: moderate)
+  --force-refresh  Re-download all data even if cache exists
+  --output-dir     Directory for results (default: backtest/results/)
+  --no-report      Skip HTML report generation (still writes CSVs)
 """
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import os
 import sys
 from pathlib import Path
 
-# Ensure backend/ is on the path when run as `python -m backtest.run_backtest`
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("backtest")
+# Ensure the backend/ package root is on sys.path when running as a module
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 
 from backtest.config import (
-    BACKTEST_TICKERS, BACKTEST_START, BACKTEST_END,
-    DEFAULT_RISK_PROFILE, HORIZONS, RESULTS_DIR,
+    BACKTEST_START, BACKTEST_END, DEFAULT_RISK_PROFILE,
+    DEFAULT_PHASE, RESULTS_DIR,
 )
 from backtest.data_loader import load_all_data
 from backtest.runner import run_backtest
 from backtest.outcome import attach_outcomes
-from backtest.metrics import build_metrics
-from backtest.report import save_csvs, save_report
+from backtest.metrics import build_all_horizons_metrics
+from backtest.report import generate_report
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("run_backtest")
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Stock Decision Tool — Backtest Engine")
-    p.add_argument("--tickers", nargs="+", default=None,
-                   help="Ticker symbols to test (default: all 20 configured tickers)")
-    p.add_argument("--start", default=None,
-                   help="Backtest start date YYYY-MM-DD (default: 2024-05-06)")
-    p.add_argument("--end", default=None,
-                   help="Backtest end date YYYY-MM-DD (default: 2026-05-04)")
-    p.add_argument("--risk-profile", default=DEFAULT_RISK_PROFILE,
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Run the stock-decision-tool backtesting framework.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    p.add_argument("--tickers",       default=None,
+                   help="Comma-separated list of tickers (overrides config)")
+    p.add_argument("--start",         default=BACKTEST_START,
+                   help=f"Backtest start date (default: {BACKTEST_START})")
+    p.add_argument("--end",           default=BACKTEST_END,
+                   help=f"Backtest end date (default: {BACKTEST_END})")
+    p.add_argument("--phase",         default=DEFAULT_PHASE, type=int, choices=[1, 2, 3],
+                   help="Phase 1=technical-only, 2=+regime, 3=+fundamentals (default: 3)")
+    p.add_argument("--risk-profile",  default=DEFAULT_RISK_PROFILE,
                    choices=["conservative", "moderate", "aggressive"],
-                   help="Risk profile for recommendations (default: moderate)")
-    p.add_argument("--refresh-cache", action="store_true",
-                   help="Force re-fetch of all data from yfinance (ignores cache)")
-    p.add_argument("--no-report", action="store_true",
-                   help="Skip HTML/JSON report generation")
+                   help=f"Risk profile (default: {DEFAULT_RISK_PROFILE})")
+    p.add_argument("--force-refresh", action="store_true",
+                   help="Re-download all data even if cache exists")
+    p.add_argument("--output-dir",    default=RESULTS_DIR,
+                   help=f"Output directory (default: {RESULTS_DIR})")
+    p.add_argument("--no-report",     action="store_true",
+                   help="Skip HTML report generation")
     return p.parse_args()
 
 
-def print_summary(metrics_by_horizon: dict) -> None:
-    """Print a concise summary table to stdout."""
-    print("\n" + "=" * 72)
-    print("BACKTEST SUMMARY")
-    print("=" * 72)
-
-    for horizon in HORIZONS:
-        m = metrics_by_horizon.get(horizon, {})
-        overall = m.get("overall_stats", {})
-        sim = m.get("portfolio_simulation", {})
-        by_decision = m.get("by_decision", [])
-
-        label = horizon.replace("_", "-").upper()
-        print(f"\n{'─' * 72}")
-        print(f"  {label} HORIZON")
-        print(f"  Total signals: {m.get('total_signals', 0)} | Resolved: {m.get('resolved_signals', 0)}")
-
-        wr = overall.get("overall_win_rate_pct")
-        ar = overall.get("avg_return_pct")
-        ae = overall.get("avg_excess_vs_spy_pct")
-        corr = overall.get("score_return_correlation")
-
-        print(f"  Overall win rate: {wr:.1f}%  |  Avg return: {ar:+.2f}%  |  Avg vs SPY: {ae:+.2f}%"
-              if (wr and ar is not None and ae is not None) else "  No resolved signals.")
-        if corr is not None:
-            print(f"  Score↔Return correlation: {corr:.3f}")
-
-        if by_decision:
-            print(f"\n  {'Decision':<22} {'Count':>6} {'Avg Return':>12} {'Win Rate':>10} {'vs SPY':>10}")
-            print(f"  {'-'*22} {'-'*6} {'-'*12} {'-'*10} {'-'*10}")
-            for row in by_decision:
-                exc = row.get("avg_excess_vs_spy_pct")
-                exc_str = f"{exc:+.2f}%" if exc is not None else "N/A"
-                print(
-                    f"  {row['decision']:<22} {row['count']:>6} "
-                    f"  {row['avg_return_pct']:>+8.2f}%  {row['win_rate_pct']:>7.1f}%  {exc_str:>10}"
-                )
-
-        sim_trades = sim.get("total_trades", 0)
-        if sim_trades > 0:
-            alpha = sim.get("alpha_pct")
-            alpha_str = f"{alpha:+.2f}%" if alpha is not None else "N/A"
-            print(f"\n  Buy signals simulated: {sim_trades} trades | Alpha vs SPY: {alpha_str}")
-
-    print("\n" + "=" * 72)
-    print(f"Results saved to: {Path(RESULTS_DIR).resolve()}/")
-    print("=" * 72 + "\n")
-
-
 def main() -> None:
-    args = parse_args()
+    args = _parse_args()
 
-    tickers = args.tickers or BACKTEST_TICKERS
-    print(f"\nStock Decision Tool — Backtest Engine")
-    print(f"Tickers: {', '.join(tickers)}")
-    print(f"Date range: {args.start or BACKTEST_START} → {args.end or BACKTEST_END}")
-    print(f"Risk profile: {args.risk_profile}")
+    tickers = [t.strip().upper() for t in args.tickers.split(",")] if args.tickers else None
 
-    # Step 1: Load / fetch data (pass user tickers so extras get fetched)
-    data = load_all_data(force_refresh=args.refresh_cache, extra_tickers=tickers)
+    logger.info("=== Stock Decision Tool Backtest ===")
+    logger.info("Phase: %d | Start: %s | End: %s", args.phase, args.start, args.end)
+    if tickers:
+        logger.info("Tickers: %s", ", ".join(tickers))
 
-    # Step 2: Run backtest
+    # ── Step 1: Load / download data ──────────────────────────────────────
+    logger.info("Step 1/5: Loading data…")
+    data = load_all_data(force_refresh=args.force_refresh, extra_tickers=tickers)
+
+    # ── Step 2: Run backtest ──────────────────────────────────────────────
+    logger.info("Step 2/5: Running backtest loop…")
     signals = run_backtest(
         data=data,
         tickers=tickers,
         start=args.start,
         end=args.end,
         risk_profile=args.risk_profile,
+        phase=args.phase,
     )
 
     if not signals:
-        print("No signals generated. Check that tickers have sufficient price history.")
+        logger.error("No signals generated — check data or date range.")
         sys.exit(1)
 
-    # Step 3: Attach outcomes
-    print("\nComputing forward returns...")
+    # ── Step 3: Attach outcomes ───────────────────────────────────────────
+    logger.info("Step 3/5: Attaching forward returns…")
     signals = attach_outcomes(signals, data["prices"])
 
-    # Step 4: Build metrics
-    print("Aggregating metrics...")
-    metrics_by_horizon = {
-        h: build_metrics(signals, h) for h in HORIZONS
-    }
+    resolved = sum(1 for s in signals if s.get("forward_return") is not None)
+    logger.info("Outcomes resolved: %d / %d signals", resolved, len(signals))
 
-    # Step 5: Save CSV files
-    save_csvs(signals, metrics_by_horizon)
+    # ── Step 4: Compute metrics ───────────────────────────────────────────
+    logger.info("Step 4/5: Computing metrics…")
+    all_metrics = build_all_horizons_metrics(signals)
 
-    # Step 6: Generate HTML + JSON report
+    # ── Step 5: Generate report ───────────────────────────────────────────
     if not args.no_report:
-        save_report(signals, metrics_by_horizon)
+        logger.info("Step 5/5: Generating report → %s/", args.output_dir)
+        generate_report(
+            all_metrics=all_metrics,
+            signals=signals,
+            output_dir=args.output_dir,
+            phase=args.phase,
+        )
+    else:
+        import pandas as pd
+        from pathlib import Path as _Path
+        out = _Path(args.output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(signals).to_csv(out / "signals_with_outcomes.csv", index=False)
+        logger.info("Signals CSV written to %s/signals_with_outcomes.csv", args.output_dir)
 
-    # Step 7: Print summary
-    print_summary(metrics_by_horizon)
+    logger.info("=== Backtest complete ===")
 
 
 if __name__ == "__main__":

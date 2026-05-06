@@ -12,7 +12,7 @@ C4Context
 
   Person(user, "Investor", "Enters a ticker and risk profile, reviews structured recommendation")
 
-  System(frontend, "React Frontend", "Dashboard UI — ticker input, recommendation cards, signal profile, regime/archetype badges, charts, markdown report")
+  System(frontend, "React Frontend", "Dashboard UI — ticker input, 11 signal cards, recommendation cards, signal profile, regime/archetype badges, performance table, ownership/volume panels, charts, markdown report")
   System(backend, "FastAPI Backend", "Analysis engine — archetype classification, regime detection, growth-adjusted valuation, regime-aware scoring, 14-label decision logic, risk management")
 
   System_Ext(yfinance, "Yahoo Finance (yfinance)", "Price/OHLCV, fundamentals, earnings, options, news, VIX, QQQ")
@@ -34,9 +34,13 @@ flowchart TB
         UI["Dashboard.tsx\nTicker input · Risk profile · Results"]
         RAB["RegimeArchetypeBar\nArchetype badge · Regime badge"]
         SPC["SignalProfileCard\n6 signal dimension cards"]
-        RC["RecommendationCard\n14 decision labels · Completeness bars"]
+        SCG["SignalCardsGrid\n11 signal cards (score gauge + factors)"]
+        RC["RecommendationCard\nNew per-horizon decision labels\nCompleteness bars"]
         SC["ScoreBreakdown"]
         TC["TechnicalChart"]
+        PT["PerformanceTable\n1W/1M/3M/6M/YTD/1Y/3Y/5Y + max DD"]
+        OP["OwnershipPanel\nInsider · Institutional · Short · Analyst"]
+        VP["VolumePanel\nOBV · A/D · CMF · VWAP dev · vol ratios"]
         NW["NewsSection"]
         MR["MarkdownReport"]
     end
@@ -46,25 +50,26 @@ flowchart TB
 
         subgraph Providers["Data Providers"]
             MP["MarketDataProvider\nyfinance OHLCV + retry"]
-            FP["FundamentalProvider\nyfinance .info + statements\n(sector, beta added)"]
+            FP["FundamentalProvider\nyfinance .info + statements\n(sector, beta, growth rates, ownership,\nanalyst data, ROA, quick ratio, etc.)"]
             EP["EarningsProvider\nearnings_history + dates"]
             NP["NewsProvider\nyfinance .news"]
             OP["OptionsProvider\noption_chain(nearest_expiry)"]
         end
 
         subgraph Services["Analysis Services"]
-            TA["TechnicalAnalysisService\nMAs · RSI · MACD · ATR\nTrend · Extension · S/R · RS"]
-            FA["FundamentalAnalysisService\nRevenue · Margins · FCF · Debt · ROE"]
+            TA["TechnicalAnalysisService\nMAs · EMA8/21 · RSI · MACD · ATR · ADX\nStochRSI · Bollinger Bands · SMA slopes\nPerf periods (1W–5Y) · Range distances\nWeekly/Monthly vol · Trend · Extension · S/R · RS\nOBV · A/D · CMF · VWAP · vol ratios\nRS vs QQQ · Percentile ranks · Drawdown · Gap fill"]
+            FA["FundamentalAnalysisService\nRevenue · Margins · FCF · Debt · ROE\nROIC · ROA · Quick ratio · LT D/E\nMulti-period EPS/Sales growth\nOwnership · Short float · Analyst data"]
             AS["StockArchetypeService\nClassify: HYPER_GROWTH / MATURE_VALUE\n/ DEFENSIVE / CYCLICAL / etc."]
-            VA["ValuationAnalysisService\nscore_valuation() — generic\nscore_valuation_with_archetype() — growth-adjusted"]
+            VA["ValuationAnalysisService\nscore_valuation() — generic\nscore_valuation_with_archetype() — growth-adjusted\nEV/Sales · P/Book · P/Cash"]
             MR2["MarketRegimeService\nBULL_RISK_ON / BEAR_RISK_OFF\n/ SIDEWAYS_CHOPPY / etc.\nApplies regime weight multipliers"]
             NS["NewsSentimentService\nOpenAI GPT-4o-mini\n(keyword fallback)"]
             DC["DataCompletenessService\nScores 0–100 per gap\nCaps confidence when data thin"]
-            SS["ScoringService\nHorizon-specific weights\n+ regime multipliers"]
-            RS["RecommendationService\n14 decision labels\nRegime-aware overrides"]
-            SP["SignalProfileService\n6 signal dimensions"]
+            SCS["SignalCardService\n11 signal card scorers:\nMomentum · Trend · Entry Timing\nVolume/Accum · Vol/Risk · RS\nGrowth · Valuation · Quality\nOwnership · Catalyst"]
+            SS["ScoringService\nSignal-card weighted aggregation\nper horizon + regime multipliers"]
+            RS["RecommendationService\nNew per-horizon decision labels\nSignal-card-based decision logic"]
+            SP["SignalProfileService\nDerived from signal card scores\n6 signal dimensions"]
             RM["RiskManagementService\nEntry · Stop-loss · Target · R/R"]
-            MDS["MarkdownReportService\nFull structured report"]
+            MDS["MarkdownReportService\nSignal cards section + full report"]
         end
 
         Cache["TTLCache\n15 min price · 24 h fundamentals"]
@@ -175,15 +180,15 @@ flowchart LR
     end
 
     subgraph AnalysisLayer["Analysis Layer"]
-        TECH["Technical Analysis\n─────────────\nMA(10/20/50/100/200)\nRSI(14), MACD, ATR\nTrend classification\nExtension detection\nSupport / Resistance\nVolume trend\nRS vs SPY + Sector\n→ technical_score 0–100"]
+        TECH["Technical Analysis\n─────────────\nMA(10/20/50/100/200) + EMA(8/21)\nSMA slopes (20/50/200) · SMA/EMA relatives\nRSI(14), MACD, ADX, StochRSI\nATR, ATR%, Bollinger Bands (pos/width)\nPerf: 1W/1M/3M/6M/YTD/1Y/3Y/5Y\nGap%, Change-from-open%\nRange dist: 20D/50D/52W/ATH/ATL high+low\nWeekly/Monthly vol · Trend classification\nExtension detection · Support/Resistance\nOBV trend · A/D trend · CMF · VWAP dev\nVol dry-up · Breakout vol mult · Up/Down vol\nRS vs SPY + QQQ + Sector\nReturn percentile ranks (20D/63D/126D/252D)\nMax drawdown (3M, 1Y) · Gap fill · Post-earnings drift\n→ technical_score 0–100"]
 
         ARCH["Stock Archetype\n─────────────\nHYPER_GROWTH\nPROFITABLE_GROWTH\nCYCLICAL_GROWTH\nMATURE_VALUE\nTURNAROUND\nSPECULATIVE_STORY\nDEFENSIVE\nCOMMODITY_CYCLICAL"]
 
         REG["Market Regime\n─────────────\nBULL_RISK_ON\nBULL_NARROW_LEADERSHIP\nSIDEWAYS_CHOPPY\nBEAR_RISK_OFF\nSECTOR_ROTATION\nLIQUIDITY_RALLY\n→ confidence + implication"]
 
-        FUND["Fundamental Analysis\n─────────────\nRevenue growth YoY/QoQ\nGross / Op / Net margin\nFree cash flow\nNet debt\nDebt-to-equity, ROE\n→ fundamental_score 0–100"]
+        FUND["Fundamental Analysis\n─────────────\nRevenue growth YoY/QoQ/3Y/5Y\nEPS growth TTM/3Y/5Y/next 5Y\nGross / Op / Net margin\nFree cash flow, FCF margin\nNet debt, ROE, ROIC, ROA\nDebt-to-equity, LT D/E, Quick ratio\nInsider/Inst ownership + transactions\nShort float/ratio, analyst rec\n→ fundamental_score 0–100"]
 
-        VAL["Valuation Analysis\n─────────────\nTrailing P/E, Forward P/E\nPEG (calculated)\nPrice/Sales, EV/EBITDA\nP/FCF, FCF Yield\nscore_valuation() — generic\nscore_valuation_with_archetype()\n→ archetype_adjusted_score 0–100"]
+        VAL["Valuation Analysis\n─────────────\nTrailing P/E, Forward P/E\nPEG (calculated)\nPrice/Sales, EV/EBITDA\nP/FCF, FCF Yield\nEV/Sales, P/Book, P/Cash\nscore_valuation() — generic\nscore_valuation_with_archetype()\n→ archetype_adjusted_score 0–100"]
 
         EARN["Earnings Analysis\n─────────────\nBeat rate (last 8 qtrs)\nAvg EPS surprise %\nNext earnings < 30d?\n→ earnings_score 0–100"]
 
@@ -219,105 +224,77 @@ flowchart LR
 
 ## 5. Scoring System
 
+Scores are now derived from **11 signal card scores** (each 0–100), weighted per horizon.
+
 ```mermaid
 flowchart TB
-    subgraph SubScores["Intermediate Scores (derived per horizon)"]
-        TM["technical_momentum\n= technical_score"]
-        RS2["relative_strength\n= technical_score"]
-        CN["catalyst_news\n= (catalyst + news) / 2"]
-        OF["options_flow\n= catalyst_score"]
-        MRG["market_regime\n= f(regime, confidence)"]
-        RR["risk_reward\n= risk_reward_score"]
-        ER["earnings_revision\n= earnings_score"]
-        GA["growth_acceleration\n= fundamental_score"]
-        TT["technical_trend\n= technical_score"]
-        SS2["sector_strength\n= sector_macro_score (real RS)"]
-        VRG["valuation_relative_growth\n= archetype_adjusted_score\n  (fallback: valuation_score)"]
-        BQ["business_quality\n= fundamental_score"]
-        GD["growth_durability\n= fundamental_score"]
-        FQ["fcf_quality\n= fundamental_score"]
-        BS2["balance_sheet_strength\n= fundamental_score"]
-        CM["competitive_moat\n= fundamental_score"]
+    subgraph Cards["11 Signal Cards (each 0–100)"]
+        MOM["Momentum\n1W/1M/3M perf, MACD, RSI slope"]
+        TRD["Trend\nPrice vs SMA20/50/200, slopes, ADX"]
+        ENT["Entry Timing\nRSI, StochRSI, EMA8/21, VWAP, ATR"]
+        VOL["Volume/Accum\nOBV, A/D, CMF, rel vol, up/down vol"]
+        VRK["Vol/Risk\nATR%, drawdown, beta, weekly vol"]
+        RS2["Relative Strength\nRS vs SPY/QQQ/sector, percentile ranks"]
+        GRW["Growth\nEPS/rev growth, EPS surprise"]
+        VALU["Valuation\nP/E, fwd P/E, PEG, P/S, EV/EBITDA, P/FCF"]
+        QUAL["Quality\nGross/op/net margin, ROE, ROIC, ROA, ratios"]
+        OWN["Ownership\nInsider/inst ownership+txn, short float"]
+        CAT["Catalyst\nNews score, analyst rec, target dist, earnings"]
     end
 
-    subgraph Weights["Horizon-Specific Weights (each sums to 100)"]
+    subgraph Weights["Signal Card Weights per Horizon (sums to 100)"]
         direction TB
-        STW["Short-Term\n─────────────\ntechnical_momentum   30%\nrelative_strength    20%\ncatalyst_news        20%\noptions_flow         10%\nmarket_regime        10%\nrisk_reward          10%"]
+        STW["Short-Term\n────────────\nMomentum          25%\nVol/Accum         20%\nEntry Timing      20%\nRelative Strength 15%\nVol/Risk          10%\nCatalyst          10%"]
 
-        MTW["Medium-Term\n─────────────\nearnings_revision         25%\ngrowth_acceleration       20%\ntechnical_trend           20%\nsector_strength           15%\nvaluation_relative_growth 10%\ncatalyst_news             10%"]
+        MTW["Medium-Term\n────────────\nTrend             20%\nGrowth            20%\nRelative Strength 15%\nVol/Accum         15%\nValuation         10%\nQuality           10%\nCatalyst          10%"]
 
-        LTW["Long-Term\n─────────────\nbusiness_quality          25%\ngrowth_durability         20%\nfcf_quality               15%\nbalance_sheet_strength    15%\nvaluation_relative_growth 15%\ncompetitive_moat          10%"]
-    end
-
-    subgraph RegimeAdjust["Regime Multipliers (applied before composite)"]
-        BULL["BULL_RISK_ON\ntechnical_momentum ×1.20\nrelative_strength ×1.15\nvaluation_relative_growth ×0.70"]
-        BEAR["BEAR_RISK_OFF\nvaluation_relative_growth ×1.30\nbalance_sheet_strength ×1.25\ntechnical_momentum ×0.90"]
-        SIDE["SIDEWAYS_CHOPPY\nmarket_regime ×1.25\nrisk_reward ×1.25"]
+        LTW["Long-Term\n────────────\nGrowth            20%\nQuality           20%\nValuation         15%\nOwnership         15%\nTrend             10%\nCatalyst          10%\nVol/Risk           5%\nMomentum           5%"]
     end
 
     subgraph Composites["Composite Scores (0–100)"]
-        STC["short_term composite"]
-        MTC["medium_term composite"]
-        LTC["long_term composite"]
+        STC["short_term\n→ per-horizon decision label"]
+        MTC["medium_term\n→ per-horizon decision label"]
+        LTC["long_term\n→ per-horizon decision label"]
     end
 
-    SubScores --> RegimeAdjust
-    RegimeAdjust --> STW --> STC
-    RegimeAdjust --> MTW --> MTC
-    RegimeAdjust --> LTW --> LTC
+    Cards --> STW --> STC
+    Cards --> MTW --> MTC
+    Cards --> LTW --> LTC
 ```
 
 ---
 
 ## 6. Decision Logic
 
-All 14 decision labels. Regime and data-quality overrides fire before threshold logic.
+Decision labels are now **horizon-specific**, derived from signal-card-weighted composite scores.
 
-```mermaid
-flowchart TD
-    INPUT["Composite Score\n+ TechnicalIndicators\n+ FundamentalData\n+ EarningsData\n+ MarketRegimeAssessment\n+ data_completeness_score"]
+### Short-Term Labels
 
-    INPUT --> DQ{"data_completeness\n< 55?"}
-    DQ -->|Yes| ALC["AVOID_LOW_CONFIDENCE ⬛"]
-    DQ -->|No| CHART{"chart_is_weak?\ndowntrend + RS < 0.8"}
-    CHART -->|Yes, score<55| ABC["AVOID_BAD_CHART 🔴"]
-    CHART -->|No| BIZ{"business_deteriorating?\nrev<0 + (neg margin OR beat<40%)"}
-    BIZ -->|Yes, score<55| ABB["AVOID_BAD_BUSINESS 🔴"]
-    BIZ -->|No| EARN30{"within 30d earnings?\n55 ≤ score < 70?"}
-    EARN30 -->|Yes| BAE["BUY_AFTER_EARNINGS 🔵"]
-    EARN30 -->|No| REGIME_BR{"score ≥ 80 AND\nNOT extended?"}
-    REGIME_BR -->|Yes, support exists| BN["BUY_NOW 🟢"]
-    REGIME_BR -->|Yes, no support| BS["BUY_STARTER 🟢"]
-    REGIME_BR -->|No| EXT{"extended AND\nscore ≥ 65?"}
-    EXT -->|Yes, BULL regime| BSE["BUY_STARTER_EXTENDED 🟢"]
-    EXT -->|Yes, non-bull| BOP["BUY_ON_PULLBACK 🟡"]
-    EXT -->|No| SC2{"70 ≤ score < 80?"}
-    SC2 -->|Yes| BS2["BUY_STARTER 🟢"]
-    SC2 -->|No| SC3{"score ≥ 65?"}
-    SC3 -->|Yes| BOP2["BUY_ON_PULLBACK 🟡"]
-    SC3 -->|No| SC4{"score < 50?"}
-    SC4 -->|Yes| AV["AVOID 🔴"]
-    SC4 -->|No| WL["WATCHLIST ⚪"]
-```
+| Label | Trigger |
+|-------|---------|
+| `BUY_NOW_MOMENTUM` | Score ≥ 75 |
+| `BUY_STARTER_STRONG_BUT_EXTENDED` | Score 65–74 |
+| `WAIT_FOR_PULLBACK` | Score 50–64 |
+| `AVOID_BAD_CHART` | Score < 50 |
 
-**Full label set (14):**
+### Medium-Term Labels
 
-| Label | Color | Trigger |
-|-------|-------|---------|
-| `BUY_NOW` | 🟢 Green | Score ≥ 80, not extended, support exists |
-| `BUY_STARTER` | 🟢 Emerald | Score 70–79, or ≥80 + extended |
-| `BUY_STARTER_EXTENDED` | 🟢 Teal | Extended + score ≥ 65 + BULL regime |
-| `BUY_ON_PULLBACK` | 🟡 Cyan | Extended + score ≥ 65 (non-bull) |
-| `BUY_ON_BREAKOUT` | 🔵 Blue | Long-term only: ≥75 + extended |
-| `BUY_AFTER_EARNINGS` | 🔵 Indigo | Earnings within 30d + 55 ≤ score < 70 |
-| `WATCHLIST` | ⚪ Slate | 50 ≤ score < 65 |
-| `WATCHLIST_NEEDS_CATALYST` | ⚪ Slate | Reserved for future use |
-| `HOLD_EXISTING_DO_NOT_ADD` | 🟠 Orange | Reserved for position management |
-| `AVOID_BAD_BUSINESS` | 🔴 Dark Red | Rev declining + neg margin or poor beat rate |
-| `AVOID_BAD_CHART` | 🔴 Rose | Downtrend + RS vs SPY < 0.8 |
-| `AVOID_BAD_RISK_REWARD` | 🔴 Red | Reserved |
-| `AVOID_LOW_CONFIDENCE` | ⬛ Neutral | Data completeness < 55 |
-| `AVOID` | 🔴 Red | Score < 50, no specific override |
+| Label | Trigger |
+|-------|---------|
+| `BUY_NOW` | Score ≥ 75 |
+| `BUY_STARTER` | Score 65–74 |
+| `BUY_ON_PULLBACK` | Score 55–64 |
+| `WATCHLIST_NEEDS_CONFIRMATION` | Score 45–54 |
+| `AVOID_BAD_BUSINESS` | Score < 45 |
+
+### Long-Term Labels
+
+| Label | Trigger |
+|-------|---------|
+| `BUY_NOW_LONG_TERM` | Score ≥ 75 |
+| `ACCUMULATE_ON_WEAKNESS` | Score 60–74 |
+| `WATCHLIST_VALUATION_TOO_RICH` | Score 45–59 |
+| `AVOID_LONG_TERM` | Score < 45 |
 
 ---
 
@@ -404,19 +381,30 @@ flowchart TD
 
     Dash --> SPC["SignalProfileCard.tsx\n6 color-coded signal cells:\nMomentum · Growth · Valuation\nEntry Timing · Sentiment · Risk/Reward"]
 
-    Dash --> RC["RecommendationCard.tsx × 3\nOne per horizon\n14 decision labels with distinct badge colors\nScore bar · Confidence bar\nData completeness bar\nPer-rec data warnings\nBullish/bearish factors\nEntry / Exit / R/R plan"]
+    Dash --> SCG2["SignalCardsGrid.tsx\n11 signal cards in responsive grid\nScore gauge · Label badge · Expand factors"]
+    SCG2 --> SCard["SignalCard.tsx\nScore bar · BULLISH/BEARISH label\nTop positives / negatives / missing data"]
+
+    Dash --> RC["RecommendationCard.tsx × 3\nNew per-horizon decision labels\nScore bar · Confidence bar\nData completeness bar\nBullish/bearish factors\nEntry / Exit / R/R plan"]
+
+    Dash --> PT2["PerformanceTable.tsx\n1W/1M/3M/6M/YTD/1Y/3Y/5Y returns\nMax drawdown 3M / 1Y"]
 
     Dash --> SB["ScoreBreakdown.tsx\nHorizontal bar chart\nper sub-score dimension"]
 
     Dash --> TCH["TechnicalChart.tsx\nMA table · RSI · MACD\nVolume · Trend · RS\nSupport / Resistance levels"]
 
-    Dash --> Fund["Fundamental Quality\n(inline grid)"]
-    Dash --> Val["Valuation\n(inline grid)"]
+    Dash --> Fund["Fundamental Quality\n(inline grid)\n+ROA, ROIC, ROE, quick ratio\n+LT D/E, net margin, rev QoQ\n+dividend yield"]
+
+    Dash --> Val["Valuation\n(inline grid)\n+EV/Sales, P/Book, P/Cash\n+analyst target distance"]
+
+    Dash --> OPN["OwnershipPanel.tsx\nInsider/inst ownership + transactions\nShort float · Analyst rec · Target dist"]
+
+    Dash --> VPN["VolumePanel.tsx\nOBV/A/D trend · CMF · VWAP dev\nUp/down vol · Vol dry-up · Breakout vol"]
+
     Dash --> Earn["Earnings\n(inline grid)"]
 
     Dash --> NS["NewsSection.tsx\nPositive / Negative / Neutral\nnews lists with badges"]
 
-    Dash --> MRP["MarkdownReport.tsx\nCollapsible details element\nreact-markdown renderer"]
+    Dash --> MRP["MarkdownReport.tsx\nCollapsible details element\nreact-markdown renderer\n(now includes signal cards table)"]
 ```
 
 ---
@@ -444,6 +432,7 @@ classDiagram
         +ValuationData valuation
         +EarningsData earnings
         +NewsSummary news
+        +SignalCards signal_cards
         +list~HorizonRecommendation~ recommendations
         +str markdown_report
         +str archetype
@@ -451,6 +440,30 @@ classDiagram
         +str market_regime
         +float regime_confidence
         +SignalProfile signal_profile
+    }
+
+    class SignalCard {
+        +str name
+        +float score
+        +str label
+        +str explanation
+        +list~str~ top_positives
+        +list~str~ top_negatives
+        +list~str~ missing_data_warnings
+    }
+
+    class SignalCards {
+        +SignalCard momentum
+        +SignalCard trend
+        +SignalCard entry_timing
+        +SignalCard volume_accumulation
+        +SignalCard volatility_risk
+        +SignalCard relative_strength
+        +SignalCard growth
+        +SignalCard valuation
+        +SignalCard quality
+        +SignalCard ownership
+        +SignalCard catalyst
     }
 
     class SignalProfile {
@@ -487,17 +500,36 @@ classDiagram
         +RiskReward risk_reward
         +PositionSizing position_sizing
         +list~str~ data_warnings
+        +dict signal_cards_weights
     }
 
     class FundamentalData {
         +float revenue_ttm
         +float revenue_growth_yoy
+        +float revenue_growth_qoq
         +float gross_margin
         +float operating_margin
+        +float net_margin
         +float free_cash_flow
         +float net_debt
         +float debt_to_equity
+        +float long_term_debt_equity
+        +float current_ratio
+        +float quick_ratio
         +float roe
+        +float roic
+        +float roa
+        +float eps_growth_ttm
+        +float eps_growth_3y
+        +float eps_growth_5y
+        +float sales_growth_3y
+        +float insider_ownership
+        +float insider_transactions
+        +float institutional_ownership
+        +float short_float
+        +float analyst_recommendation
+        +float target_price_distance
+        +float dividend_yield
         +str sector
         +float beta
         +str archetype
@@ -513,15 +545,20 @@ classDiagram
         +float ev_to_ebitda
         +float price_to_fcf
         +float fcf_yield
+        +float ev_sales
+        +float price_to_book
+        +float price_to_cash
         +float valuation_score
         +float archetype_adjusted_score
     }
 
+    StockAnalysisResult "1" --> "1" SignalCards
     StockAnalysisResult "1" --> "1" SignalProfile
     StockAnalysisResult "1" --> "1" MarketRegimeAssessment : via regime fields
     StockAnalysisResult "1" --> "1" FundamentalData
     StockAnalysisResult "1" --> "1" ValuationData
     StockAnalysisResult "1" --> "3" HorizonRecommendation
+    SignalCards "1" --> "11" SignalCard
 ```
 
 ---
@@ -736,3 +773,6 @@ mindmap
 | **Growth-adjusted valuation (archetype-aware)** | Prevents NVDA/PLTR/AVGO from being penalised by raw P/E | HYPER_GROWTH stocks now score fairly; MATURE_VALUE scored conservatively |
 | **Backtest news/options = 50** | No historical news sentiment or options data available | Short-term backtest accuracy understated |
 | **No database** | Simplicity; all state in HTTP response | No history, no user accounts, stateless |
+| **5Y growth rates from yfinance** | `ticker.info` fields inconsistently available | Many stocks will show null for `eps_growth_5y`, `sales_growth_5y`; scored as missing data |
+| **Anchored VWAP requires earnings date** | Fetched from EarningsProvider best-effort | Falls back to null when earnings date unavailable |
+| **Return percentile ranks are self-relative** | Rank stock's return vs its own 252D window | Not a true cross-sectional rank vs all US stocks |

@@ -11,13 +11,14 @@ A full-stack stock decision-support tool that evaluates any US-listed stock or E
 Enter a ticker symbol and choose a risk profile. The tool:
 
 1. Fetches live market, fundamental, valuation, earnings, news, and options data via [yfinance](https://github.com/ranaroussi/yfinance)
-2. Computes 15+ technical indicators (moving averages, RSI, MACD, ATR, support/resistance, relative strength)
-3. Scores each dimension (Technical, Fundamental, Valuation, Earnings, News/Sentiment) on a 0–100 scale
-4. Applies **horizon-specific weights** to produce a composite score for each time frame
-5. Applies decision rules to output one of: `BUY_NOW`, `BUY_STARTER`, `WAIT_FOR_PULLBACK`, `BUY_ON_BREAKOUT`, `WATCHLIST`, or `AVOID`
-6. Generates an entry plan, exit plan, stop-loss level, risk/reward ratio, and position sizing suggestion
-7. Classifies news sentiment using **OpenAI gpt-4o-mini** (falls back to keyword-based classifier if no API key)
-8. Generates a full Markdown report
+2. Computes **55+ technical indicators** — EMAs, SMAs, RSI, MACD, ADX, Stochastic RSI, Bollinger Bands, ATR, VWAP, OBV, A/D Line, CMF, performance periods (1W–5Y), range distances, drawdown metrics, and more
+3. Fetches **expanded fundamental data** — multi-period EPS/sales growth (TTM/3Y/5Y), ownership (insider, institutional, short float), ROA/ROIC/ROE, analyst targets, and valuation ratios (EV/Sales, P/Book, P/Cash)
+4. Scores **11 signal cards** (Momentum, Trend, Entry Timing, Volume/Accumulation, Volatility/Risk, Relative Strength, Growth, Valuation, Quality, Ownership, Catalyst), each 0–100
+5. Applies **horizon-specific signal card weights** to produce a composite score per time frame
+6. Outputs a **per-horizon decision label** from horizon-specific label sets (short/medium/long each have their own 4–5 labels)
+7. Generates an entry plan, exit plan, stop-loss level, risk/reward ratio, and position sizing suggestion
+8. Classifies news sentiment using **OpenAI gpt-4o-mini** (falls back to keyword-based classifier if no API key)
+9. Generates a full Markdown report including signal cards section
 
 ### Three Horizons
 
@@ -27,16 +28,31 @@ Enter a ticker symbol and choose a risk profile. The tool:
 | Medium-term | 1–6 months | Earnings, guidance, fundamental trend |
 | Long-term | 1–5+ years | Business quality, FCF, valuation, balance sheet |
 
+### 11 Signal Cards
+
+Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
+
+| Card | What It Measures |
+|------|-----------------|
+| Momentum | Short-term price momentum: weekly/monthly returns, MACD, RSI slope |
+| Trend | Medium-term trend strength: SMA position, slopes, ADX |
+| Entry Timing | Optimal entry setup: RSI zone, VWAP support, not extended |
+| Volume/Accumulation | Buying/selling pressure: OBV, A/D Line, CMF, volume ratios |
+| Volatility/Risk | Risk profile: ATR%, drawdown, beta, weekly/monthly volatility |
+| Relative Strength | Outperformance vs SPY, QQQ, sector; return percentile ranks |
+| Growth | Revenue/EPS growth acceleration across TTM/3Y/5Y timeframes |
+| Valuation | Price vs fair value across P/E, PEG, P/S, EV/EBITDA, EV/Sales |
+| Quality | Profitability quality: margins, ROE, ROIC, ROA, balance sheet |
+| Ownership | Insider/institutional activity, short float, analyst sentiment |
+| Catalyst | Near-term catalysts: news score, analyst target, earnings proximity |
+
 ### Decision Outputs
 
-| Decision | Badge Color | Meaning |
-|----------|-------------|---------|
-| `BUY_NOW` | Green | Strong setup, favorable risk/reward |
-| `BUY_STARTER` | Emerald | Good thesis, imperfect timing — size in partially |
-| `WAIT_FOR_PULLBACK` | Yellow | Good setup but stock is extended |
-| `BUY_ON_BREAKOUT` | Blue | Strong long-term thesis, wait for confirmed breakout |
-| `WATCHLIST` | Gray | Monitoring — confirmation missing |
-| `AVOID` | Red | Multiple negative signals |
+**Short-term:** `BUY_NOW_MOMENTUM` | `BUY_STARTER_STRONG_BUT_EXTENDED` | `WAIT_FOR_PULLBACK` | `AVOID_BAD_CHART`
+
+**Medium-term:** `BUY_NOW` | `BUY_STARTER` | `BUY_ON_PULLBACK` | `WATCHLIST_NEEDS_CONFIRMATION` | `AVOID_BAD_BUSINESS`
+
+**Long-term:** `BUY_NOW_LONG_TERM` | `ACCUMULATE_ON_WEAKNESS` | `WATCHLIST_VALUATION_TOO_RICH` | `AVOID_LONG_TERM`
 
 ---
 
@@ -195,14 +211,19 @@ Open `http://localhost:5173` in your browser.
 4. Review the results:
    - **Price header** — current price, 52-week range, period returns, beta, market cap
    - **Data Quality Warnings** — flags for missing data (earnings dates, peer comparison, etc.)
-   - **Recommendation Cards** — one per horizon with decision badge, score, bullish/bearish factors, entry/exit plan
+   - **Signal Profile** — 6 color-coded signal dimensions (Momentum, Growth, Valuation, Entry Timing, Sentiment, Risk/Reward)
+   - **Signal Cards** — 11 expandable cards with score gauges, BULLISH/BEARISH labels, and top factors
+   - **Recommendation Cards** — one per horizon with per-horizon decision label, score, entry/exit plan
+   - **Performance Table** — 1W/1M/3M/6M/YTD/1Y/3Y/5Y returns + max drawdown
    - **Score Breakdown** — bar chart of each scoring dimension
    - **Technical Analysis** — moving averages, RSI, MACD, volume trend, support/resistance levels
-   - **Fundamental Quality** — revenue growth, margins, FCF, debt
-   - **Valuation** — P/E, PEG, EV/EBITDA, P/FCF, FCF yield
+   - **Fundamental Quality** — revenue growth, margins, FCF, ROE/ROIC/ROA, quick ratio, dividends
+   - **Valuation** — P/E, PEG, EV/EBITDA, EV/Sales, P/Book, P/Cash, analyst target distance
+   - **Ownership** — insider/institutional ownership & transactions, short float, analyst rec
+   - **Volume & Accumulation** — OBV, A/D trend, CMF, VWAP deviation, volume ratios
    - **Earnings** — beat rate, average EPS surprise, upcoming earnings warning
    - **News & Sentiment** — classified news headlines with sentiment badges
-   - **Full Markdown Report** — collapsible structured report (great for printing/saving)
+   - **Full Markdown Report** — collapsible structured report with signal cards section
 
 ---
 
@@ -288,54 +309,78 @@ source .venv/bin/activate
 PYTHONPATH=. pytest tests/ -v
 ```
 
-**125 tests across 4 suites:**
+**535 tests across 16 suites:**
 
 | Test File | Tests | Coverage |
 |-----------|-------|---------|
-| `test_technical_analysis.py` | 38 | MAs, RSI, MACD, ATR, trend, extension, support/resistance, RS, scoring |
-| `test_fundamental_analysis.py` | 24 | Revenue/EPS growth, margins, FCF, debt, ROE, PEG/P/FCF calculation |
-| `test_earnings_analysis.py` | 29 | Beat rate, EPS surprise, KeyError handling, news sentiment, OpenAI mock |
-| `test_scoring_recommendation.py` | 34 | Weight integrity, composite scoring, all decision rules, risk/reward |
+| `test_technical_analysis.py` | 38 | MAs, RSI, MACD, ATR, trend, extension, support/resistance |
+| `test_technical_enhanced.py` | 57 | EMA relatives, SMA slopes, perf periods, range distances, volatility |
+| `test_volume_indicators.py` | 47 | OBV, A/D, CMF, VWAP deviation, vol dry-up, up/down vol |
+| `test_relative_strength.py` | 44 | RS vs QQQ, drawdown, percentile ranks, gap fill |
+| `test_fundamental_analysis.py` | 32 | Revenue/EPS growth, margins, FCF, debt, ROE, archetype-adj valuation |
+| `test_fundamental_enhanced.py` | 43 | Multi-period growth, ownership, ROA, quick ratio, analyst data |
+| `test_earnings_analysis.py` | 29 | Beat rate, EPS surprise, KeyError handling, news sentiment |
+| `test_scoring_recommendation.py` | 53 | Weight integrity, composite scoring, all decision rules, risk/reward |
+| `test_stock_archetype.py` | 19 | All 8 archetype classifications |
+| `test_market_regime.py` | 18 | All 6 regime classifications |
+| `test_data_completeness.py` | 16 | Completeness scoring, confidence capping |
+| `test_signal_profile.py` | 22 | 6 profile dimensions, label thresholds |
+| `test_signal_card_models.py` | 38 | SignalCard Pydantic models, label thresholds, serialization |
+| `test_signal_card_service.py` | 52 | All 11 signal card scorers — high/low/missing data scenarios |
+| `test_revised_scoring.py` | 19 | Signal card weights, new per-horizon decision labels |
+| `test_risk_report_updates.py` | 13 | Risk management, signal profile from cards, markdown report |
+| `test_backtest_metrics.py` | 14 | by_regime, by_archetype, portfolio simulation |
+
+**Frontend tests (Vitest):**
+
+```bash
+cd frontend
+npm test
+```
+
+36 tests: `SignalCard.test.tsx` (14) + `DataPanelUpdates.test.tsx` (22)
 
 ---
 
 ## Scoring System
 
-Each horizon uses a different weighting of the sub-scores:
+Composite scores are derived from **11 signal card scores**, weighted per horizon:
 
-### Short-term weights
+### Short-term signal card weights
 
-| Dimension | Weight |
-|-----------|--------|
-| Technical | 35% |
-| Catalyst / Options | 20% |
-| News / Sentiment | 15% |
-| Risk / Reward | 15% |
-| Sector / Macro | 10% |
-| Fundamental | 5% |
-
-### Medium-term weights
-
-| Dimension | Weight |
-|-----------|--------|
-| Fundamental | 25% |
-| Earnings | 25% |
-| Technical | 20% |
-| Valuation | 15% |
+| Signal Card | Weight |
+|------------|--------|
+| Momentum | 25% |
+| Volume/Accumulation | 20% |
+| Entry Timing | 20% |
+| Relative Strength | 15% |
+| Volatility/Risk | 10% |
 | Catalyst | 10% |
-| Risk / Reward | 5% |
 
-### Long-term weights
+### Medium-term signal card weights
 
-| Dimension | Weight |
-|-----------|--------|
-| Fundamental | 35% |
-| Valuation | 20% |
-| Earnings | 15% |
-| Risk / Reward | 10% |
-| Sector / Macro | 10% |
-| Technical | 5% |
-| News / Sentiment | 5% |
+| Signal Card | Weight |
+|------------|--------|
+| Trend | 20% |
+| Growth | 20% |
+| Relative Strength | 15% |
+| Volume/Accumulation | 15% |
+| Valuation | 10% |
+| Quality | 10% |
+| Catalyst | 10% |
+
+### Long-term signal card weights
+
+| Signal Card | Weight |
+|------------|--------|
+| Growth | 20% |
+| Quality | 20% |
+| Valuation | 15% |
+| Ownership | 15% |
+| Trend | 10% |
+| Catalyst | 10% |
+| Volatility/Risk | 5% |
+| Momentum | 5% |
 
 ---
 
@@ -350,6 +395,9 @@ Each horizon uses a different weighting of the sub-scores:
 | PEG ratio and P/FCF calculated, not provided directly | Approximation if growth data missing | Calculated from available fields |
 | News coverage via yfinance is limited | May miss key news items | Flagged as "coverage limited" in UI |
 | Sector/macro score is static (50) | Does not reflect current macro conditions | Can be wired to a sector ETF data source later |
+| 5-year growth rates often null | yfinance `ticker.info` fields inconsistently available | Gracefully excluded from scoring; flagged as missing data |
+| Return percentile ranks are self-relative | Ranks stock's return vs its own 252-day window | Not a true cross-sectional rank vs all US stocks |
+| Anchored VWAP requires earnings date | Best-effort; null when earnings date unavailable | Falls back to null with no impact on scoring |
 
 ---
 

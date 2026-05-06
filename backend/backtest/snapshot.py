@@ -1,32 +1,47 @@
 """
-Builds time-sliced analysis inputs for a given test date.
-All data is filtered to only use information available on or before test_date.
+Builds time-sliced analysis inputs for a given (ticker, test_date).
+
+All data is strictly filtered to information available on or before test_date,
+ensuring zero look-ahead bias.
+
+Phase-gate behaviour:
+  phase=1 or 2 : technical + regime only; fundamentals are neutral placeholders
+  phase=3       : adds time-sliced fundamentals constructed from quarterly filings
+                  with a 45-trading-day filing lag
 """
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import Optional
 
 import pandas as pd
 
-from app.models.fundamentals import FundamentalData, ValuationData
+from app.models.fundamentals import FundamentalData, ValuationData, StockArchetype
 from app.models.earnings import EarningsData, EarningsRecord
 from app.models.news import NewsSummary
 from backtest.config import SECTOR_ETF_MAP, MIN_ROWS_FOR_ANALYSIS
 
 logger = logging.getLogger(__name__)
 
+# Approximate quarterly filing lag in calendar days (10-K: 60–90 days; 10-Q: 40 days)
+FILING_LAG_DAYS: int = 45
+
+
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
 
 def _safe_float(val) -> Optional[float]:
     try:
         f = float(val)
-        return f if f == f else None
+        return f if f == f else None  # filter NaN
     except (TypeError, ValueError):
         return None
 
 
 def _normalize_ts(ts) -> pd.Timestamp:
-    """Strip timezone for consistent comparison."""
+    """Strip timezone from a timestamp for consistent comparison."""
     t = pd.Timestamp(ts)
     if t.tz is not None:
         t = t.tz_localize(None)
@@ -34,7 +49,7 @@ def _normalize_ts(ts) -> pd.Timestamp:
 
 
 def _filter_stmt_cols(stmt: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
-    """Keep only columns (quarters) where report date <= cutoff."""
+    """Keep only columns (quarter end-dates) filed on or before *cutoff*."""
     if stmt is None or stmt.empty:
         return pd.DataFrame()
     keep = [c for c in stmt.columns if _normalize_ts(c) <= cutoff]
@@ -42,6 +57,7 @@ def _filter_stmt_cols(stmt: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
 
 
 def _stmt_row(stmt: pd.DataFrame, *labels: str) -> Optional[pd.Series]:
+    """Return the first matching row from a financial statement DataFrame."""
     for lbl in labels:
         if lbl in stmt.index:
             return stmt.loc[lbl]
@@ -49,7 +65,7 @@ def _stmt_row(stmt: pd.DataFrame, *labels: str) -> Optional[pd.Series]:
 
 
 def _ttm(row: Optional[pd.Series], n: int = 4) -> Optional[float]:
-    """Sum most recent n quarters."""
+    """Sum the most recent *n* quarterly values (trailing-twelve-months)."""
     if row is None or row.empty:
         return None
     try:
@@ -60,17 +76,75 @@ def _ttm(row: Optional[pd.Series], n: int = 4) -> Optional[float]:
 
 
 def _latest(row: Optional[pd.Series]) -> Optional[float]:
+    """Return the most recent non-null value from a quarterly row."""
     if row is None or row.empty:
         return None
-    try:
-        for v in row.iloc:
-            f = _safe_float(v)
-            if f is not None:
-                return f
-    except Exception:
-        pass
+    for v in row.iloc:
+        f = _safe_float(v)
+        if f is not None:
+            return f
     return None
 
+
+# ---------------------------------------------------------------------------
+# Price slicing
+# ---------------------------------------------------------------------------
+
+def get_price_slice(price_df: pd.DataFrame, test_date: pd.Timestamp) -> pd.DataFrame:
+    """Return price rows up to and including *test_date* (tz-naive safe)."""
+    if price_df.empty:
+        return pd.DataFrame()
+    norm_date = _normalize_ts(test_date)
+    idx = price_df.index.map(_normalize_ts)
+    return price_df[idx <= norm_date]
+
+
+# ---------------------------------------------------------------------------
+# Neutral / placeholder data (Phase 1–2)
+# ---------------------------------------------------------------------------
+
+def neutral_news() -> NewsSummary:
+    """Neutral news summary used when historical news is unavailable."""
+    return NewsSummary(
+        items=[],
+        news_score=50.0,
+        coverage_limited=True,
+        positive_count=0,
+        negative_count=0,
+        neutral_count=0,
+    )
+
+
+def neutral_fundamentals() -> FundamentalData:
+    """Placeholder fundamentals for Phase 1–2 (technical-only backtest)."""
+    return FundamentalData(
+        fundamental_score=50.0,
+        archetype=StockArchetype.MATURE_VALUE,
+    )
+
+
+def neutral_valuation() -> ValuationData:
+    """Placeholder valuation for Phase 1–2."""
+    return ValuationData(
+        valuation_score=50.0,
+        archetype_adjusted_score=50.0,
+        peer_comparison_available=False,
+    )
+
+
+def neutral_earnings() -> EarningsData:
+    """Placeholder earnings for Phase 1–2."""
+    return EarningsData(
+        earnings_score=50.0,
+        history=[],
+        beat_count=0,
+        miss_count=0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: time-sliced fundamental snapshot
+# ---------------------------------------------------------------------------
 
 def build_historical_fundamentals(
     ticker: str,
@@ -78,33 +152,45 @@ def build_historical_fundamentals(
     quarterly_data: dict,
     price_at_date: float,
 ) -> tuple[FundamentalData, ValuationData, EarningsData]:
-    """
-    Build FundamentalData, ValuationData, and EarningsData using only
-    quarterly statements filed on or before test_date.
-    """
-    income = _filter_stmt_cols(quarterly_data.get("income_stmt", pd.DataFrame()), test_date)
-    balance = _filter_stmt_cols(quarterly_data.get("balance_sheet", pd.DataFrame()), test_date)
-    cashflow = _filter_stmt_cols(quarterly_data.get("cashflow", pd.DataFrame()), test_date)
-    eh_raw = quarterly_data.get("earnings_history", pd.DataFrame())
-    ed_raw = quarterly_data.get("earnings_dates", pd.DataFrame())
-    info = quarterly_data.get("info_snapshot", {})
+    """Build FundamentalData, ValuationData, and EarningsData from historical
+    quarterly filings available as of *test_date* minus the filing lag.
 
-    # ── Fundamentals ──────────────────────────────────────────────────────────
+    Args:
+        ticker: Stock symbol (used only for logging).
+        test_date: The simulated "today" date.
+        quarterly_data: Pre-fetched dict with keys:
+            income_stmt, balance_sheet, cashflow,
+            earnings_history, earnings_dates, info_snapshot.
+        price_at_date: Closing price on test_date (for valuation ratios).
+
+    Returns:
+        (FundamentalData, ValuationData, EarningsData)
+    """
+    cutoff = test_date - pd.Timedelta(days=FILING_LAG_DAYS)
+
+    income   = _filter_stmt_cols(quarterly_data.get("income_stmt",   pd.DataFrame()), cutoff)
+    balance  = _filter_stmt_cols(quarterly_data.get("balance_sheet",  pd.DataFrame()), cutoff)
+    cashflow = _filter_stmt_cols(quarterly_data.get("cashflow",       pd.DataFrame()), cutoff)
+    eh_raw   = quarterly_data.get("earnings_history", pd.DataFrame())
+    ed_raw   = quarterly_data.get("earnings_dates",   pd.DataFrame())
+    info     = quarterly_data.get("info_snapshot",    {})
+
+    # ── Income statement ───────────────────────────────────────────────────
     rev_row = _stmt_row(income, "Total Revenue", "Revenue")
-    gp_row = _stmt_row(income, "Gross Profit")
-    oi_row = _stmt_row(income, "Operating Income", "EBIT")
-    ni_row = _stmt_row(income, "Net Income")
+    gp_row  = _stmt_row(income, "Gross Profit")
+    oi_row  = _stmt_row(income, "Operating Income", "EBIT")
+    ni_row  = _stmt_row(income, "Net Income")
     eps_row = _stmt_row(income, "Diluted EPS", "Basic EPS")
 
-    revenue_ttm = _ttm(rev_row)
-    gross_profit_ttm = _ttm(gp_row)
-    operating_income_ttm = _ttm(oi_row)
-    net_income_ttm = _ttm(ni_row)
-    eps_ttm = _ttm(eps_row)
+    revenue_ttm            = _ttm(rev_row)
+    gross_profit_ttm       = _ttm(gp_row)
+    operating_income_ttm   = _ttm(oi_row)
+    net_income_ttm         = _ttm(ni_row)
+    eps_ttm                = _ttm(eps_row)
 
-    gross_margin: Optional[float] = None
+    gross_margin:     Optional[float] = None
     operating_margin: Optional[float] = None
-    net_margin: Optional[float] = None
+    net_margin:       Optional[float] = None
     if revenue_ttm and revenue_ttm != 0:
         if gross_profit_ttm is not None:
             gross_margin = round(gross_profit_ttm / revenue_ttm, 4)
@@ -113,12 +199,12 @@ def build_historical_fundamentals(
         if net_income_ttm is not None:
             net_margin = round(net_income_ttm / revenue_ttm, 4)
 
-    # YoY revenue growth from quarterly statements
+    # YoY revenue growth
     revenue_growth_yoy: Optional[float] = None
     if rev_row is not None and len(rev_row) >= 5:
         try:
-            r0 = _ttm(rev_row, 4)  # last 4 quarters
-            r1 = _ttm(rev_row.iloc[4:8], 4)  # prior 4 quarters (offset by 4)
+            r0 = _ttm(rev_row, 4)
+            r1 = _ttm(rev_row.iloc[4:8], 4)
             if r0 and r1 and r1 != 0:
                 revenue_growth_yoy = round((r0 - r1) / abs(r1), 4)
         except Exception:
@@ -126,16 +212,17 @@ def build_historical_fundamentals(
     if revenue_growth_yoy is None:
         revenue_growth_yoy = _safe_float(info.get("revenueGrowth"))
 
-    # FCF from cashflow statement
-    fcf_row = _stmt_row(cashflow, "Free Cash Flow")
-    ocf_row = _stmt_row(cashflow, "Operating Cash Flow", "Cash Flow From Continuing Operating Activities")
+    # ── Cash flow ──────────────────────────────────────────────────────────
+    fcf_row   = _stmt_row(cashflow, "Free Cash Flow")
+    ocf_row   = _stmt_row(cashflow, "Operating Cash Flow",
+                          "Cash Flow From Continuing Operating Activities")
     capex_row = _stmt_row(cashflow, "Capital Expenditure", "Capital Expenditures")
 
     free_cash_flow: Optional[float] = None
     if fcf_row is not None:
         free_cash_flow = _ttm(fcf_row)
     elif ocf_row is not None and capex_row is not None:
-        ocf = _ttm(ocf_row)
+        ocf   = _ttm(ocf_row)
         capex = _ttm(capex_row)
         if ocf is not None and capex is not None:
             free_cash_flow = ocf + capex  # capex is typically negative
@@ -144,15 +231,16 @@ def build_historical_fundamentals(
     if free_cash_flow is not None and revenue_ttm and revenue_ttm != 0:
         fcf_margin = round(free_cash_flow / revenue_ttm, 4)
 
-    # Balance sheet items
-    cash_row = _stmt_row(balance, "Cash And Cash Equivalents", "Cash", "Cash Financial")
-    debt_row = _stmt_row(balance, "Total Debt", "Long Term Debt")
+    # ── Balance sheet ──────────────────────────────────────────────────────
+    cash_row        = _stmt_row(balance, "Cash And Cash Equivalents", "Cash", "Cash Financial")
+    debt_row        = _stmt_row(balance, "Total Debt", "Long Term Debt")
     curr_assets_row = _stmt_row(balance, "Current Assets", "Total Current Assets")
-    curr_liab_row = _stmt_row(balance, "Current Liabilities", "Total Current Liabilities")
-    equity_row = _stmt_row(balance, "Stockholders Equity", "Total Equity Gross Minority Interest")
-    shares_row = _stmt_row(balance, "Share Issued", "Ordinary Shares Number")
+    curr_liab_row   = _stmt_row(balance, "Current Liabilities", "Total Current Liabilities")
+    equity_row      = _stmt_row(balance, "Stockholders Equity",
+                                "Total Equity Gross Minority Interest")
+    shares_row      = _stmt_row(balance, "Share Issued", "Ordinary Shares Number")
 
-    cash = _latest(cash_row)
+    cash       = _latest(cash_row)
     total_debt = _latest(debt_row)
     net_debt: Optional[float] = None
     if total_debt is not None and cash is not None:
@@ -196,7 +284,7 @@ def build_historical_fundamentals(
         roic=None,
     )
 
-    # ── Valuation ─────────────────────────────────────────────────────────────
+    # ── Valuation ──────────────────────────────────────────────────────────
     market_cap = (shares * price_at_date) if shares else None
 
     trailing_pe: Optional[float] = None
@@ -210,11 +298,10 @@ def build_historical_fundamentals(
     price_to_fcf: Optional[float] = None
     fcf_yield_val: Optional[float] = None
     if market_cap and free_cash_flow and free_cash_flow > 0:
-        price_to_fcf = round(market_cap / free_cash_flow, 2)
+        price_to_fcf  = round(market_cap / free_cash_flow, 2)
         fcf_yield_val = round(free_cash_flow / market_cap * 100, 4)
 
-    # EV/EBITDA approximation: use info snapshot (already historical limitation)
-    ev_to_ebitda = _safe_float(info.get("enterpriseToEbitda"))
+    ev_to_ebitda = _safe_float(info.get("enterpriseToEbitda"))  # current snapshot (limitation)
 
     peg_ratio: Optional[float] = None
     eps_growth = _safe_float(info.get("earningsGrowth"))
@@ -223,7 +310,7 @@ def build_historical_fundamentals(
 
     valuation = ValuationData(
         trailing_pe=trailing_pe,
-        forward_pe=None,  # can't compute forward P/E historically
+        forward_pe=None,
         peg_ratio=peg_ratio,
         price_to_sales=price_to_sales,
         ev_to_ebitda=ev_to_ebitda,
@@ -232,10 +319,10 @@ def build_historical_fundamentals(
         peer_comparison_available=False,
     )
 
-    # ── Earnings ──────────────────────────────────────────────────────────────
+    # ── Earnings history ───────────────────────────────────────────────────
     history: list[EarningsRecord] = []
-    beat_count = 0
-    miss_count = 0
+    beat_count    = 0
+    miss_count    = 0
     surprise_pcts: list[float] = []
 
     if not eh_raw.empty:
@@ -243,11 +330,11 @@ def build_historical_fundamentals(
             try:
                 row_date = _normalize_ts(row.name) if hasattr(row, "name") else None
                 if row_date is not None and row_date > test_date:
-                    continue  # skip future earnings
+                    continue  # future earnings → skip
 
-                eps_est = _safe_float(row.get("epsEstimate"))
-                eps_act = _safe_float(row.get("epsActual"))
-                surp = _safe_float(row.get("surprisePercent"))
+                surp     = _safe_float(row.get("surprisePercent"))
+                eps_est  = _safe_float(row.get("epsEstimate"))
+                eps_act  = _safe_float(row.get("epsActual"))
 
                 if surp is not None:
                     surprise_pcts.append(surp)
@@ -266,32 +353,35 @@ def build_historical_fundamentals(
                 continue
 
     avg_surprise = round(sum(surprise_pcts) / len(surprise_pcts), 2) if surprise_pcts else None
-    beat_rate = round(beat_count / (beat_count + miss_count), 4) if (beat_count + miss_count) > 0 else None
+    beat_rate    = (
+        round(beat_count / (beat_count + miss_count), 4)
+        if (beat_count + miss_count) > 0 else None
+    )
 
-    # Last earnings date (most recent before test_date)
+    # Earnings dates (past + next)
     last_date: Optional[str] = None
     next_date: Optional[str] = None
     within_30 = False
 
     if not ed_raw.empty:
         try:
-            idx_norm = ed_raw.index.map(_normalize_ts)
-            past_mask = idx_norm <= test_date
+            idx_norm   = ed_raw.index.map(_normalize_ts)
+            past_mask  = idx_norm <= test_date
             future_mask = idx_norm > test_date
 
-            past_dates = idx_norm[past_mask]
+            past_dates   = idx_norm[past_mask]
             future_dates = idx_norm[future_mask]
 
             if len(past_dates) > 0:
-                last_date = str(past_dates[0])  # most recent past
+                last_date = str(past_dates[0])
             if len(future_dates) > 0:
-                next_dt = future_dates[-1]  # nearest future
+                next_dt   = future_dates[-1]
                 next_date = str(next_dt)
-                days_until = (next_dt - test_date).days
-                within_30 = 0 <= days_until <= 30
-        except Exception as e:
-            logger.debug("earnings_dates processing failed: %s", e)
+                within_30 = 0 <= (next_dt - test_date).days <= 30
+        except Exception as exc:
+            logger.debug("earnings_dates processing failed: %s", exc)
 
+    # Earnings score
     earnings_score_val = 50.0
     if beat_rate is not None:
         if beat_rate >= 0.80:
@@ -324,28 +414,3 @@ def build_historical_fundamentals(
     )
 
     return fundamentals, valuation, earnings
-
-
-def get_price_slice(
-    price_df: pd.DataFrame,
-    test_date: pd.Timestamp,
-) -> pd.DataFrame:
-    """Return price history up to and including test_date."""
-    norm_date = _normalize_ts(test_date)
-    if price_df.empty:
-        return pd.DataFrame()
-    idx = price_df.index.map(_normalize_ts)
-    mask = idx <= norm_date
-    return price_df[mask]
-
-
-def neutral_news() -> NewsSummary:
-    """Default neutral news summary used for historical dates."""
-    return NewsSummary(
-        items=[],
-        news_score=50.0,
-        coverage_limited=True,
-        positive_count=0,
-        negative_count=0,
-        neutral_count=0,
-    )

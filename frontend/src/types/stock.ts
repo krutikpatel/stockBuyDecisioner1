@@ -31,41 +31,144 @@ export interface SupportResistanceLevels {
 }
 
 export interface TechnicalIndicators {
+  // Moving averages
   ma_10?: number;
   ma_20?: number;
   ma_50?: number;
   ma_100?: number;
   ma_200?: number;
+  // EMA relatives (% deviation)
+  ema8_relative?: number;
+  ema21_relative?: number;
+  // SMA relatives (% deviation)
+  sma20_relative?: number;
+  sma50_relative?: number;
+  sma200_relative?: number;
+  // SMA slopes (5-bar % change)
+  sma20_slope?: number;
+  sma50_slope?: number;
+  sma200_slope?: number;
+  // Momentum
   rsi_14?: number;
   macd?: number;
   macd_signal?: number;
   macd_histogram?: number;
+  adx?: number;
+  stochastic_rsi?: number;
+  // Volatility
   atr?: number;
+  atr_percent?: number;
+  bollinger_band_position?: number;
+  bollinger_band_width?: number;
+  volatility_weekly?: number;
+  volatility_monthly?: number;
+  // Performance periods (% returns)
+  perf_1w?: number;
+  perf_1m?: number;
+  perf_3m?: number;
+  perf_6m?: number;
+  perf_ytd?: number;
+  perf_1y?: number;
+  perf_3y?: number;
+  perf_5y?: number;
+  // Intraday
+  gap_percent?: number;
+  change_from_open_percent?: number;
+  // Range distances
+  dist_from_20d_high?: number;
+  dist_from_20d_low?: number;
+  dist_from_50d_high?: number;
+  dist_from_50d_low?: number;
+  dist_from_52w_high?: number;
+  dist_from_52w_low?: number;
+  dist_from_ath?: number;
+  dist_from_atl?: number;
+  // Volume trend
   volume_trend: string;
+  // Volume / accumulation
+  obv_trend: number;
+  ad_trend: number;
+  chaikin_money_flow?: number;
+  vwap_deviation?: number;
+  anchored_vwap_deviation?: number;
+  volume_dryup_ratio?: number;
+  breakout_volume_multiple?: number;
+  updown_volume_ratio?: number;
+  // Trend / extension
   trend: TrendClassification;
   is_extended: boolean;
   extension_pct_above_20ma?: number;
   extension_pct_above_50ma?: number;
+  // Support / resistance
   support_resistance: SupportResistanceLevels;
+  // Relative strength
   rs_vs_spy?: number;
+  rs_vs_qqq?: number;
   rs_vs_sector?: number;
+  // Return percentile ranks
+  return_pct_rank_20d?: number;
+  return_pct_rank_63d?: number;
+  return_pct_rank_126d?: number;
+  return_pct_rank_252d?: number;
+  // Drawdown
+  max_drawdown_3m?: number;
+  max_drawdown_1y?: number;
+  // Gap / post-earnings
+  gap_filled: boolean;
+  post_earnings_drift?: number;
+  // Composite
   technical_score: number;
 }
 
 export interface FundamentalData {
   revenue_ttm?: number;
   revenue_growth_yoy?: number;
+  revenue_growth_qoq?: number;
   eps_ttm?: number;
+  eps_growth_yoy?: number;
   gross_margin?: number;
   operating_margin?: number;
   net_margin?: number;
   free_cash_flow?: number;
+  free_cash_flow_margin?: number;
   cash?: number;
   total_debt?: number;
   net_debt?: number;
+  current_ratio?: number;
   debt_to_equity?: number;
+  shares_outstanding?: number;
   roe?: number;
+  roic?: number;
+  sector?: string;
+  beta?: number;
+  // Story 4: Enhanced growth
+  eps_growth_next_year?: number;
+  eps_growth_ttm?: number;
+  eps_growth_3y?: number;
+  eps_growth_5y?: number;
+  eps_growth_next_5y?: number;
+  sales_growth_ttm?: number;
+  sales_growth_3y?: number;
+  sales_growth_5y?: number;
+  // Story 4: Quality
+  roa?: number;
+  quick_ratio?: number;
+  long_term_debt_equity?: number;
+  // Story 4: Ownership & sentiment
+  insider_ownership?: number;
+  insider_transactions?: number;
+  institutional_ownership?: number;
+  institutional_transactions?: number;
+  short_float?: number;
+  short_ratio?: number;
+  analyst_recommendation?: number;
+  analyst_target_price?: number;
+  target_price_distance?: number;
+  shares_float?: number;
+  dividend_yield?: number;
   fundamental_score: number;
+  archetype: string;
+  archetype_confidence: number;
 }
 
 export interface ValuationData {
@@ -76,8 +179,13 @@ export interface ValuationData {
   ev_to_ebitda?: number;
   price_to_fcf?: number;
   fcf_yield?: number;
+  // Story 4: Additional metrics
+  ev_sales?: number;
+  price_to_book?: number;
+  price_to_cash?: number;
   peer_comparison_available: boolean;
   valuation_score: number;
+  archetype_adjusted_score?: number;
 }
 
 export interface EarningsRecord {
@@ -159,6 +267,39 @@ export interface HorizonRecommendation {
   risk_reward: RiskReward;
   position_sizing: PositionSizing;
   data_warnings: string[];
+  signal_cards_weights: Record<string, number>;
+}
+
+// Story 5: Signal Card types
+export type SignalCardLabelValue =
+  | 'VERY_BULLISH'
+  | 'BULLISH'
+  | 'NEUTRAL'
+  | 'BEARISH'
+  | 'VERY_BEARISH';
+
+export interface SignalCard {
+  name: string;
+  score: number;
+  label: SignalCardLabelValue;
+  explanation: string;
+  top_positives: string[];
+  top_negatives: string[];
+  missing_data_warnings: string[];
+}
+
+export interface SignalCards {
+  momentum: SignalCard;
+  trend: SignalCard;
+  entry_timing: SignalCard;
+  volume_accumulation: SignalCard;
+  volatility_risk: SignalCard;
+  relative_strength: SignalCard;
+  growth: SignalCard;
+  valuation: SignalCard;
+  quality: SignalCard;
+  ownership: SignalCard;
+  catalyst: SignalCard;
 }
 
 export interface DataQualityReport {
@@ -193,6 +334,7 @@ export interface StockAnalysisResult {
   market_regime: string;
   regime_confidence: number;
   signal_profile?: SignalProfile;
+  signal_cards?: SignalCards;
   disclaimer: string;
 }
 

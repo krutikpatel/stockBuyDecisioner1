@@ -4,7 +4,7 @@ from app.models.earnings import EarningsData
 from app.models.fundamentals import FundamentalData, ValuationData
 from app.models.market import TechnicalIndicators
 from app.models.news import NewsSummary
-from app.models.response import SignalProfile
+from app.models.response import SignalCards, SignalProfile
 
 
 def _momentum_label(technical_score: float, is_extended: bool) -> str:
@@ -74,6 +74,63 @@ def _risk_reward_label(earnings_score: float, technical_score: float) -> str:
     if combined >= 45:
         return "ACCEPTABLE"
     return "POOR"
+
+
+def build_signal_profile_from_cards(cards: SignalCards) -> SignalProfile:
+    """Derive a SignalProfile from 11 signal card scores (Story 8)."""
+    mom_score = cards.momentum.score
+    growth_score = cards.growth.score
+    val_score = cards.valuation.score
+    entry_score = cards.entry_timing.score
+    catalyst_score = cards.catalyst.score
+    vol_score = cards.volatility_risk.score
+
+    def _bullbear(score: float) -> str:
+        if score >= 80:
+            return "VERY_BULLISH"
+        if score >= 60:
+            return "BULLISH"
+        if score >= 40:
+            return "NEUTRAL"
+        if score >= 20:
+            return "BEARISH"
+        return "VERY_BEARISH"
+
+    def _val_label(score: float) -> str:
+        if score >= 70:
+            return "ATTRACTIVE"
+        if score >= 55:
+            return "FAIR"
+        if score >= 40:
+            return "ELEVATED"
+        return "RISKY"
+
+    def _entry_label(score: float) -> str:
+        if score >= 75:
+            return "IDEAL"
+        if score >= 55:
+            return "ACCEPTABLE"
+        if score >= 35:
+            return "EXTENDED"
+        return "VERY_EXTENDED"
+
+    def _risk_label(score: float) -> str:
+        if score >= 75:
+            return "EXCELLENT"
+        if score >= 60:
+            return "GOOD"
+        if score >= 45:
+            return "ACCEPTABLE"
+        return "POOR"
+
+    return SignalProfile(
+        momentum=_bullbear(mom_score),
+        growth=_bullbear(growth_score),
+        valuation=_val_label(val_score),
+        entry_timing=_entry_label(entry_score),
+        sentiment=_bullbear(catalyst_score),
+        risk_reward=_risk_label(vol_score),
+    )
 
 
 def build_signal_profile(

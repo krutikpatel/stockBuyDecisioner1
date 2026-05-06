@@ -1,0 +1,6 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,profit_factor,best_return_pct,worst_return_pct,regime
+97,97,55.07,33.6,73.2,72.2,39.52,22.75,-14.64,14.11,231.84,-47.77,BULL_NARROW_LEADERSHIP
+1034,1034,51.86,32.84,82.7,64.1,30.45,19.84,-19.26,20.06,662.35,-60.07,BEAR_RISK_OFF
+208,208,47.92,42.58,85.1,70.2,24.5,19.73,-15.01,15.89,612.3,-50.21,LIQUIDITY_RALLY
+1282,1282,37.37,24.5,73.6,58.7,21.8,15.03,-20.25,7.29,1004.38,-83.82,SIDEWAYS_CHOPPY
+4184,4184,31.02,21.99,70.1,57.2,17.79,13.75,-21.53,5.01,857.03,-84.55,BULL_RISK_ON

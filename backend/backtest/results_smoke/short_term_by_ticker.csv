@@ -1,0 +1,4 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,profit_factor,best_return_pct,worst_return_pct,ticker,avg_score,best_decision
+156,156,4.98,4.78,62.8,59.0,4.2,4.09,-9.29,2.22,48.85,-33.42,NVDA,56.4,WAIT_FOR_PULLBACK
+156,156,1.26,1.76,57.7,53.2,0.48,0.37,-5.5,1.5,18.82,-14.08,AAPL,56.5,BUY_NOW_MOMENTUM
+156,156,1.02,0.26,53.2,50.0,0.24,0.13,-5.05,1.47,25.13,-16.18,JPM,56.3,AVOID_BAD_CHART

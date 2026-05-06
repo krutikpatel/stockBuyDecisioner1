@@ -9,6 +9,10 @@ import { DataWarnings } from '../components/DataWarnings';
 import { MarkdownReport } from '../components/MarkdownReport';
 import { SignalProfileCard } from '../components/SignalProfileCard';
 import { RegimeArchetypeBar } from '../components/RegimeArchetypeBar';
+import { SignalCardsGrid } from '../components/SignalCardsGrid';
+import { PerformanceTable } from '../components/PerformanceTable';
+import { OwnershipPanel } from '../components/OwnershipPanel';
+import { VolumePanel } from '../components/VolumePanel';
 
 const RISK_PROFILES = ['conservative', 'moderate', 'aggressive'];
 
@@ -140,6 +144,11 @@ export function Dashboard() {
               <SignalProfileCard profile={result.signal_profile} />
             )}
 
+            {/* Signal cards grid */}
+            {result.signal_cards && (
+              <SignalCardsGrid cards={result.signal_cards} />
+            )}
+
             {/* Recommendation cards */}
             <div>
               <h3 className="text-slate-300 font-semibold mb-3">Recommendations</h3>
@@ -149,6 +158,9 @@ export function Dashboard() {
                 ))}
               </div>
             </div>
+
+            {/* Performance table */}
+            <PerformanceTable technicals={result.technicals} />
 
             {/* Score breakdown + Technical */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -170,12 +182,20 @@ export function Dashboard() {
                   {[
                     ['Revenue TTM', fmtB(result.fundamentals.revenue_ttm)],
                     ['Rev. Growth YoY', result.fundamentals.revenue_growth_yoy != null ? `${(result.fundamentals.revenue_growth_yoy * 100).toFixed(1)}%` : 'N/A'],
+                    ['Rev. Growth QoQ', result.fundamentals.revenue_growth_qoq != null ? `${(result.fundamentals.revenue_growth_qoq * 100).toFixed(1)}%` : 'N/A'],
                     ['Gross Margin', result.fundamentals.gross_margin != null ? `${(result.fundamentals.gross_margin * 100).toFixed(1)}%` : 'N/A'],
                     ['Op. Margin', result.fundamentals.operating_margin != null ? `${(result.fundamentals.operating_margin * 100).toFixed(1)}%` : 'N/A'],
+                    ['Net Margin', result.fundamentals.net_margin != null ? `${(result.fundamentals.net_margin * 100).toFixed(1)}%` : 'N/A'],
                     ['Free Cash Flow', fmtB(result.fundamentals.free_cash_flow)],
                     ['Net Debt', fmtB(result.fundamentals.net_debt)],
                     ['D/E Ratio', result.fundamentals.debt_to_equity?.toFixed(2) ?? 'N/A'],
+                    ['LT D/E', result.fundamentals.long_term_debt_equity?.toFixed(2) ?? 'N/A'],
+                    ['Current Ratio', result.fundamentals.current_ratio?.toFixed(2) ?? 'N/A'],
+                    ['Quick Ratio', result.fundamentals.quick_ratio?.toFixed(2) ?? 'N/A'],
                     ['ROE', result.fundamentals.roe != null ? `${(result.fundamentals.roe * 100).toFixed(1)}%` : 'N/A'],
+                    ['ROIC', result.fundamentals.roic != null ? `${(result.fundamentals.roic * 100).toFixed(1)}%` : 'N/A'],
+                    ['ROA', result.fundamentals.roa != null ? `${(result.fundamentals.roa * 100).toFixed(1)}%` : 'N/A'],
+                    ['Div. Yield', result.fundamentals.dividend_yield != null ? `${result.fundamentals.dividend_yield.toFixed(2)}%` : 'N/A'],
                   ].map(([label, val]) => (
                     <>
                       <span key={`l-${label}`} className="text-slate-500">{label}</span>
@@ -194,8 +214,12 @@ export function Dashboard() {
                     ['PEG Ratio', result.valuation.peg_ratio?.toFixed(2) ?? 'N/A'],
                     ['Price/Sales', result.valuation.price_to_sales?.toFixed(2) ?? 'N/A'],
                     ['EV/EBITDA', result.valuation.ev_to_ebitda?.toFixed(1) ?? 'N/A'],
+                    ['EV/Sales', result.valuation.ev_sales?.toFixed(2) ?? 'N/A'],
+                    ['P/Book', result.valuation.price_to_book?.toFixed(2) ?? 'N/A'],
+                    ['P/Cash', result.valuation.price_to_cash?.toFixed(2) ?? 'N/A'],
                     ['P/FCF', result.valuation.price_to_fcf?.toFixed(1) ?? 'N/A'],
                     ['FCF Yield', result.valuation.fcf_yield != null ? `${result.valuation.fcf_yield.toFixed(2)}%` : 'N/A'],
+                    ['Target Dist.', result.fundamentals.target_price_distance != null ? `${result.fundamentals.target_price_distance.toFixed(1)}%` : 'N/A'],
                     ['Peer Comparison', result.valuation.peer_comparison_available ? 'Available' : 'N/A'],
                   ].map(([label, val]) => (
                     <>
@@ -205,6 +229,12 @@ export function Dashboard() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Ownership + Volume */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <OwnershipPanel fundamentals={result.fundamentals} />
+              <VolumePanel technicals={result.technicals} />
             </div>
 
             {/* News */}

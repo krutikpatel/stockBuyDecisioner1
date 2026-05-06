@@ -1,41 +1,109 @@
+"""
+Backtest configuration.
+Centralises all tunable parameters so runner/metrics/report stay parameter-free.
+"""
 from __future__ import annotations
 
-BACKTEST_TICKERS = [
-    "AAPL", "MSFT", "NVDA", "GOOGL",
-    "JPM", "JNJ", "XOM", "WMT",
-    "CRWD", "DKNG", "ENPH", "COIN",
-    "MVIS", "PLUG", "ARRY", "CLOV",
-    "SPY", "QQQ", "IWM", "GLD",
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Universe
+# ---------------------------------------------------------------------------
+
+BACKTEST_TICKERS: list[str] = [
+    # Mega-cap tech
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META",
+    # High-growth / momentum
+    "TSLA", "AMD", "SHOP", "SNOW",
+    # Cybersecurity
+    "CRWD", "PANW",
+    # Financials
+    "JPM", "GS",
+    # Healthcare / biotech
+    "UNH", "LLY",
+    # Energy
+    "XOM", "CVX",
+    # Speculative
+    "DKNG", "ROKU",
 ]
 
-# All sector ETFs that need price data too
-SECTOR_ETF_MAP: dict[str, str | None] = {
-    "AAPL": "XLK", "MSFT": "XLK", "NVDA": "XLK", "GOOGL": "XLC",
-    "JPM": "XLF", "JNJ": "XLV", "XOM": "XLE", "WMT": "XLP",
-    "CRWD": "XLK", "DKNG": "XLY", "ENPH": "XLK", "COIN": "XLF",
-    "MVIS": "XLK", "PLUG": "XLE", "ARRY": "XLK", "CLOV": "XLV",
-    "SPY": None, "QQQ": None, "IWM": None, "GLD": None,
+# Benchmark tickers (always fetched alongside stock universe)
+BENCHMARK_TICKERS: list[str] = ["SPY", "QQQ"]
+
+# Sector ETF mapping — used for sector-relative RS and sector_macro_score
+SECTOR_ETF_MAP: dict[str, str] = {
+    "AAPL":  "XLK",
+    "MSFT":  "XLK",
+    "NVDA":  "XLK",
+    "GOOGL": "XLK",
+    "AMZN":  "XLY",
+    "META":  "XLK",
+    "TSLA":  "XLY",
+    "AMD":   "XLK",
+    "SHOP":  "XLK",
+    "SNOW":  "XLK",
+    "CRWD":  "XLK",
+    "PANW":  "XLK",
+    "JPM":   "XLF",
+    "GS":    "XLF",
+    "UNH":   "XLV",
+    "LLY":   "XLV",
+    "XOM":   "XLE",
+    "CVX":   "XLE",
+    "DKNG":  "XLY",
+    "ROKU":  "XLK",
 }
 
-BACKTEST_START = "2024-05-06"   # first Monday on/after 2024-05-01
-BACKTEST_END = "2026-05-04"
-HISTORY_START = "2022-05-01"   # 3 years of history so 2024 dates have ≥252 rows
+# ---------------------------------------------------------------------------
+# Date ranges
+# ---------------------------------------------------------------------------
 
-# Forward windows in trading days
+# Full history download start — needs enough pre-history for 200-day MA warmup
+HISTORY_START: str = "2016-01-01"
+
+# Backtest period
+BACKTEST_START: str = "2018-01-01"
+BACKTEST_END: str = "2025-12-31"
+
+# ---------------------------------------------------------------------------
+# Horizons
+# Keys match HorizonRecommendation.horizon values used by the production code.
+# Values are calendar-day offsets used when looking up exit prices.
+# ---------------------------------------------------------------------------
+
+HORIZONS: list[str] = ["short_term", "medium_term", "long_term"]
+
+# Trading-day holding periods (used by outcome.py to find exit price)
 HOLDING_PERIODS: dict[str, int] = {
-    "short_term": 20,
-    "medium_term": 65,
-    "long_term": 252,
+    "short_term":  20,   # ~1 month
+    "medium_term": 63,   # ~3 months
+    "long_term":   252,  # ~1 year
 }
 
-HORIZONS = ["short_term", "medium_term", "long_term"]
+# ---------------------------------------------------------------------------
+# Snapshot / runner settings
+# ---------------------------------------------------------------------------
 
-# Skip a test point if price slice has fewer than this many rows
-MIN_ROWS_FOR_ANALYSIS = 252
+# Minimum bars of price history required before a snapshot is generated
+MIN_ROWS_FOR_ANALYSIS: int = 252
 
-CACHE_DIR = "backtest_results/cache"
-RESULTS_DIR = "backtest_results"
+# Risk profile used by build_recommendations (affects position sizing only)
+DEFAULT_RISK_PROFILE: str = "moderate"
 
-DEFAULT_RISK_PROFILE = "moderate"
+# Slippage cost applied to forward return (as a fraction, e.g. 0.001 = 0.1%)
+SLIPPAGE: float = 0.0  # Phase 1: no slippage
 
-BENCHMARK_TICKERS = {"SPY", "QQQ"}
+# Phase gate: controls which data sources are used
+# 1 = technical + regime only (no fundamentals)
+# 2 = same as 1 (regime metrics added in post-processing)
+# 3 = add time-sliced fundamentals + archetype
+DEFAULT_PHASE: int = 3
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+_BASE = Path(__file__).parent
+
+CACHE_DIR: str = str(_BASE / "cache")
+RESULTS_DIR: str = str(_BASE / "results")

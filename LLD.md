@@ -46,7 +46,7 @@ usingGptStrategy/
 │   │   │   └── cache_manager.py             # TTLCache singleton + helpers
 │   │   ├── models/
 │   │   │   ├── request.py                   # StockAnalysisRequest
-│   │   │   ├── response.py                  # StockAnalysisResult, HorizonRecommendation, SignalProfile
+│   │   │   ├── response.py                  # StockAnalysisResult, HorizonRecommendation, SignalProfile, SignalCard, SignalCards, SignalCardLabel
 │   │   │   ├── market.py                    # MarketData, TechnicalIndicators, MarketRegime, MarketRegimeAssessment
 │   │   │   ├── fundamentals.py              # FundamentalData, ValuationData, StockArchetype
 │   │   │   ├── earnings.py                  # EarningsData, EarningsRecord
@@ -65,7 +65,8 @@ usingGptStrategy/
 │   │   │   ├── market_regime_service.py       # classify_regime, REGIME_WEIGHT_ADJUSTMENTS
 │   │   │   ├── news_sentiment_service.py
 │   │   │   ├── data_completeness_service.py   # compute_completeness
-│   │   │   ├── signal_profile_service.py      # build_signal_profile
+│   │   │   ├── signal_card_service.py         # score_all_cards → SignalCards (Story 6)
+│   │   │   ├── signal_profile_service.py      # build_signal_profile + build_signal_profile_from_cards
 │   │   │   ├── scoring_service.py
 │   │   │   ├── recommendation_service.py
 │   │   │   ├── risk_management_service.py
@@ -83,13 +84,21 @@ usingGptStrategy/
 │   │   └── run_backtest.py                  # CLI entry point
 │   ├── tests/
 │   │   ├── test_technical_analysis.py       # 38 tests
+│   │   ├── test_technical_enhanced.py       # Story 1 — EMA, slopes, perf, distances (57 tests)
+│   │   ├── test_volume_indicators.py        # Story 2 — OBV, CMF, VWAP, vol ratios (47 tests)
+│   │   ├── test_relative_strength.py        # Story 3 — RS vs QQQ, drawdown, percentiles (44 tests)
 │   │   ├── test_fundamental_analysis.py     # 32 tests (incl. 8 growth-adj valuation tests)
+│   │   ├── test_fundamental_enhanced.py     # Story 4 — multi-period growth, ownership (43 tests)
 │   │   ├── test_earnings_analysis.py        # 29 tests
 │   │   ├── test_scoring_recommendation.py   # 53 tests (incl. US-004 + US-005 tests)
 │   │   ├── test_stock_archetype.py          # 19 tests
 │   │   ├── test_market_regime.py            # 18 tests
 │   │   ├── test_data_completeness.py        # 16 tests
 │   │   ├── test_signal_profile.py           # 22 tests
+│   │   ├── test_signal_card_models.py       # Story 5 — SignalCard Pydantic models (38 tests)
+│   │   ├── test_signal_card_service.py      # Story 6 — 11 signal card scorers (52 tests)
+│   │   ├── test_revised_scoring.py          # Story 7 — signal card weights + new labels (19 tests)
+│   │   ├── test_risk_report_updates.py      # Story 8 — risk mgmt + markdown report (13 tests)
 │   │   └── test_backtest_metrics.py         # 14 tests
 │   ├── requirements.txt
 │   └── .env.example
@@ -98,14 +107,22 @@ usingGptStrategy/
 │       ├── App.tsx
 │       ├── pages/Dashboard.tsx
 │       ├── components/
-│       │   ├── RecommendationCard.tsx        # 14-label badge colors, completeness/confidence bars
-│       │   ├── SignalProfileCard.tsx         # 6-cell signal grid (new)
-│       │   ├── RegimeArchetypeBar.tsx        # Archetype + regime pill badges (new)
+│       │   ├── RecommendationCard.tsx        # New per-horizon labels, completeness/confidence bars
+│       │   ├── SignalProfileCard.tsx         # 6-cell signal grid
+│       │   ├── SignalCard.tsx                # Story 9 — score gauge + label + expand factors
+│       │   ├── SignalCardsGrid.tsx           # Story 9 — 11-card responsive grid
+│       │   ├── PerformanceTable.tsx          # Story 10 — 1W/1M/3M/6M/YTD/1Y/3Y/5Y + max DD
+│       │   ├── OwnershipPanel.tsx            # Story 10 — insider/inst/short/analyst data
+│       │   ├── VolumePanel.tsx               # Story 10 — OBV, A/D, CMF, VWAP dev, vol ratios
+│       │   ├── RegimeArchetypeBar.tsx        # Archetype + regime pill badges
 │       │   ├── ScoreBreakdown.tsx
 │       │   ├── TechnicalChart.tsx
 │       │   ├── NewsSection.tsx
 │       │   ├── DataWarnings.tsx
-│       │   └── MarkdownReport.tsx
+│       │   ├── MarkdownReport.tsx
+│       │   └── __tests__/
+│       │       ├── SignalCard.test.tsx        # 14 tests
+│       │       └── DataPanelUpdates.test.tsx  # 22 tests
 │       ├── api/stockApi.ts
 │       └── types/stock.ts
 ├── HLD.md
@@ -278,13 +295,14 @@ flowchart LR
     GVD["get_valuation_data(ticker, market_cap=None)"]
 
     GFD -->|"get_ticker_info()"| INFO["ticker.info dict"]
-    GFD -->|"yf.Ticker().quarterly_income_stmt"| QIS["Quarterly income stmt\n(for revenue_growth_qoq)"]
+    GFD -->|"yf.Ticker().quarterly_income_stmt"| QIS["Quarterly income stmt\n(revenue_growth_qoq, sales_growth_ttm)"]
+    GFD -->|"yf.Ticker().income_stmt"| AIS["Annual income stmt\n(sales/eps growth 3Y, 5Y)"]
 
     GVD -->|"get_ticker_info()"| INFO
 
-    INFO --> FD["FundamentalData\n─────────────────\nrevenue_ttm ← totalRevenue\nrevenue_growth_yoy ← revenueGrowth\neps_ttm ← trailingEps\neps_growth_yoy ← earningsGrowth\ngross_margin ← grossMargins\noperating_margin ← operatingMargins\nnet_margin ← profitMargins\nfree_cash_flow ← freeCashflow\ncash ← totalCash\ntotal_debt ← totalDebt\nnet_debt = totalDebt - totalCash\ncurrent_ratio ← currentRatio\ndebt_to_equity ← debtToEquity\nshares_outstanding ← sharesOutstanding\nroe ← returnOnEquity\nroic ← returnOnAssets (proxy)\nsector ← sector\nbeta ← beta"]
+    INFO --> FD["FundamentalData\n─────────────────\nrevenue_ttm ← totalRevenue\nrevenue_growth_yoy ← revenueGrowth\neps_ttm ← trailingEps\neps_growth_yoy ← earningsGrowth\ngross_margin ← grossMargins\noperating_margin ← operatingMargins\nnet_margin ← profitMargins\nfree_cash_flow ← freeCashflow\ncash ← totalCash\ntotal_debt ← totalDebt\nnet_debt = totalDebt - totalCash\ncurrent_ratio ← currentRatio\ndebt_to_equity ← debtToEquity\nshares_outstanding ← sharesOutstanding\nroe ← returnOnEquity\nroic ← returnOnAssets (proxy)\nsector ← sector · beta ← beta\n── Story 4 additions ──\neps_growth_next_year ← earningsQuarterlyGrowth\neps_growth_ttm = eps_growth_yoy\neps_growth_3y/5y ← annual_income CAGR\nsales_growth_ttm ← quarterly Q0-3 vs Q4-7\nsales_growth_3y/5y ← annual_income CAGR\nroa ← returnOnAssets\nquick_ratio ← quickRatio\nlong_term_debt_equity = longTermDebt / equity\ninsider_ownership ← heldPercentInsiders\ninsider_transactions ← insiderTransactions\ninstitutional_ownership ← heldPercentInstitutions\ninstitutional_transactions ← netSharePurchaseActivity\nshort_float ← shortPercentOfFloat\nshort_ratio ← shortRatio\nanalyst_recommendation ← recommendationMean\nanalyst_target_price ← targetMeanPrice\ntarget_price_distance = (target - price) / price × 100\nshares_float ← floatShares\ndividend_yield ← dividendYield"]
 
-    INFO --> VD["ValuationData\n─────────────────\ntrailing_pe ← trailingPE\nforward_pe ← forwardPE\npeg_ratio ← pegRatio (or calculated)\nprice_to_sales ← priceToSalesTrailing12Months\nev_to_ebitda ← enterpriseToEbitda\nprice_to_fcf = marketCap / freeCashflow\nfcf_yield = freeCashflow / marketCap × 100\npeer_comparison_available = False (always)"]
+    INFO --> VD["ValuationData\n─────────────────\ntrailing_pe ← trailingPE\nforward_pe ← forwardPE\npeg_ratio ← pegRatio (or calculated)\nprice_to_sales ← priceToSalesTrailing12Months\nev_to_ebitda ← enterpriseToEbitda\nprice_to_fcf = marketCap / freeCashflow\nfcf_yield = freeCashflow / marketCap × 100\n── Story 4 additions ──\nev_sales = enterpriseValue / totalRevenue\nprice_to_book ← priceToBook\nprice_to_cash = currentPrice / (totalCash / sharesOutstanding)\npeer_comparison_available = False (always)"]
 ```
 
 **Calculated fields:**
@@ -293,7 +311,14 @@ flowchart LR
 - `peg_ratio`: uses yfinance `pegRatio`; falls back to `forward_PE / (earningsGrowth × 100)` if missing
 - `price_to_fcf = market_cap / free_cash_flow` (only when FCF > 0)
 - `revenue_growth_qoq`: computed from `quarterly_income_stmt` — `(Q0 - Q1) / |Q1|`
-- `sector` and `beta` are now fetched and stored on `FundamentalData` (used by archetype classifier)
+- `sales_growth_ttm`: sum of newest 4 quarters vs prior 4 quarters from `quarterly_income_stmt`
+- `sales_growth_3y/5y`, `eps_growth_3y/5y`: CAGR from `income_stmt` annual data
+- `long_term_debt_equity = longTermDebt / totalStockholderEquity`
+- `target_price_distance = (targetMeanPrice - currentPrice) / currentPrice × 100`
+- `price_to_cash = currentPrice / (totalCash / sharesOutstanding)`
+- `ev_sales = enterpriseValue / totalRevenue`
+- `sector` and `beta` are fetched and stored on `FundamentalData` (used by archetype classifier)
+- All Story 4 fields are best-effort: `None` when source data unavailable (graceful degradation)
 
 ---
 
@@ -362,16 +387,27 @@ def get_news_items(ticker: str) -> list[NewsItem]:
 
 **File:** `backend/app/services/technical_analysis_service.py`
 
-### Function Map
+### Function Map (Story 1 — Enhanced)
 
 ```mermaid
 flowchart TD
     CT["compute_technicals(df, spy_df, sector_df)\n→ TechnicalIndicators"]
 
     CT --> SMA["_sma(series, window) → float\nrolling(window).mean().iloc[-1]"]
+    CT --> EMA["compute_ema_relative(series, period) → float\n(price-EMA)/EMA*100 · ewm(span=period)"]
+    CT --> SMAR["compute_sma_relative(series, window) → float\n(price-SMA)/SMA*100"]
+    CT --> SMAS["compute_sma_slope(series, window, slope_bars=5) → float\n5-bar % change of SMA"]
     CT --> RSI["compute_rsi(series, period=14) → float\npandas_ta.rsi()"]
     CT --> MACD["compute_macd(series) → (macd, signal, hist)\nfast=12, slow=26, signal=9\npandas_ta.macd()"]
+    CT --> ADX["compute_adx(high, low, close, period=14) → float\nManual Wilder smoothing (pandas_ta incompatible w/ pandas 3.0)"]
+    CT --> SRSI["compute_stochastic_rsi(series) → float\npandas_ta.stochrsi() · %K value 0–100"]
     CT --> ATR["compute_atr(high, low, close, period=14) → float\npandas_ta.atr()"]
+    CT --> ATRP["compute_atr_percent(atr, price) → float\natr/price*100"]
+    CT --> BB["compute_bollinger_bands(series, period=20) → (position, width)\nposition=(price-lower)/(upper-lower) · width=(upper-lower)/mid*100"]
+    CT --> PERF["compute_performance_periods(series) → dict\n1W=5bars 1M=21 3M=63 6M=126 YTD 1Y=252 3Y=756 5Y=1260"]
+    CT --> GAP["compute_gap_metrics(open, prev_close, price) → (gap%, cfo%)\ngap=(open-prev_close)/prev_close*100"]
+    CT --> RDIST["compute_range_distances(close, high, low) → dict\n20D/50D/52W/ATH/ATL high+low distances %"]
+    CT --> WVOL["compute_volatility_metrics(series) → (weekly_vol, monthly_vol)\nWeekly: std(5-bar returns)*√52*100 · Monthly: std(21-bar)*√12*100"]
     CT --> TRD["classify_trend(close, ma_50, ma_200)\n→ TrendClassification"]
     CT --> EXT["detect_extension(price, ma_20, ma_50, rsi)\n→ (bool, ext_20%, ext_50%)"]
     CT --> SR["find_support_resistance(high, low, close)\n→ SupportResistanceLevels"]
@@ -379,6 +415,21 @@ flowchart TD
     CT --> RS["compute_relative_strength(stock_close, bench_close, period=63)\n→ float"]
     CT --> SCR["score_technicals(...) → float 0–100"]
 ```
+
+**Note:** `compute_adx` is implemented manually using Wilder's EWM smoothing because `pandas_ta.adx()` calls `np.isnan()` on a pandas Series, which raises `TypeError` with pandas >= 3.0.
+
+### Story 2 — Volume & Accumulation Functions
+
+| Function | Signature | Description |
+|---------|-----------|-------------|
+| `compute_obv_trend` | `(close, volume, slope_bars=10) → int` | OBV trend: +1 rising, -1 falling, 0 flat. Slope over `slope_bars` OBV values. |
+| `compute_ad_trend` | `(high, low, close, volume, slope_bars=10) → int` | A/D Line trend. Uses Money Flow Multiplier. |
+| `compute_chaikin_money_flow` | `(high, low, close, volume, period=20) → float` | CMF in [-1, 1]. Handles zero-volume and equal high/low safely. |
+| `compute_vwap_deviation` | `(high, low, close, volume, period=20) → float` | % deviation of price from 20D VWAP. |
+| `compute_anchored_vwap_deviation` | `(high, low, close, volume, earnings_date) → float` | % deviation from earnings-anchored VWAP. Returns None when date is None, after data, or < 2 bars. |
+| `compute_volume_dryup_ratio` | `(volume, recent_bars=3, ref_bars=10) → float` | recent/prior avg volume. < 1 = drying up. |
+| `compute_updown_volume_ratio` | `(close, volume, period=20) → float` | Up-day volume / down-day volume over period. None when no down days. |
+| `_compute_breakout_volume_multiple` | `(volume, period=20) → float` | current vol / 20D avg vol. |
 
 ### Trend Classification Logic
 
@@ -813,36 +864,74 @@ score = 50 + ratio × 40   → range [10, 90] in practice
 
 **File:** `backend/app/services/scoring_service.py`
 
-### Weights (all sum to 100, verified at module import time)
+The scoring service has two pathways:
+1. **Signal-card pathway (primary):** `compute_scores_from_signal_cards()` — used when `signal_cards` is available. Weights signal card scores per horizon.
+2. **Legacy composite pathway (backtest/fallback):** `compute_scores()` — uses the old sub-score mapping. Preserved for backtest backward compatibility.
+
+### Signal Card Weights (Story 7)
+
+```python
+SIGNAL_CARD_SHORT_WEIGHTS = {
+    "momentum":          25,  # SignalCards.momentum.score
+    "volume_accumulation": 20,
+    "entry_timing":      20,
+    "relative_strength": 15,
+    "volatility_risk":   10,
+    "catalyst":          10,
+}
+
+SIGNAL_CARD_MEDIUM_WEIGHTS = {
+    "trend":             20,
+    "growth":            20,
+    "relative_strength": 15,
+    "volume_accumulation": 15,
+    "valuation":         10,
+    "quality":           10,
+    "catalyst":          10,
+}
+
+SIGNAL_CARD_LONG_WEIGHTS = {
+    "growth":            20,
+    "quality":           20,
+    "valuation":         15,
+    "ownership":         15,
+    "trend":             10,
+    "catalyst":          10,
+    "volatility_risk":    5,
+    "momentum":           5,
+}
+```
+
+### `compute_scores_from_signal_cards` Signature
+
+```python
+def compute_scores_from_signal_cards(
+    cards: SignalCards,
+    regime_assessment: Optional[MarketRegimeAssessment] = None,
+) -> dict[str, dict[str, float]]:
+    # Returns {"short_term": {"composite": ..., "weights": {...}}, "medium_term": ..., "long_term": ...}
+    # Missing card scores default to 50.0
+    # Regime multipliers applied on card scores before weighted average
+```
+
+### Legacy Weights (kept for backtest)
 
 ```python
 SHORT_TERM_WEIGHTS = {
-    "technical_momentum": 30,   # technicals.technical_score
-    "relative_strength":  20,   # technicals.technical_score (RS component)
-    "catalyst_news":      20,   # avg(catalyst_score, news_score)
-    "options_flow":       10,   # catalyst_score (PCR-derived)
-    "market_regime":      10,   # _regime_score(assessment)
-    "risk_reward":        10,   # risk_reward_score (default 50)
+    "technical_momentum": 30, "relative_strength": 20,
+    "catalyst_news": 20, "options_flow": 10,
+    "market_regime": 10, "risk_reward": 10,
 }
-
 MEDIUM_TERM_WEIGHTS = {
-    "earnings_revision":          25,   # earnings.earnings_score
-    "growth_acceleration":        20,   # fundamentals.fundamental_score
-    "technical_trend":            20,   # technicals.technical_score
-    "sector_strength":            15,   # sector_macro_score
-    "valuation_relative_growth":  10,   # archetype_adjusted_score (or valuation_score)
-    "catalyst_news":              10,   # avg(catalyst_score, news_score)
+    "earnings_revision": 25, "growth_acceleration": 20,
+    "technical_trend": 20, "sector_strength": 15,
+    "valuation_relative_growth": 10, "catalyst_news": 10,
 }
-
 LONG_TERM_WEIGHTS = {
-    "business_quality":           25,   # fundamentals.fundamental_score
-    "growth_durability":          20,   # fundamentals.fundamental_score
-    "fcf_quality":                15,   # fundamentals.fundamental_score
-    "balance_sheet_strength":     15,   # fundamentals.fundamental_score
-    "valuation_relative_growth":  15,   # archetype_adjusted_score (or valuation_score)
-    "competitive_moat":           10,   # fundamentals.fundamental_score
+    "business_quality": 25, "growth_durability": 20,
+    "fcf_quality": 15, "balance_sheet_strength": 15,
+    "valuation_relative_growth": 15, "competitive_moat": 10,
 }
-
 # _verify_weights() called at module load — AssertionError if any sum ≠ 100
 ```
 
@@ -932,24 +1021,43 @@ composite = Σ(score[key] * weight[key]) / Σ(weights)
 
 **File:** `backend/app/services/recommendation_service.py`
 
-### 14 Decision Labels
+Two decision pathways coexist:
+- **Signal-card pathway (primary):** When `signal_cards` is passed, uses `_decide_*_v2()` with new per-horizon labels.
+- **Legacy pathway (fallback/backtest):** When `signal_cards=None`, uses old `_decide_*()` with 14 labels.
+
+### New Per-Horizon Decision Labels (Story 7)
 
 ```python
-ALL_DECISIONS = {
-    "BUY_NOW",                  # ≥ 80, not extended, support visible
-    "BUY_STARTER",              # 70–80 or ≥ 80 + no support
-    "BUY_STARTER_EXTENDED",     # strong but extended in BULL regime — smaller size
-    "BUY_ON_PULLBACK",          # extended + non-bull regime, or 65–70
-    "BUY_ON_BREAKOUT",          # long-term: strong but extended
-    "BUY_AFTER_EARNINGS",       # short-term: earnings < 30d and score 55–70
-    "WATCHLIST",                # 50–65 (short) or 55–68 (medium) or 60–75 (long)
-    "WATCHLIST_NEEDS_CATALYST", # (reserved for future use)
-    "HOLD_EXISTING_DO_NOT_ADD", # (reserved for future use)
-    "AVOID",                    # generic low score fallback
-    "AVOID_BAD_BUSINESS",       # revenue declining + margin or beat-rate deterioration
-    "AVOID_BAD_CHART",          # downtrend + rs_vs_spy < 0.8
-    "AVOID_BAD_RISK_REWARD",    # (reserved for future use)
-    "AVOID_LOW_CONFIDENCE",     # data_completeness < 55.0 (forced override)
+SHORT_TERM_DECISIONS = {
+    "BUY_NOW_MOMENTUM",                # score ≥ 75
+    "BUY_STARTER_STRONG_BUT_EXTENDED", # score 65–74
+    "WAIT_FOR_PULLBACK",               # score 50–64
+    "AVOID_BAD_CHART",                 # score < 50
+}
+MEDIUM_TERM_DECISIONS = {
+    "BUY_NOW",                         # score ≥ 75
+    "BUY_STARTER",                     # score 65–74
+    "BUY_ON_PULLBACK",                 # score 55–64
+    "WATCHLIST_NEEDS_CONFIRMATION",    # score 45–54
+    "AVOID_BAD_BUSINESS",              # score < 45
+}
+LONG_TERM_DECISIONS = {
+    "BUY_NOW_LONG_TERM",               # score ≥ 75
+    "ACCUMULATE_ON_WEAKNESS",          # score 60–74
+    "WATCHLIST_VALUATION_TOO_RICH",    # score 45–59
+    "AVOID_LONG_TERM",                 # score < 45
+}
+```
+
+### Legacy 14 Decision Labels (preserved for backtest)
+
+```python
+LEGACY_ALL_DECISIONS = {
+    "BUY_NOW", "BUY_STARTER", "BUY_STARTER_EXTENDED", "BUY_ON_PULLBACK",
+    "BUY_ON_BREAKOUT", "BUY_AFTER_EARNINGS", "WATCHLIST",
+    "WATCHLIST_NEEDS_CATALYST", "HOLD_EXISTING_DO_NOT_ADD",
+    "AVOID", "AVOID_BAD_BUSINESS", "AVOID_BAD_CHART",
+    "AVOID_BAD_RISK_REWARD", "AVOID_LOW_CONFIDENCE",
 }
 ```
 
@@ -1179,6 +1287,74 @@ def build_signal_profile(
 ```
 
 **Key design principle:** Signal profile dimensions are independent — NVDA-like stocks legitimately show `momentum=VERY_BULLISH` alongside `valuation=RISKY`. The composite score would average these; the signal profile preserves the nuance.
+
+Also provides `build_signal_profile_from_cards(cards: SignalCards) -> SignalProfile` which derives the 6 profile dimensions directly from signal card scores (used when signal cards are available).
+
+---
+
+## 15b. Signal Card Service (Story 6)
+
+**File:** `backend/app/services/signal_card_service.py`
+
+### Public API
+
+```python
+def score_all_cards(
+    technicals: TechnicalIndicators,
+    fundamentals: FundamentalData,
+    valuation: ValuationData,
+    earnings: EarningsData,
+    news: NewsSummary,
+) -> SignalCards:
+    # Calls all 11 scorer functions and returns a SignalCards object
+```
+
+### 11 Scorer Functions
+
+| Scorer | Key Inputs | Score Drivers |
+|--------|-----------|---------------|
+| `score_momentum` | perf_1w/1m/3m, MACD hist, RSI | perf>0 +pts, MACD>0 +pts, RSI 50–70 +pts |
+| `score_trend` | sma20/50/200 relatives, slopes, ADX | above all MAs +pts, slopes positive +pts, ADX>25 +pts |
+| `score_entry_timing` | RSI, StochRSI, ema8/21 relatives, VWAP dev | RSI 50–70 ideal, not extended +pts, VWAP support +pts |
+| `score_volume_accumulation` | obv_trend, ad_trend, CMF, breakout vol | OBV rising +pts, CMF>0 +pts, rel vol>1.5 +pts |
+| `score_volatility_risk` | atr_percent, weekly/monthly vol, drawdown 3M/1Y | lower drawdown +pts, ATR% manageable +pts |
+| `score_relative_strength` | rs_vs_spy, rs_vs_qqq, rs_vs_sector, percentile ranks | outperformance +pts, top-quartile percentile +pts |
+| `score_growth` | eps/sales growth TTM/3Y/5Y, EPS surprise | accelerating growth +pts, beats +pts |
+| `score_valuation` | P/E, fwd P/E, PEG, P/S, EV/EBITDA, P/FCF, EV/Sales | below thresholds +pts, PEG<1.5 +pts |
+| `score_quality` | gross/op/net margin, ROE, ROIC, ROA, current ratio, quick ratio | margins positive +pts, ROIC>15% +pts |
+| `score_ownership` | insider ownership+txn, inst ownership+txn, short float | insider buying +pts, inst accumulation +pts |
+| `score_catalyst` | news_score, analyst rec, target dist, earnings proximity | positive news +pts, upgrades +pts, target upside +pts |
+
+### Score Formula Pattern
+
+All scorers use proportional scoring:
+```python
+raw_score = 0.0
+total_possible = 0.0
+
+# For each factor:
+if field is not None:
+    total_possible += factor_max_pts
+    if condition_met:
+        raw_score += pts
+
+score = (raw_score / total_possible * 100) if total_possible > 0 else 50.0
+```
+
+Missing fields add to `missing_data_warnings` and are excluded from `total_possible`.
+
+### SignalCardLabel Thresholds
+
+```python
+class SignalCardLabel:
+    @classmethod
+    def from_score(cls, score: float) -> str:
+        if score >= 80: return "VERY_BULLISH"
+        if score >= 60: return "BULLISH"
+        if score >= 40: return "NEUTRAL"
+        if score >= 20: return "BEARISH"
+        return "VERY_BEARISH"
+```
 
 ---
 
@@ -1484,6 +1660,36 @@ classDiagram
         +PositionSizing position_sizing
         +list~str~ data_warnings
     }
+    class SignalCardLabel {
+        +VERY_BULLISH: str
+        +BULLISH: str
+        +NEUTRAL: str
+        +BEARISH: str
+        +VERY_BEARISH: str
+        +from_score(score: float) str
+    }
+    class SignalCard {
+        +str name
+        +float score
+        +str label
+        +str explanation
+        +list top_positives
+        +list top_negatives
+        +list missing_data_warnings
+    }
+    class SignalCards {
+        +SignalCard momentum
+        +SignalCard trend
+        +SignalCard entry_timing
+        +SignalCard volume_accumulation
+        +SignalCard volatility_risk
+        +SignalCard relative_strength
+        +SignalCard growth
+        +SignalCard valuation
+        +SignalCard quality
+        +SignalCard ownership
+        +SignalCard catalyst
+    }
     class StockAnalysisResult {
         +str ticker, generated_at
         +float current_price
@@ -1501,6 +1707,7 @@ classDiagram
         +str market_regime
         +float regime_confidence
         +Optional~SignalProfile~ signal_profile
+        +Optional~SignalCards~ signal_cards
         +str disclaimer
     }
 ```
@@ -1651,13 +1858,16 @@ interface Props { markdown: string }
 1. Price header with `RegimeArchetypeBar`
 2. `DataWarnings` (completeness gaps)
 3. `SignalProfileCard` (6 signal dimensions)
-4. Recommendation cards (3 horizons)
-5. ScoreBreakdown + TechnicalChart (side by side)
-6. Fundamental Quality + Valuation (side by side)
-7. NewsSection
-8. Earnings table
-9. MarkdownReport (collapsible)
-10. Disclaimer
+4. `SignalCardsGrid` (11 signal cards with score gauge, label badge, expandable factors)
+5. Recommendation cards (3 horizons, new per-horizon decision labels)
+6. `PerformanceTable` (1W/1M/3M/6M/YTD/1Y/3Y/5Y + max drawdown)
+7. ScoreBreakdown + TechnicalChart (side by side)
+8. Fundamental Quality + Valuation (side by side, expanded with new fields)
+9. `OwnershipPanel` + `VolumePanel` (side by side)
+10. NewsSection
+11. Earnings table
+12. MarkdownReport (collapsible, now includes signal cards section)
+13. Disclaimer
 
 ### Vite Proxy Configuration
 

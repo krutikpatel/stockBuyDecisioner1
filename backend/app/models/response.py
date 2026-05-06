@@ -8,6 +8,55 @@ from app.models.earnings import EarningsData
 from app.models.news import NewsSummary
 
 
+# ---------------------------------------------------------------------------
+# Signal Card models (Story 5)
+# ---------------------------------------------------------------------------
+
+class SignalCardLabel:
+    VERY_BULLISH = "VERY_BULLISH"
+    BULLISH = "BULLISH"
+    NEUTRAL = "NEUTRAL"
+    BEARISH = "BEARISH"
+    VERY_BEARISH = "VERY_BEARISH"
+
+    @classmethod
+    def from_score(cls, score: float) -> str:
+        """Map a 0–100 score to a label using standard thresholds."""
+        if score >= 80:
+            return cls.VERY_BULLISH
+        if score >= 60:
+            return cls.BULLISH
+        if score >= 40:
+            return cls.NEUTRAL
+        if score >= 20:
+            return cls.BEARISH
+        return cls.VERY_BEARISH
+
+
+class SignalCard(BaseModel):
+    name: str
+    score: float                          # 0–100
+    label: str                            # SignalCardLabel value
+    explanation: str
+    top_positives: list[str] = []
+    top_negatives: list[str] = []
+    missing_data_warnings: list[str] = []
+
+
+class SignalCards(BaseModel):
+    momentum: SignalCard
+    trend: SignalCard
+    entry_timing: SignalCard
+    volume_accumulation: SignalCard
+    volatility_risk: SignalCard
+    relative_strength: SignalCard
+    growth: SignalCard
+    valuation: SignalCard
+    quality: SignalCard
+    ownership: SignalCard
+    catalyst: SignalCard
+
+
 class EntryPlan(BaseModel):
     preferred_entry: Optional[float] = None
     starter_entry: Optional[float] = None
@@ -48,6 +97,7 @@ class HorizonRecommendation(BaseModel):
     risk_reward: RiskReward
     position_sizing: PositionSizing
     data_warnings: list[str] = []
+    signal_cards_weights: dict[str, float] = {}  # card name → weight for this horizon
 
 
 class DataQualityReport(BaseModel):
@@ -89,6 +139,7 @@ class StockAnalysisResult(BaseModel):
     market_regime: str = "SIDEWAYS_CHOPPY"
     regime_confidence: float = 0.0
     signal_profile: Optional[SignalProfile] = None
+    signal_cards: Optional[SignalCards] = None
     disclaimer: str = (
         "This is a decision-support tool, not financial advice. "
         "The recommendation is based only on available data. "

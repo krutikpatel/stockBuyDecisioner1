@@ -6,7 +6,7 @@ from app.models.market import MarketRegime, MarketRegimeAssessment, TechnicalInd
 from app.models.fundamentals import FundamentalData, ValuationData
 from app.models.earnings import EarningsData
 from app.models.news import NewsSummary
-from app.models.response import HorizonRecommendation
+from app.models.response import HorizonRecommendation, SignalCards
 from app.services.risk_management_service import compute_risk_management
 from app.services.data_completeness_service import (
     compute_completeness,
@@ -30,6 +30,37 @@ ALL_DECISIONS = {
     "AVOID_BAD_RISK_REWARD",  # risk/reward < 1:1
     "AVOID_LOW_CONFIDENCE",   # missing critical data
 }
+
+# Story 7: New per-horizon decision labels
+SHORT_TERM_DECISIONS = {
+    "BUY_NOW_MOMENTUM",
+    "BUY_STARTER_STRONG_BUT_EXTENDED",
+    "WAIT_FOR_PULLBACK",
+    "AVOID_BAD_CHART",
+    "AVOID_LOW_CONFIDENCE",
+    "WATCHLIST",
+}
+
+MEDIUM_TERM_DECISIONS = {
+    "BUY_NOW",
+    "BUY_STARTER",
+    "BUY_ON_PULLBACK",
+    "WATCHLIST_NEEDS_CONFIRMATION",
+    "AVOID_BAD_BUSINESS",
+    "AVOID_LOW_CONFIDENCE",
+    "WATCHLIST",
+}
+
+LONG_TERM_DECISIONS = {
+    "ACCUMULATE_ON_WEAKNESS",
+    "BUY_NOW_LONG_TERM",
+    "WATCHLIST_VALUATION_TOO_RICH",
+    "AVOID_LONG_TERM",
+    "AVOID_LOW_CONFIDENCE",
+    "WATCHLIST",
+}
+
+ALL_DECISIONS = ALL_DECISIONS | SHORT_TERM_DECISIONS | MEDIUM_TERM_DECISIONS | LONG_TERM_DECISIONS
 
 
 def _confidence(score: float) -> str:
@@ -283,9 +314,78 @@ def _decide_long_term(
     return "AVOID"
 
 
+def _decide_short_term_v2(score: float, technicals: TechnicalIndicators) -> str:
+    """New short-term decision labels (Story 7)."""
+    if _chart_is_weak(technicals) and score < 50:
+        return "AVOID_BAD_CHART"
+    if score >= 70:
+        if technicals.is_extended:
+            return "BUY_STARTER_STRONG_BUT_EXTENDED"
+        return "BUY_NOW_MOMENTUM"
+    if score >= 55:
+        return "WAIT_FOR_PULLBACK"
+    if score < 40:
+        return "AVOID_BAD_CHART"
+    return "WATCHLIST"
+
+
+def _decide_medium_term_v2(
+    score: float,
+    technicals: TechnicalIndicators,
+    fundamentals: Optional[FundamentalData],
+    earnings: EarningsData,
+) -> str:
+    """New medium-term decision labels (Story 7)."""
+    if fundamentals is not None and _business_deteriorating(fundamentals, earnings) and score < 60:
+        return "AVOID_BAD_BUSINESS"
+    if score >= 72:
+        if not technicals.is_extended:
+            return "BUY_NOW"
+        return "BUY_STARTER"
+    if score >= 60:
+        if technicals.is_extended:
+            return "BUY_ON_PULLBACK"
+        return "BUY_STARTER"
+    if score >= 45:
+        return "WATCHLIST_NEEDS_CONFIRMATION"
+    return "AVOID_BAD_BUSINESS"
+
+
+def _decide_long_term_v2(
+    score: float,
+    fundamentals: Optional[FundamentalData],
+    earnings: Optional[EarningsData],
+    valuation_score: Optional[float],
+) -> str:
+    """New long-term decision labels (Story 7)."""
+    if fundamentals is not None and earnings is not None:
+        if _business_deteriorating(fundamentals, earnings) and score < 60:
+            return "AVOID_LONG_TERM"
+    # Expensive valuation relative to score
+    if valuation_score is not None and valuation_score < 35 and score < 65:
+        return "WATCHLIST_VALUATION_TOO_RICH"
+    if score >= 72:
+        return "BUY_NOW_LONG_TERM"
+    if score >= 55:
+        return "ACCUMULATE_ON_WEAKNESS"
+    if score >= 40:
+        return "WATCHLIST_VALUATION_TOO_RICH"
+    return "AVOID_LONG_TERM"
+
+
 def _summary(decision: str, score: float, horizon: str, technicals: TechnicalIndicators) -> str:
     hor = horizon.replace("_", "-")
     summaries = {
+        # New Story 7 labels
+        "BUY_NOW_MOMENTUM": f"Strong momentum buy signal. Score {score:.0f}/100 — price action and volume confirm the setup.",
+        "BUY_STARTER_STRONG_BUT_EXTENDED": f"Strong {hor} setup but price is extended. Score {score:.0f}/100. Start with a half position and add on pullback.",
+        "WAIT_FOR_PULLBACK": f"Good setup but not an ideal entry. Score {score:.0f}/100. Wait for a pullback to moving average support.",
+        "ACCUMULATE_ON_WEAKNESS": f"Strong long-term thesis. Score {score:.0f}/100. Accumulate gradually on any weakness.",
+        "BUY_NOW_LONG_TERM": f"Excellent long-term setup. Score {score:.0f}/100 — quality business at a reasonable valuation.",
+        "WATCHLIST_NEEDS_CONFIRMATION": f"Improving picture but needs confirmation. Score {score:.0f}/100. Add to watchlist and monitor catalysts.",
+        "WATCHLIST_VALUATION_TOO_RICH": f"Good business but valuation is stretched for a long-term entry. Score {score:.0f}/100. Wait for better pricing.",
+        "AVOID_LONG_TERM": f"Not suitable for long-term holding. Score {score:.0f}/100 — deteriorating fundamentals or excessive valuation.",
+        # Original labels
         "BUY_NOW": f"Strong setup across {hor} indicators. Score {score:.0f}/100 — favorable risk/reward.",
         "BUY_STARTER": f"Promising {hor} thesis. Score {score:.0f}/100. Consider a starter position and add on pullbacks.",
         "BUY_STARTER_EXTENDED": f"Strong {hor} setup but price is extended. Score {score:.0f}/100. Regime is supportive — use a smaller starter position.",
@@ -317,6 +417,7 @@ def build_recommendations(
     regime_assessment: Optional[MarketRegimeAssessment] = None,
     has_options_data: bool = False,
     has_sufficient_price_history: bool = True,
+    signal_cards: Optional[SignalCards] = None,
 ) -> list[HorizonRecommendation]:
     recs: list[HorizonRecommendation] = []
 
@@ -334,8 +435,26 @@ def build_recommendations(
         horizon_scores = scores[horizon]
         composite = horizon_scores["composite"]
 
+        # Determine signal card weights for this horizon (from scores dict if available)
+        horizon_weights: dict[str, float] = {}
+        if "weights" in horizon_scores:
+            horizon_weights = {k: float(v) for k, v in horizon_scores["weights"].items()}
+
+        # Use signal-card-based decision logic when signal cards provided
+        val_score = None
+        if signal_cards is not None:
+            val_score = signal_cards.valuation.score
+
         if completeness < AVOID_LOW_CONFIDENCE_THRESHOLD:
             decision = "AVOID_LOW_CONFIDENCE"
+        elif signal_cards is not None:
+            # New signal-card-based decision logic (Story 7)
+            if horizon == "short_term":
+                decision = _decide_short_term_v2(composite, technicals)
+            elif horizon == "medium_term":
+                decision = _decide_medium_term_v2(composite, technicals, fundamentals, earnings)
+            else:
+                decision = _decide_long_term_v2(composite, fundamentals, earnings, val_score)
         elif horizon == "short_term":
             decision = _decide_short_term(composite, technicals, fundamentals, earnings, regime_assessment)
         elif horizon == "medium_term":
@@ -375,6 +494,7 @@ def build_recommendations(
                 risk_reward=rr,
                 position_sizing=sizing,
                 data_warnings=warnings,
+                signal_cards_weights=horizon_weights,
             )
         )
 

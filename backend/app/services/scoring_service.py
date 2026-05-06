@@ -6,6 +6,7 @@ from app.models.market import MarketRegime, MarketRegimeAssessment, TechnicalInd
 from app.models.fundamentals import FundamentalData, StockArchetype, ValuationData
 from app.models.earnings import EarningsData
 from app.models.news import NewsSummary
+from app.models.response import SignalCards
 from app.services.market_regime_service import REGIME_WEIGHT_ADJUSTMENTS
 
 # Horizon-specific weights — each dict must sum to 100.
@@ -47,6 +48,114 @@ def _verify_weights() -> None:
 
 
 _verify_weights()
+
+
+# ---------------------------------------------------------------------------
+# Signal-card-based horizon weights (Story 7)
+# Keys are signal card names from SignalCards model
+# ---------------------------------------------------------------------------
+
+SIGNAL_CARD_SHORT_WEIGHTS: dict[str, int] = {
+    "momentum": 25,
+    "volume_accumulation": 20,
+    "entry_timing": 20,
+    "relative_strength": 15,
+    "volatility_risk": 10,
+    "catalyst": 10,
+}
+
+SIGNAL_CARD_MEDIUM_WEIGHTS: dict[str, int] = {
+    "trend": 20,
+    "growth": 20,
+    "relative_strength": 15,
+    "volume_accumulation": 15,
+    "valuation": 10,
+    "quality": 10,
+    "catalyst": 10,
+}
+
+SIGNAL_CARD_LONG_WEIGHTS: dict[str, int] = {
+    "growth": 20,
+    "quality": 20,
+    "valuation": 15,
+    "ownership": 15,
+    "trend": 10,
+    "catalyst": 10,
+    "volatility_risk": 5,
+    "momentum": 5,
+}
+
+assert sum(SIGNAL_CARD_SHORT_WEIGHTS.values()) == 100
+assert sum(SIGNAL_CARD_MEDIUM_WEIGHTS.values()) == 100
+assert sum(SIGNAL_CARD_LONG_WEIGHTS.values()) == 100
+
+
+def _signal_card_composite(cards: SignalCards, weights: dict[str, int]) -> float:
+    """Compute weighted composite from SignalCards and a weight dict."""
+    total_score = 0.0
+    total_weight = sum(weights.values())
+    for card_name, weight in weights.items():
+        card = getattr(cards, card_name, None)
+        score = card.score if card is not None else 50.0
+        total_score += score * weight
+    return round(total_score / total_weight, 2)
+
+
+def compute_scores_from_signal_cards(
+    cards: SignalCards,
+    regime_assessment: Optional[MarketRegimeAssessment] = None,
+) -> dict[str, dict]:
+    """Derive horizon composite scores from 11 signal cards.
+
+    Returns a dict mirroring the shape of compute_scores() for drop-in compatibility
+    with build_recommendations(). Each horizon dict contains:
+    - 'composite': float (0–100)
+    - 'weights': dict[str, int] (the card weights used)
+    - per-card scores for diagnostics
+    """
+    short_composite = _signal_card_composite(cards, SIGNAL_CARD_SHORT_WEIGHTS)
+    medium_composite = _signal_card_composite(cards, SIGNAL_CARD_MEDIUM_WEIGHTS)
+    long_composite = _signal_card_composite(cards, SIGNAL_CARD_LONG_WEIGHTS)
+
+    # Apply regime adjustments to composites (simple multiplier on composite)
+    if regime_assessment is not None:
+        regime = regime_assessment.regime
+        conf = regime_assessment.confidence / 100.0
+        if regime == MarketRegime.BULL_RISK_ON:
+            short_composite = min(100, short_composite * (1 + conf * 0.1))
+            medium_composite = min(100, medium_composite * (1 + conf * 0.05))
+        elif regime == MarketRegime.BEAR_RISK_OFF:
+            short_composite = max(0, short_composite * (1 - conf * 0.1))
+            medium_composite = max(0, medium_composite * (1 - conf * 0.05))
+        short_composite = round(short_composite, 2)
+        medium_composite = round(medium_composite, 2)
+
+    # Per-card scores for diagnostics
+    card_scores = {
+        name: getattr(cards, name).score
+        for name in ["momentum", "trend", "entry_timing", "volume_accumulation",
+                     "volatility_risk", "relative_strength", "growth", "valuation",
+                     "quality", "ownership", "catalyst"]
+        if hasattr(cards, name)
+    }
+
+    return {
+        "short_term": {
+            "composite": short_composite,
+            "weights": SIGNAL_CARD_SHORT_WEIGHTS,
+            **card_scores,
+        },
+        "medium_term": {
+            "composite": medium_composite,
+            "weights": SIGNAL_CARD_MEDIUM_WEIGHTS,
+            **card_scores,
+        },
+        "long_term": {
+            "composite": long_composite,
+            "weights": SIGNAL_CARD_LONG_WEIGHTS,
+            **card_scores,
+        },
+    }
 
 
 def _regime_score(assessment: Optional[MarketRegimeAssessment]) -> float:

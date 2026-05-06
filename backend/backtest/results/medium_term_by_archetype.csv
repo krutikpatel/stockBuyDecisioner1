@@ -1,0 +1,5 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,profit_factor,best_return_pct,worst_return_pct,archetype,avg_score,best_decision
+158,158,13.87,9.03,74.7,50.6,5.23,2.97,-10.4,11.32,72.37,-18.77,SPECULATIVE_STORY,65.8,BUY_STARTER
+2419,2419,9.68,7.96,62.8,57.4,6.24,5.1,-14.58,2.59,158.24,-63.94,HYPER_GROWTH,62.8,BUY_STARTER
+4929,4929,6.69,5.04,63.5,54.6,3.16,1.9,-11.39,2.58,169.23,-57.48,PROFITABLE_GROWTH,58.8,BUY_STARTER
+99,99,-0.51,3.41,60.6,30.3,-8.42,-10.8,-12.85,0.92,42.63,-49.82,MATURE_VALUE,46.4,AVOID_BAD_BUSINESS

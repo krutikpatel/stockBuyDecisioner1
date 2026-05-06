@@ -1,0 +1,6 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,profit_factor,best_return_pct,worst_return_pct,decision
+1776,1776,1.52,1.43,58.4,53.3,0.82,0.39,-6.09,1.55,54.64,-44.52,BUY_NOW_MOMENTUM
+822,822,2.67,2.23,60.3,53.5,1.63,1.18,-8.58,1.71,96.45,-47.91,BUY_STARTER_STRONG_BUT_EXTENDED
+2057,2057,2.29,1.71,57.9,52.4,1.24,0.87,-7.09,1.72,67.78,-46.96,WAIT_FOR_PULLBACK
+1167,1167,2.74,2.27,60.7,52.1,1.56,1.15,-7.67,1.82,74.74,-50.99,WATCHLIST
+1963,1963,3.04,2.6,59.7,53.6,1.17,0.8,-8.85,1.8,89.65,-48.22,AVOID_BAD_CHART

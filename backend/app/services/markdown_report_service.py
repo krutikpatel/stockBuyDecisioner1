@@ -201,6 +201,34 @@ def generate_markdown(result: StockAnalysisResult) -> str:
             lines.append(f"- {w}")
         lines.append("")
 
+    # Signal Cards section (Story 8) — only if signal_cards present
+    if result.signal_cards is not None:
+        sc = result.signal_cards
+        lines += [
+            "---",
+            "",
+            "## Signal Cards",
+            "",
+            "| Card | Score | Label |",
+            "|------|-------|-------|",
+        ]
+        for card_name, display_name in [
+            ("momentum", "Momentum"),
+            ("trend", "Trend"),
+            ("entry_timing", "Entry Timing"),
+            ("volume_accumulation", "Volume/Accumulation"),
+            ("volatility_risk", "Volatility/Risk"),
+            ("relative_strength", "Relative Strength"),
+            ("growth", "Growth"),
+            ("valuation", "Valuation"),
+            ("quality", "Quality"),
+            ("ownership", "Ownership"),
+            ("catalyst", "Catalyst"),
+        ]:
+            card = getattr(sc, card_name)
+            lines.append(f"| {display_name} | {card.score:.0f}/100 | {card.label} |")
+        lines.append("")
+
     lines += [
         "---",
         "",
