@@ -11,6 +11,29 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 BACKTEST_TICKERS: list[str] = [
+    "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "INTC", "QCOM", "TXN", "MU", "ADI",
+    "AMAT", "LRCX", "KLAC", "ASML", "TSM", "ORCL", "CRM", "ADBE", "NOW", "SNOW",
+    "PANW", "CRWD", "FTNT", "ANET", "CDNS", "GOOGL", "GOOG", "META", "NFLX",
+    "DIS", "CMCSA", "TMUS", "T", "VZ", "CHTR", "EA", "TTWO", "SPOT", "PINS",
+    "SNAP", "RDDT", "ROKU", "LYV", "AMZN", "TSLA", "HD", "LOW", "MCD", "SBUX",
+    "NKE", "LULU", "BKNG", "MAR", "HLT", "RCL", "CCL", "GM", "F", "ORLY", "AZO",
+    "CMG", "YUM", "TJX", "ROST", "ETS", "WMT", "COST", "PG", "KO", "PEP",
+    "MDLZ", "PM", "MO", "CL", "KMB", "GIS", "KHC", "KR", "TGT", "DG", "DLTR",
+    "EL", "HSY", "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "GILD",
+    "BMY", "REGN", "VRTX", "BIIB", "MRNA", "ISRG", "SYK", "MDT", "BSX", "ABT",
+    "TMO", "DHR", "IQV", "HCA", "CI", "JPM", "BAC", "WFC", "C", "GS", "MS",
+    "BLK", "SCHW", "AXP", "V", "MA", "PYPL", "COF", "DFS", "USB", "PNC", "BK",
+    "AIG", "TRV", "CB", "PGR", "MET", "PRU", "CME", "ICE", "GE", "CAT", "DE",
+    "HON", "RTX", "LMT", "NOC", "GD", "BA", "UPS", "FDX", "UNP", "CSX", "NSC",
+    "ETN", "EMR", "PH", "ROK", "MMM", "ITW", "WM", "RSG", "XOM", "CVX", "COP",
+    "EOG", "SLB", "HAL", "BKR", "PSX", "VLO", "MPC", "OXY", "DVN", "FANG", "LIN",
+    "APD", "SHW", "ECL", "DD", "DOW", "NEM", "FCX", "NUE", "STLD", "VMC", "MLM",
+    "PLD", "AMT", "EQIX", "CCI", "SPG", "O", "PSA", "WELL", "DLR", "VICI",
+    "CBRE", "AVB", "NEE", "SO", "DUK", "AEP", "EXC", "SRE", "D", "XEL", "PEG",
+    "ED",
+]
+
+BACKTEST_TICKERS_20: list[str] = [
     # Mega-cap tech
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META",
     # High-growth / momentum

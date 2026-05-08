@@ -75,14 +75,13 @@ SIGNAL_CARD_MEDIUM_WEIGHTS: dict[str, int] = {
 }
 
 SIGNAL_CARD_LONG_WEIGHTS: dict[str, int] = {
-    "growth": 20,
-    "quality": 20,
-    "valuation": 15,
-    "ownership": 15,
-    "trend": 10,
-    "catalyst": 10,
-    "volatility_risk": 5,
-    "momentum": 5,
+    "growth": 20,      # Revenue/EPS durability
+    "quality": 35,     # Profitability/ROIC (20%) + Balance sheet quality (15%)
+    "valuation": 15,   # Growth-adjusted valuation
+    "trend": 10,       # Long-term trend strength
+    "catalyst": 10,    # Sector/theme tailwind
+    "ownership": 5,    # Insider/institutional alignment
+    "volatility_risk": 5,  # Drawdown/volatility risk
 }
 
 assert sum(SIGNAL_CARD_SHORT_WEIGHTS.values()) == 100

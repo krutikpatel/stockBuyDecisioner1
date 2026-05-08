@@ -1,12 +1,12 @@
 card,n_signals,corr_with_return,quartile_returns,avg_score
-volatility_risk,7785,-0.0804,"{'Q1 Low': np.float64(3.29), 'Q2': np.float64(3.21), 'Q3': np.float64(2.15), 'Q4 High': np.float64(0.82)}",39.0
-valuation,7785,-0.063,{},39.2
-quality,7785,0.0442,{},51.1
-momentum,7785,-0.0428,"{'Q1 Low': np.float64(3.1), 'Q2': np.float64(2.43), 'Q3': np.float64(2.62), 'Q4 High': np.float64(1.4)}",61.9
-growth,7785,0.0363,{},79.6
-entry_timing,7785,-0.0351,"{'Q1 Low': np.float64(2.99), 'Q2': np.float64(2.13), 'Q3': np.float64(2.24), 'Q4 High': np.float64(2.01)}",58.3
-volume_accumulation,7785,-0.0333,"{'Q1 Low': np.float64(3.27), 'Q2': np.float64(1.98), 'Q3': np.float64(2.17), 'Q4 High': np.float64(2.14)}",51.8
-catalyst,7785,-0.031,{},59.1
-trend,7785,-0.0273,"{'Q1 Low': np.float64(2.57), 'Q2': np.float64(3.07), 'Q3': np.float64(2.02), 'Q4 High': np.float64(2.02)}",64.0
-relative_strength,7785,-0.0029,"{'Q1 Low': np.float64(2.39), 'Q2': np.float64(2.4), 'Q3': np.float64(2.31), 'Q4 High': np.float64(2.55)}",49.3
-ownership,7785,,{},50.0
+volatility_risk,80769,-0.1332,"{'Q1 Low': np.float64(2.78), 'Q2': np.float64(1.07), 'Q3': np.float64(0.95), 'Q4 High': np.float64(-0.01)}",44.9
+trend,80769,-0.0732,"{'Q1 Low': np.float64(2.36), 'Q2': np.float64(1.17), 'Q3': np.float64(0.95), 'Q4 High': np.float64(0.57)}",61.1
+momentum,80769,-0.06,"{'Q1 Low': np.float64(2.14), 'Q2': np.float64(1.4), 'Q3': np.float64(0.92), 'Q4 High': np.float64(0.69)}",58.3
+volume_accumulation,80769,-0.0545,"{'Q1 Low': np.float64(1.96), 'Q2': np.float64(1.55), 'Q3': np.float64(1.06), 'Q4 High': np.float64(0.65)}",50.8
+relative_strength,80769,-0.0443,"{'Q1 Low': np.float64(2.19), 'Q2': np.float64(1.09), 'Q3': np.float64(0.95), 'Q4 High': np.float64(1.02)}",47.2
+valuation,80769,-0.0364,"{'Q1 Low': np.float64(1.82), 'Q2': np.float64(1.11), 'Q3': np.float64(1.14), 'Q4 High': np.float64(1.04)}",56.4
+growth,80769,0.035,"{'Q1 Low': np.float64(0.99), 'Q2': np.float64(1.25), 'Q3': np.float64(1.32), 'Q4 High': np.float64(2.2)}",58.9
+entry_timing,80769,-0.0237,"{'Q1 Low': np.float64(1.62), 'Q2': np.float64(1.2), 'Q3': np.float64(1.2), 'Q4 High': np.float64(1.22)}",58.6
+catalyst,80769,-0.0231,{},59.2
+quality,80769,0.0111,{},51.1
+ownership,80769,,{},50.0

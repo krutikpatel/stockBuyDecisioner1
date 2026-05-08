@@ -92,6 +92,7 @@ class TechnicalIndicators(BaseModel):
 
     # --- Momentum indicators ---
     rsi_14: Optional[float] = None
+    rsi_slope: Optional[float] = None          # 5-bar slope of RSI (positive = improving momentum)
     macd: Optional[float] = None
     macd_signal: Optional[float] = None
     macd_histogram: Optional[float] = None

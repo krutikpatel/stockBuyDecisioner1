@@ -94,22 +94,42 @@ def score_momentum(ti: TechnicalIndicators) -> SignalCard:
     # RSI 14
     rsi = ti.rsi_14
     if rsi is not None:
-        total += 20
+        total += 15
         if 45 <= rsi <= 65:
-            raw += 20
+            raw += 15
             pos.append(f"RSI {rsi:.0f} — momentum sweet spot")
         elif 65 < rsi <= 75:
-            raw += 12
+            raw += 9
         elif rsi > 75:
-            raw += 5
+            raw += 4
             neg.append(f"RSI {rsi:.0f} — overbought")
         elif 35 <= rsi < 45:
-            raw += 8
+            raw += 6
         else:
             raw += 0
             neg.append(f"RSI {rsi:.0f} — weak / oversold")
     else:
         warn.append("RSI unavailable")
+
+    # RSI slope (improving vs deteriorating momentum)
+    rsi_slope = ti.rsi_slope
+    if rsi_slope is not None:
+        total += 10
+        if rsi_slope >= 5:
+            raw += 10
+            pos.append(f"RSI slope +{rsi_slope:.1f} — momentum accelerating")
+        elif rsi_slope >= 1:
+            raw += 7
+            pos.append(f"RSI slope +{rsi_slope:.1f} — momentum improving")
+        elif rsi_slope >= -1:
+            raw += 5
+        elif rsi_slope >= -5:
+            raw += 2
+            neg.append(f"RSI slope {rsi_slope:.1f} — momentum fading")
+        else:
+            neg.append(f"RSI slope {rsi_slope:.1f} — momentum deteriorating")
+    else:
+        warn.append("RSI slope unavailable")
 
     # Price above EMA8 and EMA21
     for attr, label, weight in [("ema8_relative", "EMA8", 10), ("ema21_relative", "EMA21", 10)]:
@@ -299,6 +319,24 @@ def score_entry_timing(ti: TechnicalIndicators) -> SignalCard:
     else:
         warn.append("EMA8 relative unavailable")
 
+    # RSI slope (entry is better when momentum is recovering/building)
+    rsi_slope = ti.rsi_slope
+    if rsi_slope is not None:
+        total += 10
+        if rsi_slope >= 3:
+            raw += 10
+            pos.append(f"RSI slope +{rsi_slope:.1f} — momentum building, good entry")
+        elif rsi_slope >= 0:
+            raw += 7
+        elif rsi_slope >= -3:
+            raw += 3
+            neg.append(f"RSI slope {rsi_slope:.1f} — momentum fading at entry")
+        else:
+            raw += 1
+            neg.append(f"RSI slope {rsi_slope:.1f} — avoid entry, momentum declining")
+    else:
+        warn.append("RSI slope unavailable")
+
     # Gap %: small gap up is fine, large gap up is extended
     gap = ti.gap_percent
     if gap is not None:
@@ -313,7 +351,7 @@ def score_entry_timing(ti: TechnicalIndicators) -> SignalCard:
     else:
         warn.append("Gap% unavailable")
 
-    parts = ["Entry timing measures RSI zone, StochRSI, VWAP support, and Bollinger Band position."]
+    parts = ["Entry timing measures RSI zone, RSI slope, StochRSI, VWAP support, and Bollinger Band position."]
     return _score_to_card("entry_timing", raw, total, pos, neg, warn, parts)
 
 
@@ -665,6 +703,53 @@ def score_growth(fd: FundamentalData, earnings: EarningsData) -> SignalCard:
     else:
         warn.append("Sales growth TTM unavailable")
 
+    # Multi-year EPS durability (3Y and 5Y EPS growth)
+    eps_3y = fd.eps_growth_3y
+    if eps_3y is not None:
+        total += 10
+        if eps_3y >= 0.15:
+            raw += 10
+            pos.append(f"EPS 3Y CAGR {eps_3y*100:.0f}% — durable growth")
+        elif eps_3y >= 0.05:
+            raw += 6
+        elif eps_3y >= 0:
+            raw += 3
+        else:
+            neg.append(f"EPS 3Y CAGR {eps_3y*100:.0f}% — declining trend")
+    else:
+        warn.append("EPS 3-year growth unavailable")
+
+    # Multi-year sales durability (3Y sales growth)
+    sg_3y = fd.sales_growth_3y
+    if sg_3y is not None:
+        total += 8
+        if sg_3y >= 0.10:
+            raw += 8
+            pos.append(f"Sales 3Y CAGR {sg_3y*100:.0f}% — durable revenue")
+        elif sg_3y >= 0.05:
+            raw += 5
+        elif sg_3y >= 0:
+            raw += 2
+        else:
+            neg.append(f"Sales 3Y CAGR {sg_3y*100:.0f}%")
+    else:
+        warn.append("Sales 3-year growth unavailable")
+
+    # Forward EPS durability (next 5Y)
+    eps_next5y = fd.eps_growth_next_5y
+    if eps_next5y is not None:
+        total += 7
+        if eps_next5y >= 0.15:
+            raw += 7
+            pos.append(f"EPS next 5Y est. {eps_next5y*100:.0f}% — strong forward growth")
+        elif eps_next5y >= 0.08:
+            raw += 4
+        else:
+            raw += 1
+            neg.append(f"EPS next 5Y est. {eps_next5y*100:.0f}% — weak outlook")
+    else:
+        warn.append("EPS next-5-year estimate unavailable")
+
     # Earnings beat rate
     beat_rate = earnings.beat_rate
     if beat_rate is not None:
@@ -939,24 +1024,41 @@ def score_quality(fd: FundamentalData) -> SignalCard:
     else:
         warn.append("Quick ratio unavailable")
 
-    # Debt/equity
+    # Debt/equity (total)
     de = fd.debt_to_equity
     if de is not None:
-        total += 10
+        total += 7
         if de <= 50:
-            raw += 10
+            raw += 7
             pos.append(f"D/E {de:.0f}% — low leverage")
         elif de <= 100:
-            raw += 6
+            raw += 4
         elif de <= 200:
-            raw += 3
+            raw += 2
             neg.append(f"D/E {de:.0f}% — high leverage")
         else:
             neg.append(f"D/E {de:.0f}% — very high leverage")
     else:
         warn.append("Debt/equity unavailable")
 
-    parts = ["Quality card scores profitability margins, return ratios (ROE/ROIC/ROA), and balance sheet strength."]
+    # Long-term debt/equity (more conservative balance sheet measure)
+    ltde = fd.long_term_debt_equity
+    if ltde is not None:
+        total += 8
+        if ltde <= 30:
+            raw += 8
+            pos.append(f"LT Debt/Equity {ltde:.0f}% — conservative long-term leverage")
+        elif ltde <= 80:
+            raw += 5
+        elif ltde <= 150:
+            raw += 2
+            neg.append(f"LT Debt/Equity {ltde:.0f}% — elevated long-term debt")
+        else:
+            neg.append(f"LT Debt/Equity {ltde:.0f}% — heavy long-term debt load")
+    else:
+        warn.append("Long-term debt/equity unavailable")
+
+    parts = ["Quality card scores profitability margins, return ratios (ROE/ROIC/ROA), and balance sheet strength (D/E, LT debt/equity, liquidity ratios)."]
     return _score_to_card("quality", raw, total, pos, neg, warn, parts)
 
 

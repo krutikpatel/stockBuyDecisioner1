@@ -732,6 +732,29 @@ def compute_rsi(series: pd.Series, period: int = 14) -> Optional[float]:
     return round(float(val), 2) if not np.isnan(val) else None
 
 
+def compute_rsi_slope(series: pd.Series, rsi_period: int = 14, slope_bars: int = 5) -> Optional[float]:
+    """Return the 5-bar slope of the RSI series.
+
+    slope = rsi[-1] - rsi[-(slope_bars+1)]
+    Positive = momentum improving, negative = deteriorating.
+    Returns None when there is insufficient data.
+    """
+    needed = rsi_period + slope_bars + 1
+    if len(series) < needed:
+        return None
+    rsi_series = ta.rsi(series, length=rsi_period)
+    if rsi_series is None or rsi_series.empty:
+        return None
+    rsi_clean = rsi_series.dropna()
+    if len(rsi_clean) < slope_bars + 1:
+        return None
+    prev = float(rsi_clean.iloc[-(slope_bars + 1)])
+    current = float(rsi_clean.iloc[-1])
+    if np.isnan(prev) or np.isnan(current):
+        return None
+    return round(current - prev, 2)
+
+
 def compute_macd(series: pd.Series) -> tuple[Optional[float], Optional[float], Optional[float]]:
     if len(series) < 35:
         return None, None, None
@@ -1029,6 +1052,7 @@ def compute_technicals(
 
     # --- Momentum indicators ---
     rsi = compute_rsi(close)
+    rsi_slope_val = compute_rsi_slope(close)
     macd_val, macd_sig, macd_hist = compute_macd(close)
     adx_val = compute_adx(high, low, close)
     stoch_rsi = compute_stochastic_rsi(close)
@@ -1122,6 +1146,7 @@ def compute_technicals(
         sma200_slope=sma200_slope,
         # Momentum
         rsi_14=rsi,
+        rsi_slope=rsi_slope_val,
         macd=macd_val,
         macd_signal=macd_sig,
         macd_histogram=macd_hist,
