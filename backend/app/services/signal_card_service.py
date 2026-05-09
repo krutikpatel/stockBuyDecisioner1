@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.algo_config import AlgoConfig, get_algo_config
 from app.models.earnings import EarningsData
 from app.models.fundamentals import FundamentalData, ValuationData
 from app.models.market import TechnicalIndicators
@@ -57,15 +58,20 @@ def _score_to_card(
 # 1. Momentum
 # ---------------------------------------------------------------------------
 
-def score_momentum(ti: TechnicalIndicators) -> SignalCard:
+def score_momentum(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on price momentum: perf periods, MACD, RSI trend, SMA position."""
+    cfg = algo_config or get_algo_config()
+    mc = cfg.signal_cards["momentum"]
+
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
     # Performance periods (1W, 1M, 3M)
     for attr, weight, label in [
-        ("perf_1w", 10, "1-week"), ("perf_1m", 15, "1-month"), ("perf_3m", 20, "3-month"),
+        ("perf_1w", mc["perf_1w_weight"], "1-week"),
+        ("perf_1m", mc["perf_1m_weight"], "1-month"),
+        ("perf_3m", mc["perf_3m_weight"], "3-month"),
     ]:
         val = getattr(ti, attr, None)
         if val is not None:
@@ -82,9 +88,9 @@ def score_momentum(ti: TechnicalIndicators) -> SignalCard:
     # MACD histogram
     hist = ti.macd_histogram
     if hist is not None:
-        total += 15
+        total += mc["macd_weight"]
         if hist > 0:
-            raw += min(15, 7.5 + hist * 5)
+            raw += min(mc["macd_max_pts"], mc["macd_base_pts"] + hist * mc["macd_scale"])
             pos.append("MACD histogram positive")
         else:
             neg.append("MACD histogram negative")
@@ -94,45 +100,50 @@ def score_momentum(ti: TechnicalIndicators) -> SignalCard:
     # RSI 14
     rsi = ti.rsi_14
     if rsi is not None:
-        total += 15
-        if 45 <= rsi <= 65:
-            raw += 15
+        total += mc["rsi_weight"]
+        if mc["rsi_sweet_spot_min"] <= rsi <= mc["rsi_sweet_spot_max"]:
+            raw += mc["rsi_sweet_spot_pts"]
             pos.append(f"RSI {rsi:.0f} — momentum sweet spot")
-        elif 65 < rsi <= 75:
-            raw += 9
-        elif rsi > 75:
-            raw += 4
+        elif mc["rsi_high_min"] < rsi <= mc["rsi_high_max"]:
+            raw += mc["rsi_high_pts"]
+        elif rsi > mc["rsi_overbought_threshold"]:
+            raw += mc["rsi_overbought_pts"]
             neg.append(f"RSI {rsi:.0f} — overbought")
-        elif 35 <= rsi < 45:
-            raw += 6
+        elif mc["rsi_low_min"] <= rsi < mc["rsi_low_max"]:
+            raw += mc["rsi_low_pts"]
         else:
-            raw += 0
+            raw += mc["rsi_oversold_pts"]
             neg.append(f"RSI {rsi:.0f} — weak / oversold")
     else:
         warn.append("RSI unavailable")
 
     # RSI slope (improving vs deteriorating momentum)
     rsi_slope = ti.rsi_slope
+    slope_pts = mc["rsi_slope_pts"]  # [strong_up, mild_up, flat, mild_down, strong_down]
     if rsi_slope is not None:
-        total += 10
-        if rsi_slope >= 5:
-            raw += 10
+        total += mc["rsi_slope_weight"]
+        if rsi_slope >= mc["rsi_slope_strong_up"]:
+            raw += slope_pts[0]
             pos.append(f"RSI slope +{rsi_slope:.1f} — momentum accelerating")
-        elif rsi_slope >= 1:
-            raw += 7
+        elif rsi_slope >= mc["rsi_slope_mild_up"]:
+            raw += slope_pts[1]
             pos.append(f"RSI slope +{rsi_slope:.1f} — momentum improving")
-        elif rsi_slope >= -1:
-            raw += 5
-        elif rsi_slope >= -5:
-            raw += 2
+        elif rsi_slope >= mc["rsi_slope_mild_down"]:
+            raw += slope_pts[2]
+        elif rsi_slope >= mc["rsi_slope_strong_down"]:
+            raw += slope_pts[3]
             neg.append(f"RSI slope {rsi_slope:.1f} — momentum fading")
         else:
+            raw += slope_pts[4]
             neg.append(f"RSI slope {rsi_slope:.1f} — momentum deteriorating")
     else:
         warn.append("RSI slope unavailable")
 
     # Price above EMA8 and EMA21
-    for attr, label, weight in [("ema8_relative", "EMA8", 10), ("ema21_relative", "EMA21", 10)]:
+    for attr, label, weight in [
+        ("ema8_relative", "EMA8", mc["ema8_weight"]),
+        ("ema21_relative", "EMA21", mc["ema21_weight"]),
+    ]:
         val = getattr(ti, attr, None)
         if val is not None:
             total += weight
@@ -152,17 +163,20 @@ def score_momentum(ti: TechnicalIndicators) -> SignalCard:
 # 2. Trend
 # ---------------------------------------------------------------------------
 
-def score_trend(ti: TechnicalIndicators) -> SignalCard:
+def score_trend(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on trend structure: SMA stack, slopes, ADX."""
+    cfg = algo_config or get_algo_config()
+    tc = cfg.signal_cards["trend"]
+
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
     # Price vs SMAs (20, 50, 200)
     for attr, label, weight in [
-        ("sma20_relative", "SMA20", 15),
-        ("sma50_relative", "SMA50", 15),
-        ("sma200_relative", "SMA200", 20),
+        ("sma20_relative", "SMA20", tc["sma20_above_pts"]),
+        ("sma50_relative", "SMA50", tc["sma50_above_pts"]),
+        ("sma200_relative", "SMA200", tc["sma200_above_pts"]),
     ]:
         val = getattr(ti, attr, None)
         if val is not None:
@@ -177,8 +191,8 @@ def score_trend(ti: TechnicalIndicators) -> SignalCard:
 
     # SMA slopes
     for attr, label, weight in [
-        ("sma20_slope", "SMA20 slope", 10),
-        ("sma50_slope", "SMA50 slope", 15),
+        ("sma20_slope", "SMA20 slope", tc["sma20_slope_pts"]),
+        ("sma50_slope", "SMA50 slope", tc["sma50_slope_pts"]),
     ]:
         val = getattr(ti, attr, None)
         if val is not None:
@@ -194,20 +208,23 @@ def score_trend(ti: TechnicalIndicators) -> SignalCard:
     # ADX (trend strength)
     adx = ti.adx
     if adx is not None:
-        total += 15
-        if adx >= 30:
-            raw += 15
+        total += tc["adx_pts"]
+        if adx >= tc["adx_strong_threshold"]:
+            raw += tc["adx_strong_pts"]
             pos.append(f"ADX {adx:.0f} — strong trend")
-        elif adx >= 20:
-            raw += 10
+        elif adx >= tc["adx_moderate_threshold"]:
+            raw += tc["adx_moderate_pts"]
         else:
-            raw += 5
+            raw += tc["adx_weak_pts"]
             neg.append(f"ADX {adx:.0f} — weak trend")
     else:
         warn.append("ADX unavailable")
 
     # 6M and 1Y performance (trend confirmation)
-    for attr, label, weight in [("perf_6m", "6-month", 5), ("perf_1y", "1-year", 5)]:
+    for attr, label, weight in [
+        ("perf_6m", "6-month", tc["perf_6m_pts"]),
+        ("perf_1y", "1-year", tc["perf_1y_pts"]),
+    ]:
         val = getattr(ti, attr, None)
         if val is not None:
             total += weight
@@ -227,7 +244,7 @@ def score_trend(ti: TechnicalIndicators) -> SignalCard:
 # 3. Entry Timing
 # ---------------------------------------------------------------------------
 
-def score_entry_timing(ti: TechnicalIndicators) -> SignalCard:
+def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on entry quality: RSI, StochRSI, VWAP, Bollinger, gap."""
     raw = 0.0
     total = 0.0
@@ -369,7 +386,7 @@ def score_entry_timing(ti: TechnicalIndicators) -> SignalCard:
 # 4. Volume / Accumulation
 # ---------------------------------------------------------------------------
 
-def score_volume_accumulation(ti: TechnicalIndicators) -> SignalCard:
+def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on OBV, A/D, CMF, relative volume, up/down ratio."""
     raw = 0.0
     total = 0.0
@@ -468,7 +485,7 @@ def score_volume_accumulation(ti: TechnicalIndicators) -> SignalCard:
 # 5. Volatility / Risk
 # ---------------------------------------------------------------------------
 
-def score_volatility_risk(ti: TechnicalIndicators) -> SignalCard:
+def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on drawdown, ATR%, weekly vol, beta, distance from highs."""
     raw = 0.0
     total = 0.0
@@ -577,7 +594,7 @@ def score_volatility_risk(ti: TechnicalIndicators) -> SignalCard:
 # 6. Relative Strength
 # ---------------------------------------------------------------------------
 
-def score_relative_strength(ti: TechnicalIndicators) -> SignalCard:
+def score_relative_strength(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on RS vs QQQ, return percentile ranks."""
     raw = 0.0
     total = 0.0
@@ -632,7 +649,7 @@ def score_relative_strength(ti: TechnicalIndicators) -> SignalCard:
 # 7. Growth
 # ---------------------------------------------------------------------------
 
-def score_growth(fd: FundamentalData, earnings: EarningsData) -> SignalCard:
+def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on EPS/revenue growth rates and earnings surprise history."""
     raw = 0.0
     total = 0.0
@@ -798,7 +815,7 @@ def score_growth(fd: FundamentalData, earnings: EarningsData) -> SignalCard:
 # 8. Valuation
 # ---------------------------------------------------------------------------
 
-def score_valuation(vd: ValuationData) -> SignalCard:
+def score_valuation(vd: ValuationData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on P/E, PEG, P/S, EV/EBITDA, P/FCF, EV/Sales."""
     raw = 0.0
     total = 0.0
@@ -919,7 +936,7 @@ def score_valuation(vd: ValuationData) -> SignalCard:
 # 9. Quality
 # ---------------------------------------------------------------------------
 
-def score_quality(fd: FundamentalData) -> SignalCard:
+def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on margins, ROE, ROIC, ROA, balance sheet health."""
     raw = 0.0
     total = 0.0
@@ -1076,7 +1093,7 @@ def score_quality(fd: FundamentalData) -> SignalCard:
 # 10. Ownership
 # ---------------------------------------------------------------------------
 
-def score_ownership(fd: FundamentalData) -> SignalCard:
+def score_ownership(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on insider/institutional ownership, short float."""
     raw = 0.0
     total = 0.0
@@ -1183,8 +1200,11 @@ def score_ownership(fd: FundamentalData) -> SignalCard:
 # 11. Catalyst
 # ---------------------------------------------------------------------------
 
-def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummary) -> SignalCard:
+def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummary, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on analyst recommendations, news sentiment, earnings proximity, target price."""
+    cfg = algo_config or get_algo_config()
+    cc = cfg.signal_cards["catalyst"]
+
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
@@ -1229,19 +1249,22 @@ def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummar
     # News score (0–100 from NewsSummary)
     ns = news.news_score
     if ns is not None:
-        total += 25
-        if ns >= 70:
-            raw += 25
+        total += cc["news_weight"]
+        news_tiers = cc["news_tiers"]  # descending thresholds e.g. [70, 55, 45, 30]
+        news_pts = cc["news_pts"]      # points per tier  e.g. [25, 18, 12, 5, 0]
+        if ns >= news_tiers[0]:
+            raw += news_pts[0]
             pos.append(f"News score {ns:.0f}/100 — positive coverage")
-        elif ns >= 55:
-            raw += 18
+        elif ns >= news_tiers[1]:
+            raw += news_pts[1]
             pos.append(f"News score {ns:.0f}/100 — mildly positive")
-        elif ns >= 45:
-            raw += 12
-        elif ns >= 30:
-            raw += 5
+        elif ns >= news_tiers[2]:
+            raw += news_pts[2]
+        elif ns >= news_tiers[3]:
+            raw += news_pts[3]
             neg.append(f"News score {ns:.0f}/100 — negative sentiment")
         else:
+            raw += news_pts[4]
             neg.append(f"News score {ns:.0f}/100 — very negative")
     else:
         warn.append("News score unavailable")
@@ -1263,13 +1286,12 @@ def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummar
     # Earnings proximity: within 30 days = upcoming catalyst
     within_30 = earnings.within_30_days
     if within_30 is True:
-        total += 15
-        # Upcoming earnings = catalyst opportunity; slight positive
-        raw += 10
+        total += cc["earnings_timing_weight"]
+        raw += cc["within_30_days_pts"]
         pos.append("Earnings within 30 days — upcoming catalyst")
     elif within_30 is False:
-        total += 15
-        raw += 12  # no binary risk event imminent
+        total += cc["earnings_timing_weight"]
+        raw += cc["beyond_30_days_pts"]
         pos.append("No imminent earnings risk")
     else:
         warn.append("Earnings date unavailable")
@@ -1288,18 +1310,19 @@ def score_all_cards(
     valuation: ValuationData,
     earnings: EarningsData,
     news: NewsSummary,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> SignalCards:
     """Compute all 11 signal cards and return a SignalCards container."""
     return SignalCards(
-        momentum=score_momentum(technicals),
-        trend=score_trend(technicals),
-        entry_timing=score_entry_timing(technicals),
-        volume_accumulation=score_volume_accumulation(technicals),
-        volatility_risk=score_volatility_risk(technicals),
-        relative_strength=score_relative_strength(technicals),
-        growth=score_growth(fundamentals, earnings),
-        valuation=score_valuation(valuation),
-        quality=score_quality(fundamentals),
-        ownership=score_ownership(fundamentals),
-        catalyst=score_catalyst(fundamentals, earnings, news),
+        momentum=score_momentum(technicals, algo_config=algo_config),
+        trend=score_trend(technicals, algo_config=algo_config),
+        entry_timing=score_entry_timing(technicals, algo_config=algo_config),
+        volume_accumulation=score_volume_accumulation(technicals, algo_config=algo_config),
+        volatility_risk=score_volatility_risk(technicals, algo_config=algo_config),
+        relative_strength=score_relative_strength(technicals, algo_config=algo_config),
+        growth=score_growth(fundamentals, earnings, algo_config=algo_config),
+        valuation=score_valuation(valuation, algo_config=algo_config),
+        quality=score_quality(fundamentals, algo_config=algo_config),
+        ownership=score_ownership(fundamentals, algo_config=algo_config),
+        catalyst=score_catalyst(fundamentals, earnings, news, algo_config=algo_config),
     )

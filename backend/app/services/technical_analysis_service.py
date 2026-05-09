@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pandas_ta as ta
 
+from app.algo_config import AlgoConfig, get_algo_config
 from app.models.market import (
     SupportResistanceLevels,
     TechnicalIndicators,
@@ -755,10 +756,15 @@ def compute_rsi_slope(series: pd.Series, rsi_period: int = 14, slope_bars: int =
     return round(current - prev, 2)
 
 
-def compute_macd(series: pd.Series) -> tuple[Optional[float], Optional[float], Optional[float]]:
-    if len(series) < 35:
+def compute_macd(
+    series: pd.Series,
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    if len(series) < slow + signal:
         return None, None, None
-    result = ta.macd(series, fast=12, slow=26, signal=9)
+    result = ta.macd(series, fast=fast, slow=slow, signal=signal)
     if result is None or result.empty:
         return None, None, None
     macd_val = result.iloc[-1, 0]
@@ -829,22 +835,32 @@ def detect_extension(
     ma_20: Optional[float],
     ma_50: Optional[float],
     rsi: Optional[float],
+    ext20_threshold: Optional[float] = None,
+    ext50_threshold: Optional[float] = None,
+    rsi_threshold: Optional[float] = None,
 ) -> tuple[bool, Optional[float], Optional[float]]:
+    if ext20_threshold is None:
+        ext20_threshold = get_algo_config().extension_detection["ext_above_20ma_threshold"]
+    if ext50_threshold is None:
+        ext50_threshold = get_algo_config().extension_detection["ext_above_50ma_threshold"]
+    if rsi_threshold is None:
+        rsi_threshold = get_algo_config().extension_detection["ext_rsi_overbought"]
+
     ext_20 = None
     ext_50 = None
     extended = False
 
     if ma_20 and ma_20 > 0:
         ext_20 = round((price - ma_20) / ma_20 * 100, 2)
-        if ext_20 > 8:
+        if ext_20 > ext20_threshold:
             extended = True
 
     if ma_50 and ma_50 > 0:
         ext_50 = round((price - ma_50) / ma_50 * 100, 2)
-        if ext_50 > 15:
+        if ext_50 > ext50_threshold:
             extended = True
 
-    if rsi and rsi > 75:
+    if rsi and rsi > rsi_threshold:
         extended = True
 
     return extended, ext_20, ext_50
@@ -859,20 +875,29 @@ def find_support_resistance(
     low: pd.Series,
     close: pd.Series,
     window: int = 10,
-    n_levels: int = 3,
+    n_levels: Optional[int] = None,
+    lookback_bars: Optional[int] = None,
+    cluster_tolerance: Optional[float] = None,
 ) -> SupportResistanceLevels:
+    if n_levels is None:
+        n_levels = get_algo_config().technical_indicators["sr_n_levels"]
+    if lookback_bars is None:
+        lookback_bars = get_algo_config().technical_indicators["sr_lookback_bars"]
+    if cluster_tolerance is None:
+        cluster_tolerance = get_algo_config().technical_indicators["sr_cluster_tolerance"]
+
     price = float(close.iloc[-1])
 
     # Rolling local maxima and minima
     local_highs = high[(high.shift(1) < high) & (high.shift(-1) < high)]
     local_lows = low[(low.shift(1) > low) & (low.shift(-1) > low)]
 
-    # Keep last 60 bars worth of levels
-    recent_highs = local_highs.tail(60).tolist()
-    recent_lows = local_lows.tail(60).tolist()
+    # Keep last lookback_bars worth of levels
+    recent_highs = local_highs.tail(lookback_bars).tolist()
+    recent_lows = local_lows.tail(lookback_bars).tolist()
 
-    # Cluster close levels (within 1% of each other)
-    def cluster(levels: list[float], tol: float = 0.01) -> list[float]:
+    # Cluster close levels (within cluster_tolerance of each other)
+    def cluster(levels: list[float], tol: float = cluster_tolerance) -> list[float]:
         if not levels:
             return []
         levels = sorted(set(round(l, 2) for l in levels))
@@ -902,17 +927,29 @@ def find_support_resistance(
 # Volume trend
 # ---------------------------------------------------------------------------
 
-def compute_volume_trend(volume: pd.Series) -> str:
-    if len(volume) < 31:
+def compute_volume_trend(
+    volume: pd.Series,
+    above_ratio: Optional[float] = None,
+    below_ratio: Optional[float] = None,
+    ref_bars: Optional[int] = None,
+) -> str:
+    if above_ratio is None:
+        above_ratio = get_algo_config().technical_indicators["vol_above_avg_ratio"]
+    if below_ratio is None:
+        below_ratio = get_algo_config().technical_indicators["vol_below_avg_ratio"]
+    if ref_bars is None:
+        ref_bars = get_algo_config().technical_indicators["vol_trend_ref_bars"]
+
+    if len(volume) < ref_bars + 1:
         return "unknown"
-    avg_30 = float(volume.iloc[-31:-1].mean())
+    avg_ref = float(volume.iloc[-(ref_bars + 1):-1].mean())
     current = float(volume.iloc[-1])
-    if avg_30 == 0:
+    if avg_ref == 0:
         return "unknown"
-    ratio = current / avg_30
-    if ratio >= 1.3:
+    ratio = current / avg_ref
+    if ratio >= above_ratio:
         return "above_average"
-    if ratio <= 0.7:
+    if ratio <= below_ratio:
         return "below_average"
     return "average"
 
@@ -948,65 +985,60 @@ def score_technicals(
     rs_spy: Optional[float],
     sr: SupportResistanceLevels,
     price: float,
+    ts: Optional[dict] = None,
 ) -> float:
-    score = 50.0
+    if ts is None:
+        ts = get_algo_config().technical_scoring
 
-    # Trend contribution (±20)
-    trend_scores = {
-        "strong_uptrend": 20,
-        "weak_uptrend": 5,
-        "sideways": -5,
-        "downtrend": -20,
-        "unknown": 0,
-    }
-    score += trend_scores.get(trend.label, 0)
+    score = ts["base_score"]
 
-    # RSI contribution (±15)
+    # Trend contribution
+    trend_pts = ts["trend_points"]
+    score += trend_pts.get(trend.label, 0)
+
+    # RSI contribution
     if rsi is not None:
-        if 50 <= rsi <= 70:
-            score += 15
-        elif 40 <= rsi < 50:
-            score += 5
-        elif rsi > 75:
-            score -= 5  # overbought
-        elif rsi < 30:
-            score -= 15  # oversold
+        if ts["rsi_healthy_min"] <= rsi <= ts["rsi_healthy_max"]:
+            score += ts["rsi_healthy_pts"]
+        elif ts["rsi_mid_min"] <= rsi < ts["rsi_mid_max"]:
+            score += ts["rsi_mid_pts"]
+        elif rsi > ts["rsi_overbought_threshold"]:
+            score += ts["rsi_overbought_pts"]
+        elif rsi < ts["rsi_oversold_threshold"]:
+            score += ts["rsi_oversold_pts"]
 
-    # MACD contribution (±10)
+    # MACD contribution
     if macd_hist is not None:
-        if macd_hist > 0:
-            score += 10
-        else:
-            score -= 10
+        score += ts["macd_positive_pts"] if macd_hist > 0 else ts["macd_negative_pts"]
 
-    # Extension penalty (−10)
+    # Extension penalty
     if is_extended:
-        score -= 10
+        score += ts["extension_penalty_pts"]
 
-    # Volume trend (±5)
+    # Volume trend
     if volume_trend == "above_average":
-        score += 5
+        score += ts["vol_above_avg_pts"]
     elif volume_trend == "below_average":
-        score -= 5
+        score += ts["vol_below_avg_pts"]
 
-    # Relative strength vs SPY (±10)
+    # Relative strength vs SPY
     if rs_spy is not None:
-        if rs_spy > 1.2:
-            score += 10
-        elif rs_spy > 1.0:
-            score += 5
-        elif rs_spy < 0.8:
-            score -= 10
-        elif rs_spy < 1.0:
-            score -= 5
+        if rs_spy > ts["rs_strong_threshold"]:
+            score += ts["rs_strong_pts"]
+        elif rs_spy > ts["rs_above_threshold"]:
+            score += ts["rs_above_pts"]
+        elif rs_spy < ts["rs_weak_threshold"]:
+            score += ts["rs_weak_pts"]
+        elif rs_spy < ts["rs_above_threshold"]:
+            score += ts["rs_below_pts"]
 
-    # Support cushion (±5): good if nearest support is within 5%
+    # Support cushion
     if sr.nearest_support and price > 0:
         cushion = (price - sr.nearest_support) / price * 100
-        if cushion <= 5:
-            score += 5
-        elif cushion > 15:
-            score -= 5
+        if cushion <= ts["support_cushion_good_pct"]:
+            score += ts["support_cushion_good_pts"]
+        elif cushion > ts["support_cushion_bad_pct"]:
+            score += ts["support_cushion_bad_pts"]
 
     return round(max(0.0, min(100.0, score)), 2)
 
@@ -1021,7 +1053,11 @@ def compute_technicals(
     sector_df: Optional[pd.DataFrame] = None,
     qqq_df: Optional[pd.DataFrame] = None,
     last_earnings_date: Optional[pd.Timestamp] = None,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> TechnicalIndicators:
+    cfg = algo_config or get_algo_config()
+    ti = cfg.technical_indicators
+
     close = df["Close"].squeeze()
     high = df["High"].squeeze()
     low = df["Low"].squeeze()
@@ -1051,16 +1087,16 @@ def compute_technicals(
     sma200_slope = compute_sma_slope(close, 200)
 
     # --- Momentum indicators ---
-    rsi = compute_rsi(close)
-    rsi_slope_val = compute_rsi_slope(close)
-    macd_val, macd_sig, macd_hist = compute_macd(close)
+    rsi = compute_rsi(close, period=ti["rsi_period"])
+    rsi_slope_val = compute_rsi_slope(close, rsi_period=ti["rsi_period"], slope_bars=ti["rsi_slope_bars"])
+    macd_val, macd_sig, macd_hist = compute_macd(close, fast=ti["macd_fast"], slow=ti["macd_slow"], signal=ti["macd_signal"])
     adx_val = compute_adx(high, low, close)
     stoch_rsi = compute_stochastic_rsi(close)
 
     # --- Volatility ---
-    atr = compute_atr(high, low, close)
+    atr = compute_atr(high, low, close, period=ti["atr_period"])
     atr_pct = compute_atr_percent(atr, price)
-    bb_position, bb_width = compute_bollinger_bands(close)
+    bb_position, bb_width = compute_bollinger_bands(close, period=ti["bb_period"], std_dev=ti["bb_std_dev"])
     weekly_vol, monthly_vol = compute_volatility_metrics(close)
 
     # --- Performance periods ---
@@ -1075,10 +1111,10 @@ def compute_technicals(
     range_dists = compute_range_distances(close, high, low)
 
     # --- Volume / accumulation (Story 2) ---
-    obv_trend_val = compute_obv_trend(close, volume)
-    ad_trend_val = compute_ad_trend(high, low, close, volume)
-    cmf = compute_chaikin_money_flow(high, low, close, volume)
-    vwap_dev = compute_vwap_deviation(high, low, close, volume)
+    obv_trend_val = compute_obv_trend(close, volume, slope_bars=ti["obv_slope_bars"])
+    ad_trend_val = compute_ad_trend(high, low, close, volume, slope_bars=ti["ad_slope_bars"])
+    cmf = compute_chaikin_money_flow(high, low, close, volume, period=ti["cmf_period"])
+    vwap_dev = compute_vwap_deviation(high, low, close, volume, period=ti["vwap_period"])
     anchored_vwap_dev: Optional[float] = None  # populated externally when earnings date known
     vol_dryup = compute_volume_dryup_ratio(volume)
     breakout_vol_mult = _compute_breakout_volume_multiple(volume)
@@ -1132,7 +1168,7 @@ def compute_technicals(
         high, low, close, volume, earnings_date=last_earnings_date
     )
 
-    tech_score = score_technicals(trend, rsi, macd_hist, is_extended, vol_trend, rs_spy, sr, price)
+    tech_score = score_technicals(trend, rsi, macd_hist, is_extended, vol_trend, rs_spy, sr, price, ts=cfg.technical_scoring)
 
     return TechnicalIndicators(
         # Existing MAs

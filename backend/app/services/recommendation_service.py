@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from app.algo_config import AlgoConfig, get_algo_config
 from app.models.market import MarketRegime, MarketRegimeAssessment, TechnicalIndicators
 from app.models.fundamentals import FundamentalData, ValuationData
 from app.models.earnings import EarningsData
@@ -23,20 +24,19 @@ class RegimeThresholds:
     rel_vol_min: float = 1.3     # minimum relative volume
 
 
-def _get_regime_thresholds(regime: str) -> RegimeThresholds:
+def _get_regime_thresholds(regime: str, algo_config: Optional[AlgoConfig] = None) -> RegimeThresholds:
     """Return appropriate entry thresholds for the given market regime."""
-    if regime == MarketRegime.LIQUIDITY_RALLY:
-        return RegimeThresholds(rsi_min=55.0, rsi_max=74.0, sma20_max=8.0, rel_vol_min=1.2)
-    if regime == MarketRegime.BULL_RISK_ON:
-        return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
-    if regime == MarketRegime.SIDEWAYS_CHOPPY:
-        return RegimeThresholds(rsi_min=40.0, rsi_max=58.0, sma20_max=3.0, rel_vol_min=1.3)
-    if regime == MarketRegime.BEAR_RISK_OFF:
-        # In bear regime, BUY_NOW_CONTINUATION is never allowed
-        return RegimeThresholds(rsi_min=999.0, rsi_max=-999.0, sma20_max=0.0, rel_vol_min=999.0)
-    if regime == MarketRegime.BULL_NARROW_LEADERSHIP:
-        return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
-    # SECTOR_ROTATION or unknown → standard
+    cfg = algo_config or get_algo_config()
+    rt = cfg.decision_logic["regime_thresholds"]
+    raw = rt.get(regime, rt.get("default", {}))
+    if raw:
+        return RegimeThresholds(
+            rsi_min=raw["rsi_min"],
+            rsi_max=raw["rsi_max"],
+            sma20_max=raw["sma20_max"],
+            rel_vol_min=raw["rel_vol_min"],
+        )
+    # Fallback (should never happen if config is complete)
     return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
 
 
@@ -577,6 +577,7 @@ def _decide_short_term_v2(
     technicals: TechnicalIndicators,
     regime: Optional[MarketRegimeAssessment] = None,
     archetype: Optional[str] = None,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> str:
     """Short-term decision labels with strict Improvements-3 criteria.
 
@@ -591,7 +592,7 @@ def _decide_short_term_v2(
     """
     t = technicals
     regime_str = regime.regime if regime is not None else MarketRegime.BULL_RISK_ON
-    thresholds = _get_regime_thresholds(regime_str)
+    thresholds = _get_regime_thresholds(regime_str, algo_config=algo_config)
 
     # --- 1. Bad chart / avoid overrides ---
     if _chart_is_weak(t) and score < 50:
@@ -684,19 +685,26 @@ def _decide_medium_term_v2(
     technicals: TechnicalIndicators,
     fundamentals: Optional[FundamentalData],
     earnings: EarningsData,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> str:
     """New medium-term decision labels (Story 7)."""
-    if fundamentals is not None and _business_deteriorating(fundamentals, earnings) and score < 60:
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    buy_now_min = dl["medium_term_buy_now_min"]
+    buy_starter_min = dl["medium_term_buy_starter_min"]
+    watchlist_min = dl["medium_term_watchlist_min"]
+
+    if fundamentals is not None and _business_deteriorating(fundamentals, earnings) and score < buy_starter_min:
         return "AVOID_BAD_BUSINESS"
-    if score >= 72:
+    if score >= buy_now_min:
         if not technicals.is_extended:
             return "BUY_NOW"
         return "BUY_STARTER"
-    if score >= 60:
+    if score >= buy_starter_min:
         if technicals.is_extended:
             return "BUY_ON_PULLBACK"
         return "BUY_STARTER"
-    if score >= 45:
+    if score >= watchlist_min:
         return "WATCHLIST_NEEDS_CONFIRMATION"
     return "AVOID_BAD_BUSINESS"
 
@@ -706,19 +714,28 @@ def _decide_long_term_v2(
     fundamentals: Optional[FundamentalData],
     earnings: Optional[EarningsData],
     valuation_score: Optional[float],
+    algo_config: Optional[AlgoConfig] = None,
 ) -> str:
     """New long-term decision labels (Story 7)."""
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    buy_now_min = dl["long_term_buy_now_min"]
+    accumulate_min = dl["long_term_accumulate_min"]
+    watchlist_min = dl["long_term_watchlist_min"]
+    val_gate = dl["long_term_valuation_gate"]
+    val_score_gate = dl["long_term_valuation_score_gate"]
+
     if fundamentals is not None and earnings is not None:
-        if _business_deteriorating(fundamentals, earnings) and score < 60:
+        if _business_deteriorating(fundamentals, earnings) and score < accumulate_min:
             return "AVOID_LONG_TERM"
     # Expensive valuation relative to score
-    if valuation_score is not None and valuation_score < 35 and score < 65:
+    if valuation_score is not None and valuation_score < val_gate and score < val_score_gate:
         return "WATCHLIST_VALUATION_TOO_RICH"
-    if score >= 72:
+    if score >= buy_now_min:
         return "BUY_NOW_LONG_TERM"
-    if score >= 55:
+    if score >= accumulate_min:
         return "ACCUMULATE_ON_WEAKNESS"
-    if score >= 40:
+    if score >= watchlist_min:
         return "WATCHLIST_VALUATION_TOO_RICH"
     return "AVOID_LONG_TERM"
 
@@ -772,6 +789,7 @@ def build_recommendations(
     has_options_data: bool = False,
     has_sufficient_price_history: bool = True,
     signal_cards: Optional[SignalCards] = None,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> list[HorizonRecommendation]:
     recs: list[HorizonRecommendation] = []
 
@@ -804,11 +822,11 @@ def build_recommendations(
         elif signal_cards is not None:
             # New signal-card-based decision logic (Story 7)
             if horizon == "short_term":
-                decision = _decide_short_term_v2(composite, technicals)
+                decision = _decide_short_term_v2(composite, technicals, algo_config=algo_config)
             elif horizon == "medium_term":
-                decision = _decide_medium_term_v2(composite, technicals, fundamentals, earnings)
+                decision = _decide_medium_term_v2(composite, technicals, fundamentals, earnings, algo_config=algo_config)
             else:
-                decision = _decide_long_term_v2(composite, fundamentals, earnings, val_score)
+                decision = _decide_long_term_v2(composite, fundamentals, earnings, val_score, algo_config=algo_config)
         elif horizon == "short_term":
             decision = _decide_short_term(composite, technicals, fundamentals, earnings, regime_assessment)
         elif horizon == "medium_term":

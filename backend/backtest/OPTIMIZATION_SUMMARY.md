@@ -120,21 +120,58 @@ With N tickers, this reduces regime classification from N×D calls to D calls (D
 
 ---
 
-## Remaining Hotspots (after optimization)
+---
 
-After these fixes, `compute_technicals` is now the dominant cost at ~12s (84% of remaining time). It computes ~25 indicators per snapshot including pandas rolling operations, ADX, StochRSI, MACD, etc. This is inherently per-ticker computation and harder to cache. Potential further improvements:
+## Round 2: Indicator Time-Series Cache
 
-- **Incremental indicator computation**: Instead of recomputing indicators on the full price slice each week, maintain a rolling state and update incrementally (complex refactor).
-- **Reduce indicator count**: Profile which signal cards actually use which indicators and skip unused ones.
-- **Vectorise across dates**: Pre-compute all indicator time-series for a ticker once, then look up values by date — avoids recomputing from scratch every week.
+### Problem: `compute_technicals` — remaining bottleneck (84% of post-round-1 runtime)
+
+After round 1, `compute_technicals` still takes ~12s per 780 snapshots. It recomputes all 40+ indicators (RSI, MACD, ADX, SMAs, Bollinger Bands, etc.) from scratch for every (ticker, date) pair, even though ~85% of indicators depend only on the stock's own price history and are identical across tickers for the same stock.
+
+### Solution: Indicator cache (`backtest/indicator_cache.py`)
+
+**Indicator classification:**
+- **Ticker-only (cacheable, ~85%)**: All indicators using only the stock's own close/high/low/volume — SMAs, EMAs, RSI, MACD, ADX, StochRSI, ATR, Bollinger Bands, volume metrics, performance periods, range distances, support/resistance, etc.
+- **Benchmark-dependent (inline, ~15%)**: `rs_vs_spy`, `rs_vs_spy_20d`, `rs_vs_spy_63d`, `rs_vs_qqq`, `rs_vs_sector`, `rs_vs_sector_20d`, `rs_vs_sector_63d` — require SPY/QQQ/sector slices.
+
+**Cache format**: `dict[ticker][date_iso] → TechnicalIndicators` (Pydantic object, RS fields = None in stored version).
+
+**Cache file**: `backtest/cache/indicators.pkl`
+
+**Invalidation**: Auto-rebuilds if `indicators.pkl` missing or `prices.pkl` is newer. Also triggered by `--force-refresh`.
+
+**Correctness**: `technical_score` uses `rs_spy` (±5–10 pts). After loading from cache, `_attach_rs_fields()` computes all 7 RS fields inline and calls `score_technicals()` to recompute `technical_score`. Output is **identical** to a full `compute_technicals` call (verified: 0 mismatches across all fields).
+
+### Round 2 Results
+
+Same benchmark (5 tickers × 156 dates × 3 horizons):
+
+| Run type | Wall time | vs original (68.8s) |
+|----------|-----------|---------------------|
+| Original (pre-round-1) | 68.8 s | baseline |
+| Round 1 (searchsorted + regime cache) | 14.5 s | 4.75x faster |
+| Round 2, first run (builds indicator cache) | 5.9 s | **11.7x faster** |
+| Round 2, second run (cache loaded from disk) | 0.91 s | **75x faster** |
+
+On subsequent runs (the common case during iterative backtesting), the cache load + RS attachment reduces `compute_technicals` from the dominant cost to effectively zero.
+
+### Round 2 Files Changed
+
+| File | Change |
+|------|--------|
+| `backtest/indicator_cache.py` | **NEW** — `build_indicator_cache`, `lookup_ticker_indicators`, `_is_stale` |
+| `backtest/runner.py` | New `_attach_rs_fields` helper; `force_refresh` param; cache load before main loop; inner-loop cache lookup with fallback |
+| `backtest/run_backtest.py` | Pass `force_refresh=args.force_refresh` to `run_backtest()` |
 
 ---
 
-## Files Changed
+## Files Changed (All Rounds)
 
 | File | Change |
 |------|--------|
 | `backtest/snapshot.py` | `get_price_slice`: `index.map` → `searchsorted` |
 | `backtest/outcome.py` | `_get_price_at_offset`, `_max_drawdown_window`: `index.map` → `searchsorted` |
 | `backtest/data_loader.py` | Added `_normalize_price_indices`; called on cache load and fresh download |
-| `backtest/runner.py` | Pre-compute per-date SPY/QQQ/VIX/regime before ticker loop |
+| `backtest/runner.py` | Per-date regime/VIX cache; indicator cache lookup; `_attach_rs_fields`; `force_refresh` param |
+| `backtest/run_backtest.py` | Pass `force_refresh` to `run_backtest()` |
+| `backtest/indicator_cache.py` | **NEW** — ticker-only indicator pre-computation and disk cache |

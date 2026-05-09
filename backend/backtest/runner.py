@@ -22,7 +22,15 @@ from typing import Optional
 
 import pandas as pd
 
-from app.services.technical_analysis_service import compute_technicals, compute_relative_strength
+from app.algo_config import AlgoConfig, get_algo_config
+from app.services.technical_analysis_service import (
+    compute_technicals,
+    compute_relative_strength,
+    compute_rs_vs_benchmark,
+    score_technicals,
+)
+from app.models.market import TechnicalIndicators
+from backtest.indicator_cache import build_indicator_cache, lookup_ticker_indicators
 from app.services.fundamental_analysis_service import score_fundamentals
 from app.services.valuation_analysis_service import (
     score_valuation as score_valuation_legacy,
@@ -56,6 +64,46 @@ from backtest.snapshot import (
 
 logger = logging.getLogger(__name__)
 
+
+def _attach_rs_fields(
+    ti: TechnicalIndicators,
+    stock_close: pd.Series,
+    spy_slice: pd.DataFrame,
+    qqq_slice: pd.DataFrame,
+    sector_slice: pd.DataFrame,
+) -> None:
+    """Attach benchmark-dependent RS fields to a cached TechnicalIndicators in-place.
+
+    The cached object has RS fields = None and technical_score as a placeholder
+    (computed without rs_spy).  This function sets the RS fields and recomputes
+    technical_score so the result is identical to a full compute_technicals call.
+    """
+    if not spy_slice.empty:
+        spy_close = spy_slice["Close"].squeeze()
+        ti.rs_vs_spy     = compute_relative_strength(stock_close, spy_close)
+        ti.rs_vs_spy_20d = compute_rs_vs_benchmark(stock_close, spy_close, period=20)
+        ti.rs_vs_spy_63d = compute_rs_vs_benchmark(stock_close, spy_close, period=63)
+    if not qqq_slice.empty:
+        qqq_close = qqq_slice["Close"].squeeze()
+        ti.rs_vs_qqq = compute_rs_vs_benchmark(stock_close, qqq_close, period=63)
+    if not sector_slice.empty:
+        sector_close = sector_slice["Close"].squeeze()
+        ti.rs_vs_sector     = compute_relative_strength(stock_close, sector_close)
+        ti.rs_vs_sector_20d = compute_rs_vs_benchmark(stock_close, sector_close, period=20)
+        ti.rs_vs_sector_63d = compute_rs_vs_benchmark(stock_close, sector_close, period=63)
+    # Recompute technical_score now that rs_vs_spy is correctly populated
+    ti.technical_score = score_technicals(
+        ti.trend,
+        ti.rsi_14,
+        ti.macd_histogram,
+        ti.is_extended,
+        ti.volume_trend,
+        ti.rs_vs_spy,
+        ti.support_resistance,
+        float(stock_close.iloc[-1]),
+    )
+
+
 SIGNAL_CARD_NAMES = [
     "momentum", "trend", "entry_timing", "volume_accumulation",
     "volatility_risk", "relative_strength", "growth", "valuation",
@@ -83,6 +131,8 @@ def run_backtest(
     end: Optional[str] = None,
     risk_profile: str = DEFAULT_RISK_PROFILE,
     phase: int = DEFAULT_PHASE,
+    force_refresh: bool = False,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> list[dict]:
     """Run the backtest and return a list of signal records.
 
@@ -101,6 +151,7 @@ def run_backtest(
     tickers = tickers or BACKTEST_TICKERS
     start   = start   or BACKTEST_START
     end     = end     or BACKTEST_END
+    _cfg    = algo_config or get_algo_config()
 
     prices:   dict[str, pd.DataFrame] = data["prices"]
     quarterly: dict[str, dict]        = data["quarterly"]
@@ -108,6 +159,15 @@ def run_backtest(
     test_dates   = _generate_weekly_dates(start, end)
     spy_full     = prices.get("SPY", pd.DataFrame())
     qqq_full     = prices.get("QQQ", pd.DataFrame())
+
+    # ── Pre-compute / load indicator cache (ticker-only technicals) ────────
+    logger.info("Loading indicator cache…")
+    _indicator_cache = build_indicator_cache(
+        prices=prices,
+        tickers=tickers,
+        test_dates=test_dates,
+        force_refresh=force_refresh,
+    )
 
     # ── Pre-compute per-date shared state (SPY/QQQ slices, VIX, regime) ───
     # These depend only on the date, not the ticker, so compute once per date.
@@ -127,7 +187,7 @@ def run_backtest(
         regime = None
         if not spy_sl.empty and not qqq_sl.empty:
             try:
-                regime = classify_regime(spy_sl, qqq_sl, vix_level=vix)
+                regime = classify_regime(spy_sl, qqq_sl, vix_level=vix, algo_config=_cfg)
             except Exception as exc:
                 logger.debug("classify_regime pre-compute failed for %s: %s", td.date(), exc)
 
@@ -181,12 +241,29 @@ def run_backtest(
                 current_price = float(price_slice["Close"].iloc[-1])
 
                 # ── Technical indicators ───────────────────────────────────
-                technicals = compute_technicals(
-                    price_slice,
-                    spy_df=spy_slice    if not spy_slice.empty    else None,
-                    qqq_df=qqq_slice    if not qqq_slice.empty    else None,
-                    sector_df=sector_slice if not sector_slice.empty else None,
-                )
+                technicals = lookup_ticker_indicators(_indicator_cache, ticker, test_date)
+                if technicals is not None:
+                    # Cache hit: attach benchmark-dependent RS fields and rescore
+                    _attach_rs_fields(
+                        technicals,
+                        stock_close=price_slice["Close"].squeeze(),
+                        spy_slice=spy_slice,
+                        qqq_slice=qqq_slice,
+                        sector_slice=sector_slice,
+                    )
+                else:
+                    # Cache miss: compute everything inline (includes RS fields)
+                    logger.debug(
+                        "Cache miss: %s %s — computing full technicals",
+                        ticker, test_date.date(),
+                    )
+                    technicals = compute_technicals(
+                        price_slice,
+                        spy_df=spy_slice    if not spy_slice.empty    else None,
+                        qqq_df=qqq_slice    if not qqq_slice.empty    else None,
+                        sector_df=sector_slice if not sector_slice.empty else None,
+                        algo_config=_cfg,
+                    )
 
                 # ── Fundamentals (phase-gated) ─────────────────────────────
                 if phase >= 3 and q_data:
@@ -198,14 +275,15 @@ def run_backtest(
                     )
                     # Fundamental score + archetype-adjusted valuation
                     fundamentals.fundamental_score = score_fundamentals(fundamentals)
-                    valuation.valuation_score       = score_valuation_legacy(valuation)
-                    fundamentals = classify_and_attach(fundamentals, valuation)
+                    valuation.valuation_score       = score_valuation_legacy(valuation, algo_config=_cfg)
+                    fundamentals = classify_and_attach(fundamentals, valuation, algo_config=_cfg)
                     valuation.archetype_adjusted_score = score_valuation_with_archetype(
                         valuation,
                         fundamentals.archetype,
                         revenue_growth_yoy=fundamentals.revenue_growth_yoy,
                         operating_margin=fundamentals.operating_margin,
                         gross_margin=fundamentals.gross_margin,
+                        algo_config=_cfg,
                     )
                 else:
                     fundamentals = neutral_fundamentals()
@@ -236,10 +314,11 @@ def run_backtest(
                     valuation=valuation,
                     earnings=earnings,
                     news=news,
+                    algo_config=_cfg,
                 )
 
                 # ── Horizon scores from signal cards ───────────────────────
-                scores = compute_scores_from_signal_cards(signal_cards, regime_assessment)
+                scores = compute_scores_from_signal_cards(signal_cards, regime_assessment, algo_config=_cfg)
 
                 # ── Recommendations ────────────────────────────────────────
                 recommendations = build_recommendations(
@@ -254,6 +333,7 @@ def run_backtest(
                     current_price=current_price,
                     regime_assessment=regime_assessment,
                     signal_cards=signal_cards,
+                    algo_config=_cfg,
                 )
 
                 # ── Flatten signal card scores into a dict ─────────────────

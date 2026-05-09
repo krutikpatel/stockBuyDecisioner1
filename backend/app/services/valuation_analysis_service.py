@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+from app.algo_config import AlgoConfig
 from app.models.fundamentals import StockArchetype, ValuationData
 
 
-def score_valuation(data: ValuationData) -> float:
+def score_valuation(data: ValuationData, algo_config: Optional[AlgoConfig] = None) -> float:
     """Score 0–100. Attractive valuation = higher score.
 
     This archetype-neutral version is kept for backward compatibility.
@@ -96,6 +97,7 @@ def score_valuation_with_archetype(
     revenue_growth_yoy: Optional[float] = None,
     operating_margin: Optional[float] = None,
     gross_margin: Optional[float] = None,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> float:
     """Growth-adjusted valuation score tailored to the stock's archetype.
 

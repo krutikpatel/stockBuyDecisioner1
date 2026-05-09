@@ -21,6 +21,7 @@ Options:
   --force-refresh  Re-download all data even if cache exists
   --output-dir     Directory for results (default: backtest/results/)
   --no-report      Skip HTML report generation (still writes CSVs)
+  --algo-config    Path to a custom algo_config.json (default: backend/algo_config.json)
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from app.algo_config import AlgoConfig, reset_algo_config
 from backtest.config import (
     BACKTEST_START, BACKTEST_END, DEFAULT_RISK_PROFILE,
     DEFAULT_PHASE, RESULTS_DIR,
@@ -75,6 +77,8 @@ def _parse_args() -> argparse.Namespace:
                    help=f"Output directory (default: {RESULTS_DIR})")
     p.add_argument("--no-report",     action="store_true",
                    help="Skip HTML report generation")
+    p.add_argument("--algo-config",   default=None,
+                   help="Path to a custom algo_config.json (default: backend/algo_config.json)")
     return p.parse_args()
 
 
@@ -83,10 +87,20 @@ def main() -> None:
 
     tickers = [t.strip().upper() for t in args.tickers.split(",")] if args.tickers else None
 
+    # ── Load custom algo config if provided ───────────────────────────────
+    algo_cfg: AlgoConfig | None = None
+    if args.algo_config:
+        config_path = Path(args.algo_config).resolve()
+        logger.info("Loading custom algo config from: %s", config_path)
+        reset_algo_config()
+        algo_cfg = AlgoConfig.from_file(str(config_path))
+
     logger.info("=== Stock Decision Tool Backtest ===")
     logger.info("Phase: %d | Start: %s | End: %s", args.phase, args.start, args.end)
     if tickers:
         logger.info("Tickers: %s", ", ".join(tickers))
+    if algo_cfg:
+        logger.info("Custom algo config: %s", args.algo_config)
 
     # ── Step 1: Load / download data ──────────────────────────────────────
     logger.info("Step 1/5: Loading data…")
@@ -101,6 +115,8 @@ def main() -> None:
         end=args.end,
         risk_profile=args.risk_profile,
         phase=args.phase,
+        force_refresh=args.force_refresh,
+        algo_config=algo_cfg,
     )
 
     if not signals:
