@@ -196,7 +196,7 @@ class TestComputeScoresFromSignalCards:
 class TestDecisionLabelConstants:
     def test_short_term_decisions_exist(self):
         assert hasattr(SHORT_TERM_DECISIONS, "__contains__")  # iterable/set
-        assert "BUY_NOW_MOMENTUM" in SHORT_TERM_DECISIONS
+        assert "BUY_NOW_CONTINUATION" in SHORT_TERM_DECISIONS  # replaced BUY_NOW_MOMENTUM
         assert "BUY_STARTER_STRONG_BUT_EXTENDED" in SHORT_TERM_DECISIONS
         assert "WAIT_FOR_PULLBACK" in SHORT_TERM_DECISIONS
         assert "AVOID_BAD_CHART" in SHORT_TERM_DECISIONS

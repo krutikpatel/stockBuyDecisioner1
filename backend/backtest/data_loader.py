@@ -32,6 +32,18 @@ logger = logging.getLogger(__name__)
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _normalize_price_indices(prices: dict) -> None:
+    """Strip timezone from all price DataFrame indices in-place.
+
+    Ensures all DataFrames have a tz-naive DatetimeIndex so that
+    searchsorted works correctly without per-row _normalize_ts calls.
+    """
+    for ticker, df in list(prices.items()):
+        if not df.empty and getattr(df.index, "tz", None) is not None:
+            new_df = df.copy()
+            new_df.index = df.index.tz_localize(None)
+            prices[ticker] = new_df
+
 def _cache_path(name: str) -> Path:
     path = Path(CACHE_DIR)
     path.mkdir(parents=True, exist_ok=True)
@@ -140,6 +152,7 @@ def load_all_data(
             prices = pickle.load(f)
         with open(quarterly_cache, "rb") as f:
             quarterly = pickle.load(f)
+        _normalize_price_indices(prices)
         logger.info(
             "Cache loaded: %d price series, %d quarterly datasets",
             len(prices), len(quarterly),
@@ -177,6 +190,9 @@ def load_all_data(
         quarterly[ticker] = _fetch_quarterly_data(ticker)
         time.sleep(0.5)
     print()
+
+    # ── Normalise indices before caching and returning ─────────────────────
+    _normalize_price_indices(prices)
 
     # ── Persist cache ──────────────────────────────────────────────────────
     print("Saving to cache…")

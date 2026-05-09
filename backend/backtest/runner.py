@@ -109,6 +109,30 @@ def run_backtest(
     spy_full     = prices.get("SPY", pd.DataFrame())
     qqq_full     = prices.get("QQQ", pd.DataFrame())
 
+    # ── Pre-compute per-date shared state (SPY/QQQ slices, VIX, regime) ───
+    # These depend only on the date, not the ticker, so compute once per date.
+    _date_state: dict[pd.Timestamp, tuple] = {}
+    for td in test_dates:
+        spy_sl  = get_price_slice(spy_full, td)
+        qqq_sl  = get_price_slice(qqq_full, td)
+
+        vix: Optional[float] = None
+        if not spy_sl.empty and len(spy_sl) >= 21:
+            spy_close = spy_sl["Close"].squeeze()
+            daily_ret = spy_close.pct_change().dropna()
+            rolling_vol = daily_ret.rolling(20).std().iloc[-1]
+            if pd.notna(rolling_vol):
+                vix = round(float(rolling_vol) * (252 ** 0.5) * 100, 2)
+
+        regime = None
+        if not spy_sl.empty and not qqq_sl.empty:
+            try:
+                regime = classify_regime(spy_sl, qqq_sl, vix_level=vix)
+            except Exception as exc:
+                logger.debug("classify_regime pre-compute failed for %s: %s", td.date(), exc)
+
+        _date_state[td] = (spy_sl, qqq_sl, vix, regime)
+
     signals: list[dict] = []
     total  = len(tickers) * len(test_dates)
     done   = 0
@@ -146,8 +170,9 @@ def run_backtest(
                 if len(price_slice) < MIN_ROWS_FOR_ANALYSIS:
                     continue
 
-                spy_slice    = get_price_slice(spy_full, test_date)
-                qqq_slice    = get_price_slice(qqq_full, test_date)
+                # Shared per-date state (pre-computed above)
+                spy_slice, qqq_slice, vix_proxy, regime_assessment = _date_state[test_date]
+
                 sector_slice = (
                     get_price_slice(sector_full, test_date)
                     if not sector_full.empty else pd.DataFrame()
@@ -202,25 +227,7 @@ def run_backtest(
                     if rs is not None:
                         sector_macro_score = 65.0 if rs > 1.05 else (35.0 if rs < 0.95 else 50.0)
 
-                # ── Market regime ──────────────────────────────────────────
-                # Use rolling SPY 20-day volatility × √252 as VIX proxy
-                vix_proxy: Optional[float] = None
-                if not spy_slice.empty and len(spy_slice) >= 21:
-                    spy_close = spy_slice["Close"].squeeze()
-                    daily_ret = spy_close.pct_change().dropna()
-                    rolling_vol = daily_ret.rolling(20).std().iloc[-1]
-                    if pd.notna(rolling_vol):
-                        vix_proxy = round(float(rolling_vol) * (252 ** 0.5) * 100, 2)
-
-                regime_assessment = None
-                if not spy_slice.empty and not qqq_slice.empty:
-                    try:
-                        regime_assessment = classify_regime(
-                            spy_slice, qqq_slice, vix_level=vix_proxy
-                        )
-                    except Exception as exc:
-                        logger.debug("classify_regime failed for %s %s: %s",
-                                     ticker, test_date.date(), exc)
+                # regime_assessment and vix_proxy come from _date_state (pre-computed)
 
                 # ── Signal cards ───────────────────────────────────────────
                 signal_cards = score_all_cards(

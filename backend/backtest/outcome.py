@@ -34,15 +34,15 @@ def _get_price_at_offset(
 ) -> Optional[float]:
     """Return the closing price *trading_days_offset* trading days after *from_date*.
 
+    Uses searchsorted (O(log N)) instead of index.map (O(N)).
     Returns None if the required date is beyond available data.
     """
     if price_df.empty:
         return None
 
-    norm_from   = _normalize_ts(from_date)
-    idx_norm    = price_df.index.map(_normalize_ts)
-    future_mask = idx_norm > norm_from
-    future_rows = price_df[future_mask]
+    norm_from = _normalize_ts(from_date)
+    pos = price_df.index.searchsorted(norm_from, side="right")
+    future_rows = price_df.iloc[pos:]
 
     if len(future_rows) < trading_days_offset:
         return None
@@ -58,16 +58,16 @@ def _max_drawdown_window(
 ) -> Optional[float]:
     """Compute the maximum intra-period drawdown from *entry_price*.
 
+    Uses searchsorted (O(log N)) instead of index.map (O(N)).
     Returns the worst trough as a negative percentage (e.g. -8.3 means -8.3%).
     Returns None if data is unavailable.
     """
     if price_df.empty or entry_price <= 0:
         return None
 
-    norm_from   = _normalize_ts(from_date)
-    idx_norm    = price_df.index.map(_normalize_ts)
-    future_mask = idx_norm > norm_from
-    window      = price_df[future_mask].iloc[:trading_days]
+    norm_from = _normalize_ts(from_date)
+    pos = price_df.index.searchsorted(norm_from, side="right")
+    window = price_df.iloc[pos : pos + trading_days]
 
     if window.empty:
         return None

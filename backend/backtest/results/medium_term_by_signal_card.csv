@@ -5,7 +5,7 @@ momentum,78987,-0.0709,"{'Q1 Low': np.float64(5.79), 'Q2': np.float64(4.11), 'Q3
 valuation,78987,-0.0684,"{'Q1 Low': np.float64(5.75), 'Q2': np.float64(3.41), 'Q3': np.float64(3.16), 'Q4 High': np.float64(3.18)}",56.4
 growth,78987,0.0637,"{'Q1 Low': np.float64(3.05), 'Q2': np.float64(3.99), 'Q3': np.float64(4.0), 'Q4 High': np.float64(7.06)}",58.8
 volume_accumulation,78987,-0.0566,"{'Q1 Low': np.float64(5.27), 'Q2': np.float64(4.44), 'Q3': np.float64(3.71), 'Q4 High': np.float64(2.82)}",50.9
-entry_timing,78987,-0.0446,"{'Q1 Low': np.float64(5.05), 'Q2': np.float64(4.02), 'Q3': np.float64(3.58), 'Q4 High': np.float64(3.63)}",58.6
+entry_timing,78987,-0.0529,"{'Q1 Low': np.float64(5.16), 'Q2': np.float64(4.11), 'Q3': np.float64(3.89), 'Q4 High': np.float64(3.05)}",59.0
 relative_strength,78987,-0.0405,"{'Q1 Low': np.float64(5.47), 'Q2': np.float64(3.76), 'Q3': np.float64(3.43), 'Q4 High': np.float64(3.61)}",47.3
 quality,78987,0.0216,{},50.7
 catalyst,78987,-0.0097,{},59.1

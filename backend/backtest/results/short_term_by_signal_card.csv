@@ -6,7 +6,7 @@ volume_accumulation,80769,-0.0545,"{'Q1 Low': np.float64(1.96), 'Q2': np.float64
 relative_strength,80769,-0.0443,"{'Q1 Low': np.float64(2.19), 'Q2': np.float64(1.09), 'Q3': np.float64(0.95), 'Q4 High': np.float64(1.02)}",47.2
 valuation,80769,-0.0364,"{'Q1 Low': np.float64(1.82), 'Q2': np.float64(1.11), 'Q3': np.float64(1.14), 'Q4 High': np.float64(1.04)}",56.4
 growth,80769,0.035,"{'Q1 Low': np.float64(0.99), 'Q2': np.float64(1.25), 'Q3': np.float64(1.32), 'Q4 High': np.float64(2.2)}",58.9
-entry_timing,80769,-0.0237,"{'Q1 Low': np.float64(1.62), 'Q2': np.float64(1.2), 'Q3': np.float64(1.2), 'Q4 High': np.float64(1.22)}",58.6
+entry_timing,80769,-0.0292,"{'Q1 Low': np.float64(1.65), 'Q2': np.float64(1.22), 'Q3': np.float64(1.42), 'Q4 High': np.float64(0.92)}",59.0
 catalyst,80769,-0.0231,{},59.2
 quality,80769,0.0111,{},51.1
 ownership,80769,,{},50.0

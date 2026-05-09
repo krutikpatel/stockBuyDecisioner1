@@ -91,12 +91,16 @@ def _latest(row: Optional[pd.Series]) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 def get_price_slice(price_df: pd.DataFrame, test_date: pd.Timestamp) -> pd.DataFrame:
-    """Return price rows up to and including *test_date* (tz-naive safe)."""
+    """Return price rows up to and including *test_date* (tz-naive safe).
+
+    Uses searchsorted (O(log N)) instead of index.map (O(N)) for speed.
+    Assumes price_df.index is already tz-naive (enforced by data_loader).
+    """
     if price_df.empty:
         return pd.DataFrame()
     norm_date = _normalize_ts(test_date)
-    idx = price_df.index.map(_normalize_ts)
-    return price_df[idx <= norm_date]
+    pos = price_df.index.searchsorted(norm_date, side="right")
+    return price_df.iloc[:pos]
 
 
 # ---------------------------------------------------------------------------
