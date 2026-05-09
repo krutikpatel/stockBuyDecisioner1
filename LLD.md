@@ -8,7 +8,7 @@
 ## Table of Contents
 
 1. [Project Layout](#1-project-layout)
-2. [Configuration & Environment](#2-configuration--environment)
+2. [Configuration & Environment](#2-configuration--environment) — Runtime Settings (2a) · AlgoConfig parameter system (2b)
 3. [Cache Layer](#3-cache-layer)
 4. [Data Providers](#4-data-providers)
 5. [Technical Analysis Service](#5-technical-analysis-service)
@@ -39,7 +39,12 @@
 ```
 usingGptStrategy/
 ├── backend/
+│   ├── algo_config.json                     # Centralized algorithm parameters (12 sections)
+│   ├── ALGO_PARAMS.md                       # Parameter catalog — descriptions, types, effects
+│   ├── ALGO_PARAMS_VALUES.md                # Parameter values reference with experiment log
+│   ├── CONFIG_MIGRATION_PROGRESS.md         # Step-by-step migration tracking
 │   ├── app/
+│   │   ├── algo_config.py                   # AlgoConfig: from_file, from_dict, singleton, reset
 │   │   ├── main.py                          # FastAPI app init, CORS, router mount
 │   │   ├── config.py                        # Pydantic settings (env vars)
 │   │   ├── cache/
@@ -83,24 +88,34 @@ usingGptStrategy/
 │   │   ├── report.py                        # CSV + self-contained HTML
 │   │   └── run_backtest.py                  # CLI entry point
 │   ├── tests/
-│   │   ├── test_technical_analysis.py       # 38 tests
-│   │   ├── test_technical_enhanced.py       # Story 1 — EMA, slopes, perf, distances (57 tests)
-│   │   ├── test_volume_indicators.py        # Story 2 — OBV, CMF, VWAP, vol ratios (47 tests)
-│   │   ├── test_relative_strength.py        # Story 3 — RS vs QQQ, drawdown, percentiles (44 tests)
-│   │   ├── test_fundamental_analysis.py     # 32 tests (incl. 8 growth-adj valuation tests)
-│   │   ├── test_fundamental_enhanced.py     # Story 4 — multi-period growth, ownership (43 tests)
-│   │   ├── test_earnings_analysis.py        # 29 tests
-│   │   ├── test_scoring_recommendation.py   # 53 tests (incl. US-004 + US-005 tests)
-│   │   ├── test_stock_archetype.py          # 19 tests
-│   │   ├── test_market_regime.py            # 18 tests
-│   │   ├── test_data_completeness.py        # 16 tests
-│   │   ├── test_signal_profile.py           # 22 tests
-│   │   ├── test_signal_card_models.py       # Story 5 — SignalCard Pydantic models (38 tests)
-│   │   ├── test_signal_card_service.py      # Story 6 — 11 signal card scorers (52 tests)
-│   │   ├── test_revised_scoring.py          # Story 7 — signal card weights + new labels (19 tests)
-│   │   ├── test_risk_report_updates.py      # Story 8 — risk mgmt + markdown report (13 tests)
-│   │   ├── test_improvements3.py            # improvements3 — new labels, gates, ATR sizing (102 tests)
-│   │   └── test_backtest_metrics.py         # 14 tests
+│   │   ├── test_technical_analysis.py              # 38 tests
+│   │   ├── test_technical_enhanced.py              # Story 1 — EMA, slopes, perf, distances (57 tests)
+│   │   ├── test_volume_indicators.py               # Story 2 — OBV, CMF, VWAP, vol ratios (47 tests)
+│   │   ├── test_relative_strength.py               # Story 3 — RS vs QQQ, drawdown, percentiles (44 tests)
+│   │   ├── test_fundamental_analysis.py            # 32 tests (incl. 8 growth-adj valuation tests)
+│   │   ├── test_fundamental_enhanced.py            # Story 4 — multi-period growth, ownership (43 tests)
+│   │   ├── test_earnings_analysis.py               # 29 tests
+│   │   ├── test_scoring_recommendation.py          # 53 tests (incl. US-004 + US-005 tests)
+│   │   ├── test_stock_archetype.py                 # 19 tests
+│   │   ├── test_market_regime.py                   # 18 tests
+│   │   ├── test_data_completeness.py               # 16 tests
+│   │   ├── test_signal_profile.py                  # 22 tests
+│   │   ├── test_signal_card_models.py              # Story 5 — SignalCard Pydantic models (38 tests)
+│   │   ├── test_signal_card_service.py             # Story 6 — 11 signal card scorers (52 tests)
+│   │   ├── test_revised_scoring.py                 # Story 7 — signal card weights + new labels (19 tests)
+│   │   ├── test_risk_report_updates.py             # Story 8 — risk mgmt + markdown report (13 tests)
+│   │   ├── test_improvements3.py                   # improvements3 — new labels, gates, ATR sizing (102 tests)
+│   │   ├── test_backtest_metrics.py                # 14 tests
+│   │   ├── test_algo_config.py                     # AlgoConfig loader: from_file, from_dict, env override, 12 sections
+│   │   ├── test_algo_config_technical.py           # Technical indicator params injected via AlgoConfig
+│   │   ├── test_algo_config_signal_cards.py        # Signal card thresholds injected via AlgoConfig
+│   │   ├── test_algo_config_recommendation.py      # Decision logic gates injected via AlgoConfig
+│   │   ├── test_algo_config_risk_management.py     # Position sizing + ATR multipliers via AlgoConfig
+│   │   ├── test_algo_config_scoring.py             # Scoring weights injected via AlgoConfig
+│   │   ├── test_algo_config_market_regime.py       # VIX thresholds + regime weights via AlgoConfig
+│   │   ├── test_algo_config_stock_archetype.py     # Archetype classification thresholds via AlgoConfig
+│   │   ├── test_algo_config_data_completeness.py   # Completeness deductions + confidence caps via AlgoConfig
+│   │   └── test_algo_config_valuation.py           # Valuation score thresholds via AlgoConfig
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -138,6 +153,8 @@ usingGptStrategy/
 
 ## 2. Configuration & Environment
 
+### 2a. Runtime Settings
+
 **File:** `backend/app/config.py`
 
 ```python
@@ -151,7 +168,7 @@ class Settings(BaseSettings):
 settings = Settings()   # module-level singleton, imported by all services
 ```
 
-**Loading order:** `.env` file → environment variables → defaults.  
+**Loading order:** `.env` file → environment variables → defaults.
 **`settings` is a module-level singleton** — imported directly, never passed as argument.
 
 ```mermaid
@@ -165,6 +182,83 @@ flowchart LR
 ```
 
 **Extension point:** Add new env vars by adding fields to `Settings`. Pydantic auto-reads them from `.env` with no other changes.
+
+---
+
+### 2b. Algorithm Configuration (AlgoConfig)
+
+**Files:** `backend/algo_config.json` · `backend/app/algo_config.py`
+
+All tunable algorithm parameters — indicator periods, scoring thresholds, decision gates, position sizing factors — live in `algo_config.json` rather than as hardcoded constants in service modules.
+
+**`algo_config.json` top-level sections:**
+
+| Section | Parameters Covered |
+|---------|-------------------|
+| `technical_indicators` | SMA/EMA periods, RSI period & slope bars, MACD fast/slow/signal, ADX period, StochRSI, ATR, Bollinger, OBV/A-D/CMF/VWAP windows, RS periods |
+| `technical_scoring` | Bonus/penalty thresholds for each scored technical condition |
+| `extension_detection` | SMA20/50/200 extension % thresholds |
+| `stock_archetype` | Revenue growth, margin, FCF, and debt thresholds for each archetype |
+| `market_regime` | VIX levels, SPY/QQQ MA conditions, per-regime confidence values |
+| `regime_scoring` | Score multipliers for each regime × score dimension |
+| `scoring` | Signal card weights per horizon (must sum to 1.0 each) |
+| `signal_cards` | Per-card scoring thresholds (RSI zones, ADX, RS, vol, etc.) |
+| `decision_logic` | Gate values for every short/medium/long-term decision label |
+| `data_completeness` | Deduction amounts, confidence cap threshold, avoid-low-confidence cutoff |
+| `risk_management` | ATR stop multipliers per horizon, position sizing factors, entry/target offsets |
+| `valuation` | Archetype-adjusted score thresholds per valuation regime |
+
+**`AlgoConfig` class interface:**
+
+```python
+# Production singleton (lazy-loaded from algo_config.json on first call)
+from app.algo_config import get_algo_config
+cfg = get_algo_config()
+period = cfg.technical_indicators["rsi_period"]   # → 14
+
+# Load from a custom path (backtest experiments)
+cfg = AlgoConfig.from_file("/path/to/custom.json")
+
+# Inline dict (unit tests — isolate a specific parameter)
+cfg = AlgoConfig.from_dict({"technical_indicators": {"rsi_period": 10}, ...})
+
+# Force singleton reload after ALGO_CONFIG_PATH changes (test teardown)
+reset_algo_config()
+```
+
+**Service function signature pattern:**
+
+```python
+def compute_technicals(df, spy_df, sector_df=None, algo_config=None):
+    cfg = algo_config or get_algo_config()
+    rsi_period = cfg.technical_indicators["rsi_period"]
+    ...
+```
+
+Every service function accepts `algo_config: Optional[AlgoConfig] = None`. When `None`, the production singleton is used — no call-site changes required for existing code.
+
+**Environment override:**
+
+```bash
+ALGO_CONFIG_PATH=/path/to/experiment.json uvicorn app.main:app
+```
+
+**Typed property accessors on `AlgoConfig`:**
+
+```python
+cfg.technical_indicators   # dict
+cfg.technical_scoring      # dict
+cfg.extension_detection    # dict
+cfg.stock_archetype        # dict
+cfg.market_regime          # dict
+cfg.regime_scoring         # dict
+cfg.scoring                # dict
+cfg.signal_cards           # dict
+cfg.decision_logic         # dict
+cfg.data_completeness      # dict
+cfg.risk_management        # dict
+cfg.valuation              # dict
+```
 
 ---
 
@@ -2153,7 +2247,7 @@ flowchart TD
 
 ## 23. Test Coverage Map
 
-**Total: 627 tests across 15 test files** (10 pre-existing failures in `test_backtest_metrics.py` — unrelated to improvements3)
+**Total: 768 tests across 27 test files** (10 pre-existing failures in `test_backtest_metrics.py` — unrelated to improvements3; 131 new tests from algo_config suite)
 
 ```mermaid
 flowchart LR
@@ -2310,10 +2404,11 @@ flowchart LR
 ```bash
 cd backend
 source .venv/bin/activate
-PYTHONPATH=. pytest tests/ -v                           # all 627 tests
-PYTHONPATH=. pytest tests/test_improvements3.py -v     # improvements3 suite (102)
-PYTHONPATH=. pytest tests/test_stock_archetype.py -v   # single suite
-PYTHONPATH=. pytest tests/ -v --tb=short               # compact output
+PYTHONPATH=. pytest tests/ -v                               # all 768 tests
+PYTHONPATH=. pytest tests/test_algo_config*.py -v          # algo_config suite (131 tests)
+PYTHONPATH=. pytest tests/test_improvements3.py -v         # improvements3 suite (102)
+PYTHONPATH=. pytest tests/test_stock_archetype.py -v       # single suite
+PYTHONPATH=. pytest tests/ -v --tb=short                   # compact output
 ```
 
 **Regression gate:** All previously passing tests must still pass after each new story.

@@ -759,6 +759,7 @@ mindmap
       cachetools TTLCache
       tenacity retry
       pydantic v2
+      algo_config.json — centralized parameter store
     Frontend
       React 18 + TypeScript
       Vite 5
@@ -782,7 +783,52 @@ mindmap
 
 ---
 
-## 17. Known Limitations & Design Decisions
+## 17. Algorithm Configuration System
+
+All tunable algorithm parameters are stored in `backend/algo_config.json` and loaded via `app/algo_config.py`. No parameter values are hardcoded in service modules.
+
+```mermaid
+flowchart LR
+    subgraph Config["algo_config.json (12 sections)"]
+        TI["technical_indicators\nRSI, MACD, ATR, MA periods"]
+        TS["technical_scoring\nBonus/penalty thresholds"]
+        SM["scoring\nSignal card weights per horizon"]
+        DL["decision_logic\nGate values for BUY/AVOID labels"]
+        RM["risk_management\nATR multipliers, sizing factors"]
+        MR["market_regime\nVIX thresholds, regime confidences"]
+        SC["signal_cards\nPer-card scoring thresholds"]
+        VA["valuation\nArchetype-adjusted score thresholds"]
+        DC["data_completeness\nDeduction amounts, confidence caps"]
+        SA["stock_archetype\nClassification rules for 8 archetypes"]
+        EX["extension_detection\nSMA extension % thresholds"]
+        RS["regime_scoring\nScore multipliers per regime"]
+    end
+
+    subgraph Loader["app/algo_config.py"]
+        AC["AlgoConfig class\n─────────────\nfrom_file(path) — load JSON\nfrom_dict(data) — inline dict\nget_algo_config() — singleton\nreset_algo_config() — test util"]
+        ENV["ALGO_CONFIG_PATH env var\noverrides default path"]
+    end
+
+    subgraph Services["Analysis Services"]
+        SVC["Each service function accepts\nalgo_config: Optional[AlgoConfig] = None\n(falls back to singleton if None)"]
+    end
+
+    Config --> Loader
+    ENV --> Loader
+    Loader --> Services
+```
+
+**Key design properties:**
+- All service functions accept `algo_config` as an optional parameter — backward-compatible with callers that pass nothing
+- Default singleton loaded from `algo_config.json` on first call; override via `ALGO_CONFIG_PATH`
+- Tests inject custom configs via `AlgoConfig.from_dict({...})` for isolated parameter testing
+- `reset_algo_config()` clears the singleton between tests when `ALGO_CONFIG_PATH` changes
+
+See `backend/ALGO_PARAMS.md` for a full parameter catalog with descriptions, types, and sensitivity notes.
+
+---
+
+## 18. Known Limitations & Design Decisions
 
 | Decision | Rationale | Trade-off |
 |----------|-----------|-----------|

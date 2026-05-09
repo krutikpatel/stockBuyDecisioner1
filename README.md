@@ -78,7 +78,11 @@ Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
 ```
 .
 ├── backend/
+│   ├── algo_config.json            # Centralized algorithm parameters (all tunable values)
+│   ├── ALGO_PARAMS.md              # Parameter catalog with descriptions and effects
+│   ├── ALGO_PARAMS_VALUES.md       # Parameter values reference
 │   ├── app/
+│   │   ├── algo_config.py          # AlgoConfig loader — singleton + injection pattern
 │   │   ├── providers/          # Data fetching (yfinance wrappers)
 │   │   │   ├── market_data_provider.py
 │   │   │   ├── fundamental_provider.py
@@ -100,11 +104,21 @@ Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
 │   │   │   └── stock.py        # POST /api/stocks/analyze
 │   │   ├── config.py
 │   │   └── main.py
-│   ├── tests/                  # 125 unit tests
-│   │   ├── test_technical_analysis.py    # 38 tests
-│   │   ├── test_fundamental_analysis.py  # 24 tests
-│   │   ├── test_earnings_analysis.py     # 29 tests
-│   │   └── test_scoring_recommendation.py # 34 tests
+│   ├── tests/                  # 768 unit tests
+│   │   ├── test_technical_analysis.py          # 38 tests
+│   │   ├── test_fundamental_analysis.py        # 32 tests
+│   │   ├── test_earnings_analysis.py           # 29 tests
+│   │   ├── test_scoring_recommendation.py      # 53 tests
+│   │   ├── test_algo_config.py                 # AlgoConfig loader + all 12 sections
+│   │   ├── test_algo_config_technical.py       # Technical params via AlgoConfig
+│   │   ├── test_algo_config_signal_cards.py    # Signal card thresholds via AlgoConfig
+│   │   ├── test_algo_config_recommendation.py  # Decision logic via AlgoConfig
+│   │   ├── test_algo_config_risk_management.py # Risk sizing via AlgoConfig
+│   │   ├── test_algo_config_scoring.py         # Scoring weights via AlgoConfig
+│   │   ├── test_algo_config_market_regime.py   # Regime thresholds via AlgoConfig
+│   │   ├── test_algo_config_stock_archetype.py # Archetype thresholds via AlgoConfig
+│   │   ├── test_algo_config_data_completeness.py # Completeness deductions via AlgoConfig
+│   │   └── test_algo_config_valuation.py       # Valuation thresholds via AlgoConfig
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/
@@ -309,7 +323,7 @@ source .venv/bin/activate
 PYTHONPATH=. pytest tests/ -v
 ```
 
-**535 tests across 16 suites:**
+**768 tests across 27 suites:**
 
 | Test File | Tests | Coverage |
 |-----------|-------|---------|
@@ -330,6 +344,16 @@ PYTHONPATH=. pytest tests/ -v
 | `test_revised_scoring.py` | 19 | Signal card weights, new per-horizon decision labels |
 | `test_risk_report_updates.py` | 13 | Risk management, signal profile from cards, markdown report |
 | `test_backtest_metrics.py` | 14 | by_regime, by_archetype, portfolio simulation |
+| `test_improvements3.py` | 102 | New labels, gates, ATR sizing, regime thresholds |
+| `test_algo_config.py` | — | AlgoConfig loader: from_file, from_dict, env override, section validation |
+| `test_algo_config_technical.py` | — | Technical indicator params injected via AlgoConfig |
+| `test_algo_config_signal_cards.py` | — | Signal card thresholds injected via AlgoConfig |
+| `test_algo_config_recommendation.py` | — | Decision logic gates injected via AlgoConfig |
+| `test_algo_config_risk_management.py` | — | Position sizing and ATR multipliers via AlgoConfig |
+| `test_algo_config_scoring.py` | — | Scoring weights injected via AlgoConfig |
+| `test_algo_config_market_regime.py` | — | VIX thresholds and regime weights via AlgoConfig |
+| `test_algo_config_stock_archetype.py` | — | Archetype classification thresholds via AlgoConfig |
+| `test_algo_config_data_completeness.py` | — | Completeness deductions and caps via AlgoConfig |
 
 **Frontend tests (Vitest):**
 
@@ -432,3 +456,54 @@ The analysis and scoring pipeline is completely decoupled from the data source.
 | `CACHE_TTL_PRICE_SECONDS` | `900` | Price data cache TTL (15 min) |
 | `CACHE_TTL_FUNDAMENTALS_SECONDS` | `86400` | Fundamentals cache TTL (24 h) |
 | `LOG_LEVEL` | `INFO` | Python logging level |
+| `ALGO_CONFIG_PATH` | `backend/algo_config.json` | Path to algorithm parameters JSON. Override to load a custom config file |
+
+---
+
+## Customizing Algorithm Parameters
+
+All tunable algorithm parameters — RSI periods, scoring thresholds, decision gate values, position sizing multipliers, etc. — are defined in a single file:
+
+```
+backend/algo_config.json
+```
+
+This is a structured JSON with 12 top-level sections:
+
+| Section | What It Controls |
+|---------|-----------------|
+| `technical_indicators` | MA/EMA periods, RSI, MACD, ATR, ADX, Stochastic RSI, Bollinger, OBV/CMF/VWAP windows |
+| `technical_scoring` | Score bonus/penalty thresholds for each technical condition |
+| `extension_detection` | SMA20/50/200 extension percentage thresholds |
+| `stock_archetype` | Classification rules for the 8 stock archetypes |
+| `market_regime` | VIX thresholds, SPY/QQQ MA conditions, regime confidence levels |
+| `regime_scoring` | Score multipliers applied per market regime |
+| `scoring` | Signal card weights per horizon (short/medium/long) |
+| `signal_cards` | Internal scoring thresholds for each of the 11 signal cards |
+| `decision_logic` | Gate values for short/medium/long-term decision labels |
+| `data_completeness` | Completeness deductions and confidence cap thresholds |
+| `risk_management` | ATR multipliers, position sizing factors, entry/exit offsets |
+| `valuation` | Archetype-adjusted valuation score thresholds |
+
+### Usage patterns
+
+**Default (production):** Services auto-load `algo_config.json` via a module-level singleton:
+```python
+from app.algo_config import get_algo_config
+cfg = get_algo_config()
+period = cfg.technical_indicators["rsi_period"]
+```
+
+**Override for experiments:** Pass a custom config to any service function:
+```python
+from app.algo_config import AlgoConfig
+cfg = AlgoConfig.from_dict({"technical_indicators": {"rsi_period": 10}, ...})
+result = compute_technicals(df, spy_df, algo_config=cfg)
+```
+
+**Override via environment variable:**
+```bash
+ALGO_CONFIG_PATH=/path/to/custom.json python -m backtest.run_backtest ...
+```
+
+See `backend/ALGO_PARAMS.md` for a full parameter catalog with descriptions and sensitivity notes.
