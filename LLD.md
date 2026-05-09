@@ -99,6 +99,7 @@ usingGptStrategy/
 │   │   ├── test_signal_card_service.py      # Story 6 — 11 signal card scorers (52 tests)
 │   │   ├── test_revised_scoring.py          # Story 7 — signal card weights + new labels (19 tests)
 │   │   ├── test_risk_report_updates.py      # Story 8 — risk mgmt + markdown report (13 tests)
+│   │   ├── test_improvements3.py            # improvements3 — new labels, gates, ATR sizing (102 tests)
 │   │   └── test_backtest_metrics.py         # 14 tests
 │   ├── requirements.txt
 │   └── .env.example
@@ -412,11 +413,25 @@ flowchart TD
     CT --> EXT["detect_extension(price, ma_20, ma_50, rsi)\n→ (bool, ext_20%, ext_50%)"]
     CT --> SR["find_support_resistance(high, low, close)\n→ SupportResistanceLevels"]
     CT --> VOL["compute_volume_trend(volume) → str"]
-    CT --> RS["compute_relative_strength(stock_close, bench_close, period=63)\n→ float"]
+    CT --> RS["compute_relative_strength(stock_close, bench_close, period=63)\n→ float (ratio, kept for backward compat)"]
+    CT --> RSB["compute_rs_vs_benchmark(stock_close, bench_close, period) → float\nstock N-day return − benchmark N-day return (% difference)\nUsed for rs_vs_spy_20d, rs_vs_spy_63d, rs_vs_sector_20d, rs_vs_sector_63d"]
     CT --> SCR["score_technicals(...) → float 0–100"]
 ```
 
 **Note:** `compute_adx` is implemented manually using Wilder's EWM smoothing because `pandas_ta.adx()` calls `np.isnan()` on a pandas Series, which raises `TypeError` with pandas >= 3.0.
+
+### RS % Difference Fields (improvements3)
+
+Four new `TechnicalIndicators` fields computed in `compute_technicals()`:
+
+| Field | Formula | Period |
+|-------|---------|--------|
+| `rs_vs_spy_20d` | stock 20D return − SPY 20D return (%) | 20 bars |
+| `rs_vs_spy_63d` | stock 63D return − SPY 63D return (%) | 63 bars |
+| `rs_vs_sector_20d` | stock 20D return − sector ETF 20D return (%) | 20 bars |
+| `rs_vs_sector_63d` | stock 63D return − sector ETF 63D return (%) | 63 bars |
+
+Computed via `compute_rs_vs_benchmark(close, bench_close, period)`. Returns `None` when `spy_df` or `sector_df` is unavailable. The old `rs_vs_spy` (ratio) is preserved for backward compatibility.
 
 ### Story 2 — Volume & Accumulation Functions
 
@@ -1025,14 +1040,18 @@ Two decision pathways coexist:
 - **Signal-card pathway (primary):** When `signal_cards` is passed, uses `_decide_*_v2()` with new per-horizon labels.
 - **Legacy pathway (fallback/backtest):** When `signal_cards=None`, uses old `_decide_*()` with 14 labels.
 
-### New Per-Horizon Decision Labels (Story 7)
+### Per-Horizon Decision Labels
 
 ```python
 SHORT_TERM_DECISIONS = {
-    "BUY_NOW_MOMENTUM",                # score ≥ 75
-    "BUY_STARTER_STRONG_BUT_EXTENDED", # score 65–74
-    "WAIT_FOR_PULLBACK",               # score 50–64
-    "AVOID_BAD_CHART",                 # score < 50
+    "BUY_NOW_CONTINUATION",            # strict multi-gate (see below)
+    "BUY_STARTER_STRONG_BUT_EXTENDED", # score ≥ 65 + SMA20 +5–10%
+    "BUY_ON_PULLBACK",                 # near SMA50, RSI 40–58, vol dry-up
+    "WAIT_FOR_PULLBACK",               # chasing avoidance gate
+    "OVERSOLD_REBOUND_CANDIDATE",      # RSI 25–42 turning up
+    "TRUE_DOWNTREND_AVOID",            # death cross + weak RS (default bad-chart)
+    "BROKEN_SUPPORT_AVOID",            # heavy-vol break + weak close + RSI falling
+    "WATCHLIST",                       # score ≥ 50, no buy gates met
 }
 MEDIUM_TERM_DECISIONS = {
     "BUY_NOW",                         # score ≥ 75
@@ -1049,7 +1068,7 @@ LONG_TERM_DECISIONS = {
 }
 ```
 
-### Legacy 14 Decision Labels (preserved for backtest)
+### Legacy Decision Labels (preserved for backtest)
 
 ```python
 LEGACY_ALL_DECISIONS = {
@@ -1064,61 +1083,124 @@ LEGACY_ALL_DECISIONS = {
 ### Helper Functions
 
 ```python
+# ── Regime helpers ──────────────────────────────────────────────────────────
 def _is_bull_regime(regime) -> bool:
     # regime.regime in (BULL_RISK_ON, LIQUIDITY_RALLY)
 
 def _is_bear_regime(regime) -> bool:
     # regime.regime == BEAR_RISK_OFF
 
+# ── Chart/business condition helpers ────────────────────────────────────────
 def _chart_is_weak(technicals) -> bool:
-    # trend.label == "downtrend" AND rs_vs_spy < 0.8
-    # Both conditions required — weak RS alone is not enough
+    # trend.label == "downtrend" AND rs_vs_spy < 0.8 (both required)
 
 def _business_deteriorating(fundamentals, earnings) -> bool:
-    # revenue_growth_yoy < 0
-    # AND (operating_margin < -0.05 OR beat_rate < 0.40)
-    # Revenue decline + either margin compression OR earnings miss history
+    # revenue_growth_yoy < 0 AND (operating_margin < -0.05 OR beat_rate < 0.40)
+
+# ── Improvements3 helpers ───────────────────────────────────────────────────
+@dataclass
+class RegimeThresholds:
+    rsi_min: float = 55.0
+    rsi_max: float = 68.0
+    sma20_max: float = 5.0
+    rel_vol_min: float = 1.3
+
+def _get_regime_thresholds(regime: str) -> RegimeThresholds:
+    # LIQUIDITY_RALLY:       rsi_min=55, rsi_max=74, sma20_max=8,  rel_vol=1.2
+    # BULL_RISK_ON:          rsi_min=55, rsi_max=68, sma20_max=5,  rel_vol=1.3  (default)
+    # SIDEWAYS_CHOPPY:       rsi_min=40, rsi_max=58, sma20_max=3,  rel_vol=1.3
+    # BEAR_RISK_OFF:         rsi_min=999 (blocks all continuation)
+    # BULL_NARROW_LEADERSHIP: same as BULL_RISK_ON (+ RS leader required)
+
+def _is_pullback_to_sma50(technicals, archetype=None) -> bool:
+    # All 9 criteria must be met:
+    # sma50_relative ∈ [−3, +5] (or [−5, +8] for hyper-growth)
+    # sma20_relative ≤ +8
+    # RSI ∈ [40, 58] (or [38, 62] for hyper-growth)
+    # RSI slope ≥ −2 (stabilizing)
+    # perf_1m ≥ −12%
+    # perf_3m > 0
+    # volume_dryup_ratio < 0.85
+    # rs_vs_sector_20d ≥ −3% (or None → permissive)
+    # sma50_slope ≥ 0
+
+def _classify_bad_chart(technicals) -> str:
+    # Returns one of: OVERSOLD_REBOUND_CANDIDATE | BROKEN_SUPPORT_AVOID | TRUE_DOWNTREND_AVOID
+    # Priority order (first match wins):
+    # 1. OVERSOLD_REBOUND_CANDIDATE: RSI 25–42 + slope>0 + price improving + rel_vol≥1.2 + SMA200 not crashing
+    # 2. BROKEN_SUPPORT_AVOID:       vol_dryup_ratio>1.5 + close<open-1% + RSI<40 falling
+    # 3. TRUE_DOWNTREND_AVOID:       default fallback
+
+def _rs_continuation_ok(technicals) -> bool:
+    # True when: rs_vs_spy_20d>0 AND rs_vs_spy_63d>0 AND rs_vs_sector_20d>0
+    # Permissive (True) when all three RS fields are None (missing data)
+
+def _rs_leader(technicals) -> bool:
+    # True when: rs_vs_spy_20d≥3% AND rs_vs_spy_63d≥5% AND rs_vs_sector_20d≥2%
+    # False if any field is None
+
+def _rs_avoid(technicals) -> bool:
+    # True when: rs_vs_spy_20d<−5% OR rs_vs_spy_63d<−10% OR rs_vs_sector_20d<−5%
+
+def _perf_gates(technicals, context: str) -> bool:
+    # context="continuation": 1W ∈ [0,6] AND 1M ∈ [3,15]  (permissive if None)
+    # context="chasing":      1W > 10 OR 1M > 25  → True means chasing
+    # context="rebound":      1M < −10 AND (1W ≥ −1 OR RSI slope up)
+
+def _classify_52w_position(technicals) -> str:
+    # dist_from_52w_high buckets:
+    # ≥ −3%:   "near_52w_high"    (breakout candidate)
+    # ≥ −10%:  "healthy_pullback"
+    # ≥ −15%:  "extended_pullback"
+    # ≥ −35%:  "rebound_territory"
+    # < −35%:  "avoid_zone"
+    # None:    "unknown"
+    # Used as a modifier/context, not a hard gate
 ```
 
 ### Decision Logic by Horizon
 
 ```mermaid
 flowchart TD
-    subgraph ST["_decide_short_term(score, technicals, fundamentals, earnings, regime)"]
-        ST0["chart_is_weak AND score < 55\n→ AVOID_BAD_CHART"]
-        ST0b["business_deteriorating AND score < 55\n→ AVOID_BAD_BUSINESS"]
-        ST0c["within_30_days AND 55 ≤ score < 70\n→ BUY_AFTER_EARNINGS"]
-        ST1["score ≥ 80 AND NOT extended:\n  nearest_support exists → BUY_NOW\n  else → BUY_STARTER"]
-        ST2["extended AND score ≥ 65:\n  bull regime → BUY_STARTER_EXTENDED\n  else → BUY_ON_PULLBACK"]
-        ST3["70 ≤ score < 80 → BUY_STARTER"]
-        ST4["score ≥ 65 → BUY_ON_PULLBACK"]
-        ST5["score < 50:\n  bear + chart weak → AVOID_BAD_CHART\n  else → AVOID"]
-        ST6["50 ≤ score < 65 → WATCHLIST"]
+    subgraph ST["_decide_short_term_v2(score, technicals, regime, archetype)"]
+        ST_AVOID["_rs_avoid() → TRUE_DOWNTREND_AVOID / BROKEN_SUPPORT_AVOID"]
+        ST_BEAR["BEAR_RISK_OFF + score<55 → _classify_bad_chart()"]
+        ST_CHOP["SIDEWAYS_CHOPPY: check _is_pullback_to_sma50() FIRST → BUY_ON_PULLBACK"]
+        ST_CHASE["_perf_gates('chasing') → WAIT_FOR_PULLBACK"]
+        ST_CONT["All gates pass:\n  score≥75 + RSI in regime range + SMA20≤max\n  + SMA50≤12% + slopes≥0 + RS ok + perf ok + rel_vol≥min\n  → BUY_NOW_CONTINUATION"]
+        ST_EXT["SMA20 +5–10% → BUY_STARTER_STRONG_BUT_EXTENDED"]
+        ST_PULL["_is_pullback_to_sma50() → BUY_ON_PULLBACK"]
+        ST_REB["_perf_gates('rebound') + RSI 25–42 turning up → OVERSOLD_REBOUND_CANDIDATE"]
+        ST_WATCH["score≥50 → WATCHLIST"]
+        ST_BAD["score<50 → _classify_bad_chart()"]
     end
 
-    subgraph MT["_decide_medium_term(score, technicals, earnings, fundamentals, regime)"]
+    subgraph MT["_decide_medium_term_v2(score, technicals, fundamentals, earnings, regime)"]
         MT0["business_deteriorating AND score < 65\n→ AVOID_BAD_BUSINESS"]
-        MT0b["chart_is_weak AND score < 55\n→ AVOID_BAD_CHART"]
+        MT0b["chart_is_weak AND score < 55\n→ TRUE_DOWNTREND_AVOID"]
         MT1["score ≥ 82 AND NOT extended → BUY_NOW"]
-        MT2["72 ≤ score < 82 OR (≥ 82 AND extended) → BUY_STARTER"]
+        MT2["72 ≤ score < 82 OR (≥82 AND extended) → BUY_STARTER"]
         MT3["score ≥ 68 AND extended:\n  bull → BUY_STARTER_EXTENDED\n  else → BUY_ON_PULLBACK"]
         MT4["score ≥ 68 → BUY_ON_PULLBACK"]
-        MT5["55 ≤ score < 68 → WATCHLIST"]
-        MT6["score < 55 → AVOID"]
+        MT5["55 ≤ score < 68 → WATCHLIST_NEEDS_CONFIRMATION"]
+        MT6["score < 55 → AVOID_BAD_BUSINESS"]
     end
 
-    subgraph LT["_decide_long_term(score, technicals, fundamentals, earnings, regime)"]
+    subgraph LT["_decide_long_term_v2(score, technicals, fundamentals, earnings, regime)"]
         LT0["business_deteriorating AND score < 65\n→ AVOID_BAD_BUSINESS"]
-        LT0b["chart_is_weak AND score < 60\n→ AVOID_BAD_CHART"]
-        LT1["score ≥ 85 AND NOT extended → BUY_NOW"]
-        LT2["75 ≤ score < 85 → BUY_STARTER"]
-        LT3["score ≥ 75 AND extended → BUY_ON_BREAKOUT"]
-        LT4["60 ≤ score < 75 → WATCHLIST"]
-        LT5["score < 60 → AVOID"]
+        LT0b["chart_is_weak AND score < 60\n→ TRUE_DOWNTREND_AVOID"]
+        LT1["score ≥ 85 AND NOT extended → BUY_NOW_LONG_TERM"]
+        LT2["75 ≤ score < 85 → ACCUMULATE_ON_WEAKNESS"]
+        LT3["45 ≤ score < 75 → WATCHLIST_VALUATION_TOO_RICH"]
+        LT4["score < 45 → AVOID_LONG_TERM"]
     end
 ```
 
-**Key regime rule:** In BULL_RISK_ON, valuation-driven low scores alone cannot trigger AVOID. Expensive + strong chart → `BUY_STARTER_EXTENDED`.
+**Key design principles:**
+- Short-term gates are **all-or-nothing**: every gate must pass independently; partial matches route to the next-best label.
+- RS fields use **% difference** (stock return − benchmark return), not ratio — permissive when None.
+- SIDEWAYS_CHOPPY checks `_is_pullback_to_sma50()` **before** continuation gates (prefer pullback entries in choppy markets).
+- ATR only affects **sizing and stop placement**, never the signal score.
 
 ### `build_recommendations` Signature
 
@@ -1315,7 +1397,7 @@ def score_all_cards(
 |--------|-----------|---------------|
 | `score_momentum` | perf_1w/1m/3m, MACD hist, RSI | perf>0 +pts, MACD>0 +pts, RSI 50–70 +pts |
 | `score_trend` | sma20/50/200 relatives, slopes, ADX | above all MAs +pts, slopes positive +pts, ADX>25 +pts |
-| `score_entry_timing` | RSI, StochRSI, ema8/21 relatives, VWAP dev | RSI 50–70 ideal, not extended +pts, VWAP support +pts |
+| `score_entry_timing` | RSI, StochRSI, ema8/21 relatives, VWAP dev | RSI 55–68 continuation ideal (+25), RSI 40–55 pullback (+20), RSI 25–42 rebound (+15), RSI 68–76 extended (+15), RSI>76 overbought (+5), not extended +pts, VWAP support +pts |
 | `score_volume_accumulation` | obv_trend, ad_trend, CMF, breakout vol | OBV rising +pts, CMF>0 +pts, rel vol>1.5 +pts |
 | `score_volatility_risk` | atr_percent, weekly/monthly vol, drawdown 3M/1Y | lower drawdown +pts, ATR% manageable +pts |
 | `score_relative_strength` | rs_vs_spy, rs_vs_qqq, rs_vs_sector, percentile ranks | outperformance +pts, top-quartile percentile +pts |
@@ -1324,6 +1406,21 @@ def score_all_cards(
 | `score_quality` | gross/op/net margin, ROE, ROIC, ROA, current ratio, quick ratio | margins positive +pts, ROIC>15% +pts |
 | `score_ownership` | insider ownership+txn, inst ownership+txn, short float | insider buying +pts, inst accumulation +pts |
 | `score_catalyst` | news_score, analyst rec, target dist, earnings proximity | positive news +pts, upgrades +pts, target upside +pts |
+
+### Entry Timing RSI Split (improvements3)
+
+`score_entry_timing()` uses context-aware RSI scoring (max 25 pts for RSI component):
+
+| RSI Range | Context | Points |
+|-----------|---------|--------|
+| 55–68 | Continuation ideal | +25 |
+| 40–55 | Pullback sweet spot | +20 |
+| 25–42 | Rebound candidate | +15 |
+| 68–76 | Extended but buyable | +15 |
+| > 76 | Overbought, avoid | +5 |
+| < 25 | Extreme oversold | +3 |
+
+Note: RSI 25–42 and 40–55 overlap at 40–42; `25–42` is checked before `40–55` so RSI=41 → rebound (+15).
 
 ### Score Formula Pattern
 
@@ -1392,14 +1489,34 @@ flowchart TD
     DEC -->|"WATCHLIST\nWATCHLIST_NEEDS_CATALYST\nHOLD_EXISTING_DO_NOT_ADD\nAVOID_*"| WL["preferred_entry = nearest_support\n  (fallback: price × 0.90)\nstarter_entry = None\nbreakout_entry = None\navoid_above = None"]
 ```
 
+### ATR-Based Position Sizing (improvements3)
+
+```python
+def _atr_size_multiplier(atr_pct: float) -> float:
+    # ATR% = ATR14 / price × 100
+    # < 4%   → 1.00  (full size — low/normal volatility)
+    # 4–7%   → 0.55  (starter only — high volatility)
+    # > 7%   → 0.30  (small/speculative — extreme volatility)
+
+def _compute_stop_atr(entry: float, atr: float, horizon: str) -> float:
+    # short_term  → entry − 1.5 × ATR
+    # medium_term → entry − 2.0 × ATR
+    # long_term   → entry − 2.5 × ATR
+    # (unknown horizon defaults to 2.0×)
+```
+
+ATR multiplier is applied **after** earnings halving. ATR only affects sizing and stop placement — never the signal score.
+
 ### Stop-Loss & Target Logic
 
 ```
-Stop-loss:
-  nearest_support exists → stop = nearest_support × 0.99
-                           invalidation = nearest_support × 0.98
-  no support             → stop = price × 0.92
-                           invalidation = price × 0.90
+Stop-loss (priority order):
+  ATR available (atr > 0) → stop = entry − 1.5 × ATR (short_term default)
+                             invalidation = stop − 0.5 × ATR
+  nearest_support exists  → stop = nearest_support × 0.99
+                             invalidation = nearest_support × 0.98
+  no ATR, no support      → stop = price × 0.92
+                             invalidation = price × 0.90
 
 Targets:
   first_target  = resistances[0]  (fallback: price × 1.10)
@@ -1628,6 +1745,13 @@ classDiagram
         +float fundamental_score
         +str archetype
         +float archetype_confidence
+    }
+    class TechnicalIndicatorsRS {
+        +Optional~float~ rs_vs_spy_20d    "20D excess return vs SPY (%)"
+        +Optional~float~ rs_vs_spy_63d    "63D excess return vs SPY (%)"
+        +Optional~float~ rs_vs_sector_20d "20D excess return vs sector ETF (%)"
+        +Optional~float~ rs_vs_sector_63d "63D excess return vs sector ETF (%)"
+        Note: % difference (stock ret − bench ret), not ratio
     }
     class ValuationData {
         +Optional~float~ trailing_pe, forward_pe, peg_ratio
@@ -2029,7 +2153,7 @@ flowchart TD
 
 ## 23. Test Coverage Map
 
-**Total: 241 tests across 9 test files**
+**Total: 627 tests across 15 test files** (10 pre-existing failures in `test_backtest_metrics.py` — unrelated to improvements3)
 
 ```mermaid
 flowchart LR
@@ -2167,13 +2291,29 @@ flowchart LR
     end
 ```
 
+    subgraph IMP3["test_improvements3.py (102 tests — improvements3)"]
+        IMP3_1["TestNewTechnicalIndicatorFields: rs_vs_spy_20d/63d, rs_vs_sector_20d/63d fields exist + computed"]
+        IMP3_2["TestNewDecisionLabels: BUY_NOW_CONTINUATION, OVERSOLD_REBOUND_CANDIDATE, TRUE_DOWNTREND_AVOID, BROKEN_SUPPORT_AVOID in label sets"]
+        IMP3_3["TestIsPullbackToSma50: all 9 boundary conditions (SMA50 dist, RSI, vol dry-up, RS vs sector, slope)"]
+        IMP3_4["TestClassifyBadChart: rebound vs support-break vs downtrend routing"]
+        IMP3_5["TestBuyNowContinuation: strict gate tests (RSI 54 blocked, 55 passes; chasing gates; SIDEWAYS priority)"]
+        IMP3_6["TestRsHelpers: _rs_continuation_ok, _rs_leader, _rs_avoid boundary conditions"]
+        IMP3_7["TestRegimeThresholds: per-regime RSI/SMA/vol values; BEAR blocks all"]
+        IMP3_8["TestAtrSizing: ATR% 1.5→1.0x, 5→0.55x, 8→0.30x; ATR stops per horizon"]
+        IMP3_9["TestContextVolumeScoring: breakout vol, pullback dry-up, distribution penalty"]
+        IMP3_10["TestPerfGates: continuation gate (1W>6 blocked), chasing gate, rebound gate"]
+        IMP3_11["TestClassify52WPosition: all 5 buckets + unknown"]
+        IMP3_12["TestEntryTimingRsiSplit: RSI 60→+25, RSI 72→+15, RSI 33→+15, RSI 80→+5"]
+    end
+
 **Running tests:**
 ```bash
 cd backend
 source .venv/bin/activate
-PYTHONPATH=. pytest tests/ -v                    # all 241 tests
+PYTHONPATH=. pytest tests/ -v                           # all 627 tests
+PYTHONPATH=. pytest tests/test_improvements3.py -v     # improvements3 suite (102)
 PYTHONPATH=. pytest tests/test_stock_archetype.py -v   # single suite
-PYTHONPATH=. pytest tests/ -v --tb=short         # compact output
+PYTHONPATH=. pytest tests/ -v --tb=short               # compact output
 ```
 
 **Regression gate:** All previously passing tests must still pass after each new story.

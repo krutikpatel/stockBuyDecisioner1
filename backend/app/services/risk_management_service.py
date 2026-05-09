@@ -13,6 +13,39 @@ _POSITION_SIZING = {
 }
 
 
+def _atr_size_multiplier(atr_pct: float) -> float:
+    """Return a position-size multiplier based on ATR% (ATR / price * 100).
+
+    ATR% < 2  → 1.00 (full size — low volatility)
+    ATR% 2–4  → 1.00 (full size — normal volatility)
+    ATR% 4–7  → 0.55 (starter only — high volatility)
+    ATR% > 7  → 0.30 (small/speculative — extreme volatility)
+
+    Note: ATR does NOT reduce the signal score; only affects sizing.
+    """
+    if atr_pct < 4.0:
+        return 1.0
+    if atr_pct <= 7.0:
+        return 0.55
+    return 0.30
+
+
+def _compute_stop_atr(entry: float, atr: float, horizon: str) -> float:
+    """Compute ATR-based stop loss.
+
+    short_term  → entry - 1.5 × ATR
+    medium_term → entry - 2.0 × ATR
+    long_term   → entry - 2.5 × ATR
+    """
+    multipliers = {
+        "short_term": 1.5,
+        "medium_term": 2.0,
+        "long_term": 2.5,
+    }
+    mult = multipliers.get(horizon, 2.0)
+    return round(entry - mult * atr, 2)
+
+
 def compute_risk_management(
     price: float,
     technicals: TechnicalIndicators,
@@ -53,8 +86,15 @@ def compute_risk_management(
         avoid_above = None
 
     # Exit plan
-    # Stop-loss: just below nearest support, or fixed % below entry
-    if nearest_support:
+    # Stop-loss: ATR-based when available, otherwise support or fixed %
+    atr_val = technicals.atr
+    entry_ref_for_stop = preferred_entry or price
+    horizon_guess = "short_term"  # default (refined by caller if needed)
+
+    if atr_val is not None and atr_val > 0:
+        stop_loss = _compute_stop_atr(entry_ref_for_stop, atr_val, horizon_guess)
+        invalidation = round(stop_loss - atr_val * 0.5, 2)
+    elif nearest_support:
         stop_loss = round(nearest_support * 0.99, 2)
         invalidation = round(nearest_support * 0.98, 2)
     else:
@@ -87,6 +127,14 @@ def compute_risk_management(
     if within_30_days_earnings:
         starter_pct = int(starter_pct * 0.5)
         max_alloc = round(max_alloc * 0.7, 1)
+
+    # ATR-based position size adjustment
+    atr_pct = technicals.atr_percent
+    if atr_pct is not None:
+        atr_mult = _atr_size_multiplier(atr_pct)
+        if atr_mult < 1.0:
+            starter_pct = max(1, int(starter_pct * atr_mult))
+            max_alloc = round(max_alloc * atr_mult, 1)
 
     return (
         EntryPlan(

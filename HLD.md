@@ -13,7 +13,7 @@ C4Context
   Person(user, "Investor", "Enters a ticker and risk profile, reviews structured recommendation")
 
   System(frontend, "React Frontend", "Dashboard UI — ticker input, 11 signal cards, recommendation cards, signal profile, regime/archetype badges, performance table, ownership/volume panels, charts, markdown report")
-  System(backend, "FastAPI Backend", "Analysis engine — archetype classification, regime detection, growth-adjusted valuation, regime-aware scoring, 14-label decision logic, risk management")
+  System(backend, "FastAPI Backend", "Analysis engine — archetype classification, regime detection, growth-adjusted valuation, regime-aware scoring, multi-gate decision logic, ATR-based risk management")
 
   System_Ext(yfinance, "Yahoo Finance (yfinance)", "Price/OHLCV, fundamentals, earnings, options, news, VIX, QQQ")
   System_Ext(openai, "OpenAI API", "GPT-4o-mini — news headline sentiment classification")
@@ -266,16 +266,32 @@ flowchart TB
 
 ## 6. Decision Logic
 
-Decision labels are now **horizon-specific**, derived from signal-card-weighted composite scores.
+Decision labels are **horizon-specific**, derived from signal-card-weighted composite scores plus multi-gate technical filters. Short-term decisions use the strictest gate logic; medium and long-term use simpler score-based routing.
 
-### Short-Term Labels
+### Short-Term Labels (multi-gate, regime-aware)
 
-| Label | Trigger |
-|-------|---------|
-| `BUY_NOW_MOMENTUM` | Score ≥ 75 |
-| `BUY_STARTER_STRONG_BUT_EXTENDED` | Score 65–74 |
-| `WAIT_FOR_PULLBACK` | Score 50–64 |
-| `AVOID_BAD_CHART` | Score < 50 |
+Short-term routing uses `_decide_short_term_v2()` with priority-ordered gates:
+
+| Label | Routing Condition |
+|-------|------------------|
+| `BUY_NOW_CONTINUATION` | Score ≥ 75 **AND** RSI 55–68 (regime-adj) **AND** SMA20 0–5% **AND** SMA50 0–12% **AND** RS vs SPY/sector all positive **AND** 1W 0–6% **AND** 1M 3–15% **AND** rel-vol ≥ 1.3 |
+| `BUY_STARTER_STRONG_BUT_EXTENDED` | Score ≥ 65 but SMA20 +5–10% (mildly extended) |
+| `BUY_ON_PULLBACK` | Near SMA50 (−3% to +5%), RSI 40–58, vol dry-up < 0.85, RS vs sector ≥ −3% |
+| `WAIT_FOR_PULLBACK` | Chasing avoidance: SMA20 > +10% **or** 1W > +10% **or** 1M > +25% |
+| `OVERSOLD_REBOUND_CANDIDATE` | RSI 25–42 + turning up + improving price action + rel-vol ≥ 1.2 |
+| `TRUE_DOWNTREND_AVOID` | Confirmed death cross + SMA200 falling + RS weak (default bad-chart fallback) |
+| `BROKEN_SUPPORT_AVOID` | Heavy-volume break (dry-up > 1.5) + weak close + RSI falling |
+| `WATCHLIST` | Score ≥ 50 but no buy gates met |
+
+**Regime adjustments** (via `RegimeThresholds`):
+
+| Regime | RSI range | SMA20 max | Rel-vol min | Notes |
+|--------|-----------|-----------|-------------|-------|
+| LIQUIDITY_RALLY | 55–74 | 8% | 1.2 | Relaxed — risk-on environment |
+| BULL_RISK_ON | 55–68 | 5% | 1.3 | Standard thresholds |
+| SIDEWAYS_CHOPPY | 40–58 | 3% | 1.3 | BUY_ON_PULLBACK checked first |
+| BEAR_RISK_OFF | blocks all continuation | — | — | Only rebound/pullback allowed |
+| BULL_NARROW_LEADERSHIP | 55–68 | 5% | 1.3 | Requires RS leader status |
 
 ### Medium-Term Labels
 
@@ -345,16 +361,21 @@ flowchart LR
     subgraph Inputs
         PR["Current Price"]
         SR["Support / Resistance\nLevels"]
-        DEC["Decision (14 labels)"]
+        DEC["Decision label"]
         RP["Risk Profile\nconservative / moderate / aggressive"]
         EW["Earnings within 30d?"]
+        ATR["ATR (Average True Range)\n+ ATR%"]
     end
 
     subgraph RiskMgmt["RiskManagementService"]
         EP["EntryPlan\n─────────────\npreferred_entry\nstarter_entry\nbreakout_entry\navoid_above"]
-        EXP["ExitPlan\n─────────────\nstop_loss\ninvalidation_level\nfirst_target\nsecond_target"]
+        EXP["ExitPlan\n─────────────\nstop_loss (ATR-based when available)\ninvalidation_level\nfirst_target\nsecond_target"]
         RR["RiskReward\n─────────────\ndownside %\nupside %\nratio (≥ 2.0 for BUY)"]
-        PS["PositionSizing\n─────────────\nstarter % of full\nmax portfolio %\nConservative: 15% / 3%\nModerate:     25% / 5%\nAggressive:   40% / 8%\nEarnings halving applies"]
+        PS["PositionSizing\n─────────────\nstarter % of full\nmax portfolio %\nConservative: 15% / 3%\nModerate:     25% / 5%\nAggressive:   40% / 8%\nEarnings halving applies\nATR% multiplier: <4%=1.0x, 4–7%=0.55x, >7%=0.30x"]
+    end
+
+    subgraph ATRStops["ATR-Based Stops"]
+        ATRST["Short-term:  entry − 1.5 × ATR\nMedium-term: entry − 2.0 × ATR\nLong-term:   entry − 2.5 × ATR\n(falls back to support-based when ATR unavailable)"]
     end
 
     Inputs --> RiskMgmt
@@ -362,6 +383,8 @@ flowchart LR
     RiskMgmt --> EXP
     RiskMgmt --> RR
     RiskMgmt --> PS
+    ATR --> ATRStops
+    ATRStops --> EXP
 ```
 
 ---

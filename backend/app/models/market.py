@@ -158,6 +158,12 @@ class TechnicalIndicators(BaseModel):
     rs_vs_qqq: Optional[float] = None
     rs_vs_sector: Optional[float] = None
 
+    # --- RS % difference fields (stock return - benchmark return, in %) ---
+    rs_vs_spy_20d: Optional[float] = None    # 20D excess return vs SPY
+    rs_vs_spy_63d: Optional[float] = None    # 63D excess return vs SPY
+    rs_vs_sector_20d: Optional[float] = None # 20D excess return vs sector ETF
+    rs_vs_sector_63d: Optional[float] = None # 63D excess return vs sector ETF
+
     # --- Return percentile ranks (Story 3) ---
     return_pct_rank_20d: Optional[float] = None
     return_pct_rank_63d: Optional[float] = None

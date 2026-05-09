@@ -233,24 +233,34 @@ def score_entry_timing(ti: TechnicalIndicators) -> SignalCard:
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # RSI: 45–65 is ideal entry zone
+    # RSI: context-aware split (Improvements 3)
+    # 55–68  → continuation ideal  (+25)
+    # 40–55  → pullback sweet spot  (+20)
+    # 25–42  → rebound candidate    (+15)
+    # 68–76  → extended but buyable (+15)
+    # > 76   → overbought, avoid    (+5)
+    # < 25   → extreme oversold     (+3)
     rsi = ti.rsi_14
     if rsi is not None:
         total += 25
-        if 45 <= rsi <= 65:
+        if 55.0 <= rsi <= 68.0:
             raw += 25
-            pos.append(f"RSI {rsi:.0f} — ideal entry zone (45–65)")
-        elif 35 <= rsi < 45:
-            raw += 18
-            pos.append(f"RSI {rsi:.0f} — mild pullback, decent entry")
-        elif 65 < rsi <= 70:
+            pos.append(f"RSI {rsi:.0f} — continuation entry zone (55–68)")
+        elif 40.0 <= rsi < 55.0:
+            raw += 20
+            pos.append(f"RSI {rsi:.0f} — pullback sweet spot (40–55)")
+        elif 25.0 <= rsi < 42.0:
             raw += 15
-        elif rsi > 70:
+            pos.append(f"RSI {rsi:.0f} — rebound candidate zone (25–42)")
+        elif 68.0 < rsi <= 76.0:
+            raw += 15
+            pos.append(f"RSI {rsi:.0f} — extended but buyable (68–76)")
+        elif rsi > 76.0:
             raw += 5
-            neg.append(f"RSI {rsi:.0f} — overbought, extended entry")
+            neg.append(f"RSI {rsi:.0f} — overbought, avoid new entries")
         else:
-            raw += 5
-            neg.append(f"RSI {rsi:.0f} — oversold / momentum breakdown")
+            raw += 3
+            neg.append(f"RSI {rsi:.0f} — extreme oversold, high risk")
     else:
         warn.append("RSI unavailable")
 

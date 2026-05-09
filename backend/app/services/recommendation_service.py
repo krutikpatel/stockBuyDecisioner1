@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 from app.models.market import MarketRegime, MarketRegimeAssessment, TechnicalIndicators
@@ -13,30 +14,65 @@ from app.services.data_completeness_service import (
     AVOID_LOW_CONFIDENCE_THRESHOLD,
 )
 
+@dataclass
+class RegimeThresholds:
+    """Per-regime entry thresholds for short-term decisions."""
+    rsi_min: float = 55.0
+    rsi_max: float = 68.0
+    sma20_max: float = 5.0       # max % above SMA20 for BUY_NOW_CONTINUATION
+    rel_vol_min: float = 1.3     # minimum relative volume
+
+
+def _get_regime_thresholds(regime: str) -> RegimeThresholds:
+    """Return appropriate entry thresholds for the given market regime."""
+    if regime == MarketRegime.LIQUIDITY_RALLY:
+        return RegimeThresholds(rsi_min=55.0, rsi_max=74.0, sma20_max=8.0, rel_vol_min=1.2)
+    if regime == MarketRegime.BULL_RISK_ON:
+        return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
+    if regime == MarketRegime.SIDEWAYS_CHOPPY:
+        return RegimeThresholds(rsi_min=40.0, rsi_max=58.0, sma20_max=3.0, rel_vol_min=1.3)
+    if regime == MarketRegime.BEAR_RISK_OFF:
+        # In bear regime, BUY_NOW_CONTINUATION is never allowed
+        return RegimeThresholds(rsi_min=999.0, rsi_max=-999.0, sma20_max=0.0, rel_vol_min=999.0)
+    if regime == MarketRegime.BULL_NARROW_LEADERSHIP:
+        return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
+    # SECTOR_ROTATION or unknown → standard
+    return RegimeThresholds(rsi_min=55.0, rsi_max=68.0, sma20_max=5.0, rel_vol_min=1.3)
+
+
 # All valid decision labels (US-005 expansion)
 ALL_DECISIONS = {
     "BUY_NOW",
     "BUY_STARTER",
-    "BUY_STARTER_EXTENDED",   # strong but extended; smaller position
-    "BUY_ON_PULLBACK",        # wait for MA retest
-    "BUY_ON_BREAKOUT",        # consolidating near resistance
-    "BUY_AFTER_EARNINGS",     # wait for earnings confirmation
+    "BUY_STARTER_EXTENDED",          # strong but extended; smaller position
+    "BUY_ON_PULLBACK",               # wait for MA retest
+    "BUY_ON_BREAKOUT",               # consolidating near resistance
+    "BUY_AFTER_EARNINGS",            # wait for earnings confirmation
     "WATCHLIST",
     "WATCHLIST_NEEDS_CATALYST",
     "HOLD_EXISTING_DO_NOT_ADD",
-    "AVOID",                  # generic (backward compat)
-    "AVOID_BAD_BUSINESS",     # deteriorating fundamentals
-    "AVOID_BAD_CHART",        # price below 50DMA + 200DMA, weak RS
-    "AVOID_BAD_RISK_REWARD",  # risk/reward < 1:1
-    "AVOID_LOW_CONFIDENCE",   # missing critical data
+    "AVOID",                         # generic (backward compat)
+    "AVOID_BAD_BUSINESS",            # deteriorating fundamentals
+    "AVOID_BAD_CHART",               # legacy: price below 50DMA + 200DMA, weak RS
+    "AVOID_BAD_RISK_REWARD",         # risk/reward < 1:1
+    "AVOID_LOW_CONFIDENCE",          # missing critical data
+    # Improvements 3: new precise labels
+    "BUY_NOW_CONTINUATION",          # tightened momentum continuation buy
+    "OVERSOLD_REBOUND_CANDIDATE",    # RSI 25-42 turning up, rebound setup
+    "TRUE_DOWNTREND_AVOID",          # confirmed downtrend with all criteria
+    "BROKEN_SUPPORT_AVOID",          # heavy-vol break of key support
 }
 
-# Story 7: New per-horizon decision labels
+# Story 7 + Improvements 3: per-horizon decision labels
 SHORT_TERM_DECISIONS = {
-    "BUY_NOW_MOMENTUM",
+    "BUY_NOW_CONTINUATION",          # replaces BUY_NOW_MOMENTUM (tightened)
     "BUY_STARTER_STRONG_BUT_EXTENDED",
     "WAIT_FOR_PULLBACK",
-    "AVOID_BAD_CHART",
+    "BUY_ON_PULLBACK",
+    "OVERSOLD_REBOUND_CANDIDATE",
+    "TRUE_DOWNTREND_AVOID",
+    "BROKEN_SUPPORT_AVOID",
+    "AVOID_BAD_CHART",               # kept for backward compat fallback
     "AVOID_LOW_CONFIDENCE",
     "WATCHLIST",
 }
@@ -104,6 +140,228 @@ def _business_deteriorating(fundamentals: FundamentalData, earnings: EarningsDat
     )
     poor_beats = earnings.beat_rate is not None and earnings.beat_rate < 0.40
     return rev_declining and (op_margin_negative or poor_beats)
+
+
+def _classify_52w_position(technicals: TechnicalIndicators) -> str:
+    """Return a bucket label based on distance from the 52-week high.
+
+    Buckets (dist_from_52w_high is negative, e.g. -5 means 5% below high):
+    - "near_52w_high"      : 0 to -3%   (breakout candidate territory)
+    - "healthy_pullback"   : -3% to -10%
+    - "extended_pullback"  : -10% to -15%
+    - "rebound_territory"  : -15% to -35%
+    - "avoid_zone"         : < -35%
+    - "unknown"            : field is None
+    """
+    dist = technicals.dist_from_52w_high
+    if dist is None:
+        return "unknown"
+    # dist is negative (price below 52W high)
+    if dist >= -3.0:
+        return "near_52w_high"
+    if dist >= -10.0:
+        return "healthy_pullback"
+    if dist >= -15.0:
+        return "extended_pullback"
+    if dist >= -35.0:
+        return "rebound_territory"
+    return "avoid_zone"
+
+
+def _classify_bad_chart(technicals: TechnicalIndicators) -> str:
+    """Split old AVOID_BAD_CHART into three precise sub-labels.
+
+    Priority order:
+    1. OVERSOLD_REBOUND_CANDIDATE — RSI 25-42 turning up with improving price action
+    2. BROKEN_SUPPORT_AVOID      — heavy-volume break of SMA50 with weak close
+    3. TRUE_DOWNTREND_AVOID      — full confirmed downtrend (default)
+    """
+    t = technicals
+    rsi = t.rsi_14
+    rsi_slope = t.rsi_slope
+
+    # --- Check OVERSOLD_REBOUND_CANDIDATE first (most actionable) ---
+    rsi_in_rebound_range = rsi is not None and 25.0 <= rsi <= 42.0
+    rsi_turning_up = rsi_slope is not None and rsi_slope > 0
+    # Price action improving: perf_1w > 0 or green close
+    perf_5d_ok = (t.perf_1w is not None and t.perf_1w >= 0) or (
+        t.change_from_open_percent is not None and t.change_from_open_percent > 0
+    )
+    rel_vol_ok = t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= 1.2
+    # Not in active crash (SMA200 not steeply falling)
+    sma200_not_crashing = t.sma200_slope is None or t.sma200_slope >= -0.5
+
+    if rsi_in_rebound_range and rsi_turning_up and perf_5d_ok and rel_vol_ok and sma200_not_crashing:
+        return "OVERSOLD_REBOUND_CANDIDATE"
+
+    # --- Check BROKEN_SUPPORT_AVOID ---
+    heavy_vol_break = t.volume_dryup_ratio is not None and t.volume_dryup_ratio > 1.5
+    weak_close = t.change_from_open_percent is not None and t.change_from_open_percent < -1.0
+    rsi_falling = rsi is not None and rsi < 40.0 and (rsi_slope is None or rsi_slope < 0)
+
+    if heavy_vol_break and weak_close and rsi_falling:
+        return "BROKEN_SUPPORT_AVOID"
+
+    # --- Default: TRUE_DOWNTREND_AVOID ---
+    return "TRUE_DOWNTREND_AVOID"
+
+
+def _rs_continuation_ok(technicals: TechnicalIndicators) -> bool:
+    """Return True when RS vs SPY and sector is positive for all periods (continuation buy).
+
+    If all RS fields are None (data unavailable), returns True (permissive — don't
+    block signal when we cannot measure it).  If any available field is negative, block.
+    """
+    t = technicals
+    spy20 = t.rs_vs_spy_20d
+    spy63 = t.rs_vs_spy_63d
+    sector20 = t.rs_vs_sector_20d
+    # All None → no RS data available, don't block
+    if spy20 is None and spy63 is None and sector20 is None:
+        return True
+    # Any available field negative → block
+    if spy20 is not None and spy20 <= 0:
+        return False
+    if spy63 is not None and spy63 <= 0:
+        return False
+    if sector20 is not None and sector20 <= 0:
+        return False
+    return True
+
+
+def _rs_leader(technicals: TechnicalIndicators) -> bool:
+    """Return True when stock is clearly outperforming (leader) across all RS dimensions."""
+    t = technicals
+    spy20 = t.rs_vs_spy_20d
+    spy63 = t.rs_vs_spy_63d
+    sector20 = t.rs_vs_sector_20d
+    if spy20 is None or spy63 is None or sector20 is None:
+        return False
+    return spy20 >= 3.0 and spy63 >= 5.0 and sector20 >= 2.0
+
+
+def _rs_avoid(technicals: TechnicalIndicators) -> bool:
+    """Return True when RS is weak enough to warrant avoidance."""
+    t = technicals
+    spy20 = t.rs_vs_spy_20d
+    spy63 = t.rs_vs_spy_63d
+    sector20 = t.rs_vs_sector_20d
+    if spy20 is not None and spy20 < -5.0:
+        return True
+    if spy63 is not None and spy63 < -10.0:
+        return True
+    if sector20 is not None and sector20 < -5.0:
+        return True
+    return False
+
+
+def _perf_gates(technicals: TechnicalIndicators, context: str) -> bool:
+    """Gate performance-based filters.
+
+    context == "continuation": returns True if perf is in ideal continuation range
+    context == "chasing":      returns True if performance is too hot (chasing signal)
+    context == "rebound":      returns True if stock has been weak enough for rebound setup
+    """
+    t = technicals
+    p1w = t.perf_1w
+    p1m = t.perf_1m
+    rsi_slope = t.rsi_slope
+
+    if context == "continuation":
+        if p1w is None or p1m is None:
+            return True  # insufficient data → don't block
+        return 0.0 <= p1w <= 6.0 and 3.0 <= p1m <= 15.0
+
+    if context == "chasing":
+        if p1w is not None and p1w > 10.0:
+            return True
+        if p1m is not None and p1m > 25.0:
+            return True
+        return False
+
+    if context == "rebound":
+        if p1m is None:
+            return False
+        rebound_weakness = p1m < -10.0
+        improving = (p1w is not None and p1w >= -1.0) or (rsi_slope is not None and rsi_slope > 0)
+        return rebound_weakness and improving
+
+    return False
+
+
+def _is_pullback_to_sma50(
+    technicals: TechnicalIndicators,
+    archetype: Optional[str] = None,
+) -> bool:
+    """Return True when price is in a clean pullback-to-SMA50 zone.
+
+    Standard criteria:
+    - sma50_relative in [-3%, +5%]
+    - sma20_relative <= +8%
+    - RSI between 40 and 58
+    - RSI slope >= -2 (stabilizing or rising)
+    - perf_1m >= -12%
+    - perf_3m > 0
+    - volume_dryup_ratio < 0.85
+    - rs_vs_sector_20d >= -3%
+    - price above SMA200 (sma200_relative > -100 is always true; use trend)
+    - SMA50 slope >= 0
+
+    Hyper-growth override (archetype == "HYPER_GROWTH"):
+    - sma50_relative in [-5%, +8%]
+    - RSI between 38 and 62
+    """
+    t = technicals
+
+    # SMA50 distance boundaries
+    if archetype == "HYPER_GROWTH":
+        sma50_low, sma50_high = -5.0, 8.0
+        rsi_low, rsi_high = 38.0, 62.0
+    else:
+        sma50_low, sma50_high = -3.0, 5.0
+        rsi_low, rsi_high = 40.0, 58.0
+
+    # SMA50 distance check
+    if t.sma50_relative is None:
+        return False
+    if not (sma50_low <= t.sma50_relative <= sma50_high):
+        return False
+
+    # SMA20 not too extended
+    if t.sma20_relative is not None and t.sma20_relative > 8.0:
+        return False
+
+    # RSI range
+    if t.rsi_14 is None:
+        return False
+    if not (rsi_low <= t.rsi_14 <= rsi_high):
+        return False
+
+    # RSI slope stabilizing or rising
+    if t.rsi_slope is not None and t.rsi_slope < -2.0:
+        return False
+
+    # 1M return not worse than -12%
+    if t.perf_1m is not None and t.perf_1m < -12.0:
+        return False
+
+    # 3M return positive
+    if t.perf_3m is not None and t.perf_3m <= 0:
+        return False
+
+    # Volume dry-up: pullback should have drying volume
+    if t.volume_dryup_ratio is not None and t.volume_dryup_ratio >= 0.85:
+        return False
+
+    # RS vs sector not too weak
+    if t.rs_vs_sector_20d is not None and t.rs_vs_sector_20d < -3.0:
+        return False
+
+    # SMA50 slope should be non-negative (not a falling 50MA)
+    if t.sma50_slope is not None and t.sma50_slope < 0:
+        return False
+
+    return True
 
 
 def _build_factors(
@@ -314,18 +572,110 @@ def _decide_long_term(
     return "AVOID"
 
 
-def _decide_short_term_v2(score: float, technicals: TechnicalIndicators) -> str:
-    """New short-term decision labels (Story 7)."""
-    if _chart_is_weak(technicals) and score < 50:
-        return "AVOID_BAD_CHART"
+def _decide_short_term_v2(
+    score: float,
+    technicals: TechnicalIndicators,
+    regime: Optional[MarketRegimeAssessment] = None,
+    archetype: Optional[str] = None,
+) -> str:
+    """Short-term decision labels with strict Improvements-3 criteria.
+
+    Priority order:
+    1. Avoid / confidence overrides
+    2. Oversold rebound candidate
+    3. BUY_NOW_CONTINUATION (all strict gates must pass)
+    4. BUY_STARTER_STRONG_BUT_EXTENDED (extended but buyable)
+    5. WAIT_FOR_PULLBACK (chasing / overextended)
+    6. BUY_ON_PULLBACK (precise SMA50 pullback criteria)
+    7. WATCHLIST / fallback avoids
+    """
+    t = technicals
+    regime_str = regime.regime if regime is not None else MarketRegime.BULL_RISK_ON
+    thresholds = _get_regime_thresholds(regime_str)
+
+    # --- 1. Bad chart / avoid overrides ---
+    if _chart_is_weak(t) and score < 50:
+        return _classify_bad_chart(t)
+    if score < 40:
+        return _classify_bad_chart(t)
+
+    # --- 2. Oversold rebound candidate (even for low scores) ---
+    if (
+        t.rsi_14 is not None and 25.0 <= t.rsi_14 <= 42.0
+        and t.rsi_slope is not None and t.rsi_slope > 0
+        and (
+            (t.perf_1w is not None and t.perf_1w >= 0)
+            or (t.change_from_open_percent is not None and t.change_from_open_percent > 0)
+        )
+        and t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= 1.2
+    ):
+        return "OVERSOLD_REBOUND_CANDIDATE"
+
+    # --- WAIT_FOR_PULLBACK: chasing / over-extended gates (check before scoring gates) ---
+    is_chasing = _perf_gates(t, "chasing")
+    sma20_above_10 = t.sma20_relative is not None and t.sma20_relative > 10.0
+    rsi_too_hot = t.rsi_14 is not None and t.rsi_14 > 72.0
+    if is_chasing or sma20_above_10:
+        return "WAIT_FOR_PULLBACK"
+
+    # --- 3. BUY_ON_PULLBACK priority in SIDEWAYS_CHOPPY ---
+    # In sideways regimes, prefer pullback entries over continuation buys
+    if regime_str == MarketRegime.SIDEWAYS_CHOPPY and score >= 55:
+        if _is_pullback_to_sma50(t, archetype=archetype):
+            return "BUY_ON_PULLBACK"
+
+    # --- 3. BUY_NOW_CONTINUATION (all gates must pass) ---
+    if score >= 70 and not t.is_extended:
+        rsi = t.rsi_14
+        sma20 = t.sma20_relative
+        sma50 = t.sma50_relative
+        rsi_slope = t.rsi_slope
+        rel_vol = t.breakout_volume_multiple
+
+        rsi_ok = rsi is None or (thresholds.rsi_min <= rsi <= thresholds.rsi_max)
+        sma20_ok = sma20 is None or (0.0 <= sma20 <= thresholds.sma20_max)
+        sma50_ok = sma50 is None or sma50 <= 12.0
+        slopes_ok = (t.sma20_slope is None or t.sma20_slope >= 0) and (
+            t.sma50_slope is None or t.sma50_slope >= 0
+        )
+        rsi_slope_ok = rsi_slope is None or rsi_slope >= 0
+        vol_ok = rel_vol is None or rel_vol >= thresholds.rel_vol_min
+        rs_ok = _rs_continuation_ok(t)
+        # In BULL_NARROW_LEADERSHIP, require leader RS
+        if regime_str == MarketRegime.BULL_NARROW_LEADERSHIP:
+            rs_ok = _rs_leader(t)
+        perf_ok = _perf_gates(t, "continuation")
+
+        if rsi_ok and sma20_ok and sma50_ok and slopes_ok and rsi_slope_ok and vol_ok and rs_ok and perf_ok:
+            return "BUY_NOW_CONTINUATION"
+
+        # Not all gates passed — fall through to extended / pullback checks
+
+    # --- 4. BUY_STARTER_STRONG_BUT_EXTENDED ---
     if score >= 70:
-        if technicals.is_extended:
+        sma20 = t.sma20_relative
+        rsi = t.rsi_14
+        extended_sma20 = sma20 is not None and 5.0 < sma20 <= 10.0
+        extended_rsi = rsi is not None and thresholds.rsi_max < rsi <= 76.0
+        if t.is_extended or extended_sma20 or extended_rsi:
             return "BUY_STARTER_STRONG_BUT_EXTENDED"
-        return "BUY_NOW_MOMENTUM"
+
+        # High score but RS or perf gate failed → prefer pullback
+        if _is_pullback_to_sma50(t, archetype=archetype):
+            return "BUY_ON_PULLBACK"
+        return "WAIT_FOR_PULLBACK"
+
+    # --- 5. WAIT_FOR_PULLBACK (overbought RSI, score 55-70) ---
+    if score >= 55 and rsi_too_hot:
+        return "WAIT_FOR_PULLBACK"
+
+    # --- 6. BUY_ON_PULLBACK (score 55+ with precise pullback criteria) ---
+    if score >= 55 and _is_pullback_to_sma50(t, archetype=archetype):
+        return "BUY_ON_PULLBACK"
+
+    # --- 7. Fallback ---
     if score >= 55:
         return "WAIT_FOR_PULLBACK"
-    if score < 40:
-        return "AVOID_BAD_CHART"
     return "WATCHLIST"
 
 
@@ -376,8 +726,12 @@ def _decide_long_term_v2(
 def _summary(decision: str, score: float, horizon: str, technicals: TechnicalIndicators) -> str:
     hor = horizon.replace("_", "-")
     summaries = {
-        # New Story 7 labels
-        "BUY_NOW_MOMENTUM": f"Strong momentum buy signal. Score {score:.0f}/100 — price action and volume confirm the setup.",
+        # Improvements 3: new precise labels
+        "BUY_NOW_CONTINUATION": f"Tight momentum continuation signal. Score {score:.0f}/100 — RSI 55-68, within 5% of SMA20, positive RS. Entry timing is ideal.",
+        "OVERSOLD_REBOUND_CANDIDATE": f"Oversold rebound setup. Score {score:.0f}/100 — RSI turning up from 25-42, selling pressure fading. Small position, tight stop.",
+        "TRUE_DOWNTREND_AVOID": f"Confirmed downtrend. Score {score:.0f}/100 — price below both SMAs, death cross, weak RS. Avoid until trend repairs.",
+        "BROKEN_SUPPORT_AVOID": f"Heavy-volume support break. Score {score:.0f}/100 — price broke key support on high volume with weak close. Stand aside.",
+        # Story 7 labels
         "BUY_STARTER_STRONG_BUT_EXTENDED": f"Strong {hor} setup but price is extended. Score {score:.0f}/100. Start with a half position and add on pullback.",
         "WAIT_FOR_PULLBACK": f"Good setup but not an ideal entry. Score {score:.0f}/100. Wait for a pullback to moving average support.",
         "ACCUMULATE_ON_WEAKNESS": f"Strong long-term thesis. Score {score:.0f}/100. Accumulate gradually on any weakness.",

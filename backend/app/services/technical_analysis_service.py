@@ -1091,9 +1091,13 @@ def compute_technicals(
     sr = find_support_resistance(high, low, close)
 
     rs_spy = None
+    rs_spy_20d = None
+    rs_spy_63d = None
     if spy_df is not None and not spy_df.empty:
         spy_close = spy_df["Close"].squeeze()
         rs_spy = compute_relative_strength(close, spy_close)
+        rs_spy_20d = compute_rs_vs_benchmark(close, spy_close, period=20)
+        rs_spy_63d = compute_rs_vs_benchmark(close, spy_close, period=63)
 
     rs_qqq = None
     if qqq_df is not None and not qqq_df.empty:
@@ -1101,9 +1105,13 @@ def compute_technicals(
         rs_qqq = compute_rs_vs_benchmark(close, qqq_close, period=63)
 
     rs_sector = None
+    rs_sector_20d = None
+    rs_sector_63d = None
     if sector_df is not None and not sector_df.empty:
         sector_close = sector_df["Close"].squeeze()
         rs_sector = compute_relative_strength(close, sector_close)
+        rs_sector_20d = compute_rs_vs_benchmark(close, sector_close, period=20)
+        rs_sector_63d = compute_rs_vs_benchmark(close, sector_close, period=63)
 
     # --- Story 3: Percentile ranks, drawdown, gap fill, post-earnings drift ---
     rank_20d = compute_return_percentile_rank(close, return_bars=20, lookback=252)
@@ -1201,6 +1209,10 @@ def compute_technicals(
         rs_vs_spy=rs_spy,
         rs_vs_qqq=rs_qqq,
         rs_vs_sector=rs_sector,
+        rs_vs_spy_20d=rs_spy_20d,
+        rs_vs_spy_63d=rs_spy_63d,
+        rs_vs_sector_20d=rs_sector_20d,
+        rs_vs_sector_63d=rs_sector_63d,
         # Story 3: percentile ranks
         return_pct_rank_20d=rank_20d,
         return_pct_rank_63d=rank_63d,
