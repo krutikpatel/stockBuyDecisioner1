@@ -1,0 +1,5 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,avg_mfe_pct,profit_factor,best_return_pct,worst_return_pct,setup,avg_score
+10826,10826,7.76,6.56,65.4,53.5,2.1,0.41,-11.59,20.13,2.85,149.41,-69.65,TRUE_BROKEN_CHART_AVOID,25.9
+1346,1346,3.78,3.49,60.5,48.9,0.54,-0.65,-9.46,12.89,2.07,135.38,-64.12,DOWNTREND_REBOUND_CANDIDATE,71.6
+9858,9858,2.63,2.31,58.4,45.9,-0.49,-1.75,-9.53,11.41,1.7,147.79,-59.8,GROWTH_LEADER_PULLBACK,55.3
+824,824,1.24,1.07,52.7,46.6,-0.12,-1.38,-12.21,12.24,1.23,80.44,-69.26,BREAKOUT_MOMENTUM,27.3

@@ -713,5 +713,8 @@
       "ps_tiers": [2, 5, 10],
       "ps_pts": [8, 3, 0, -5]
     }
+  },
+  "feature_flags": {
+    "use_new_strategy_engine": true
   }
 }

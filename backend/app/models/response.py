@@ -98,6 +98,9 @@ class HorizonRecommendation(BaseModel):
     position_sizing: PositionSizing
     data_warnings: list[str] = []
     signal_cards_weights: dict[str, float] = {}  # card name → weight for this horizon
+    # New engine metadata (None when legacy engine is used)
+    setup: Optional[str] = None
+    strategy_name: Optional[str] = None
 
 
 class DataQualityReport(BaseModel):

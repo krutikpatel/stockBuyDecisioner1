@@ -8,7 +8,7 @@
 ## Table of Contents
 
 1. [Project Layout](#1-project-layout)
-2. [Configuration & Environment](#2-configuration--environment) — Runtime Settings (2a) · AlgoConfig parameter system (2b)
+2. [Configuration & Environment](#2-configuration--environment) — Runtime Settings (2a) · AlgoConfig parameter system (2b) · Multi-Source Config (2c)
 3. [Cache Layer](#3-cache-layer)
 4. [Data Providers](#4-data-providers)
 5. [Technical Analysis Service](#5-technical-analysis-service)
@@ -31,6 +31,9 @@
 22. [Error Handling Map](#22-error-handling-map)
 23. [Test Coverage Map](#23-test-coverage-map)
 24. [Extension Guide](#24-extension-guide)
+25. [Config-Driven Strategy Engine Internals](#25-config-driven-strategy-engine-internals)
+26. [Backtest Phase 4 Internals](#26-backtest-phase-4-internals)
+27. [Data Layer Abstraction Internals](#27-data-layer-abstraction-internals)
 
 ---
 
@@ -39,16 +42,47 @@
 ```
 usingGptStrategy/
 ├── backend/
-│   ├── algo_config.json                     # Centralized algorithm parameters (12 sections)
+│   ├── algo_config.json                     # Centralized algorithm parameters (13 sections incl. feature_flags)
 │   ├── ALGO_PARAMS.md                       # Parameter catalog — descriptions, types, effects
 │   ├── ALGO_PARAMS_VALUES.md                # Parameter values reference with experiment log
-│   ├── CONFIG_MIGRATION_PROGRESS.md         # Step-by-step migration tracking
+│   ├── config/                              # 5 strategy config JSON files (new — Phase 2)
+│   │   ├── market_and_universe_config.json  # Universe filters, regime rules, sector benchmarks, active_provider
+│   │   ├── stock_classification_config.json # Archetype rules + 11 secondary tag rules
+│   │   ├── technical_setup_config.json      # 10 named signals + 4 setup definitions
+│   │   ├── strategy_logic_config.json       # Strategy router (5 rules) + 5 strategy engine configs
+│   │   └── parameter_governance_config.json # Frozen / active / research-only param tiers
 │   ├── app/
 │   │   ├── algo_config.py                   # AlgoConfig: from_file, from_dict, singleton, reset
 │   │   ├── main.py                          # FastAPI app init, CORS, router mount
-│   │   ├── config.py                        # Pydantic settings (env vars)
+│   │   ├── config/                          # Package — shadows old config.py; re-exports Settings + settings
+│   │   │   ├── __init__.py                  # Re-exports Settings, settings (backward compat)
+│   │   │   └── config_loader.py             # MultiSourceConfig: loads 5 JSON files; get_multi_config(); reset_multi_config()
 │   │   ├── cache/
 │   │   │   └── cache_manager.py             # TTLCache singleton + helpers
+│   │   ├── features/                        # Feature snapshot + builder (new — Phase 1)
+│   │   │   ├── __init__.py
+│   │   │   ├── feature_snapshot.py          # FeatureSnapshot Pydantic model (~120 fields), .to_dict()
+│   │   │   └── feature_builder.py           # build_feature_snapshot() — adapter from existing models
+│   │   ├── engine/                          # Config-driven strategy engine (new — Phases 1–3)
+│   │   │   ├── __init__.py
+│   │   │   ├── rule_engine.py               # RuleEngine.evaluate() — all operators, nested all/any/not
+│   │   │   ├── technical_signal_detector.py # TechnicalSignalDetector.detect() → SignalDetectionResult
+│   │   │   ├── setup_detector.py            # SetupDetector.detect() — priority/blocking signal logic
+│   │   │   ├── universe_filter.py           # UniverseFilter.check() — price/market_cap/volume/earnings
+│   │   │   ├── strategy_router.py           # StrategyRouter.route() → StrategyRoutingResult
+│   │   │   ├── config_driven_strategy_engine.py  # ConfigDrivenStrategyEngine.score() → StrategyEngineResult
+│   │   │   └── stock_decision_engine.py     # StockDecisionEngine.decide() — full pipeline orchestrator
+│   │   ├── data/                            # Abstract data layer (new — Phase 5)
+│   │   │   ├── __init__.py
+│   │   │   ├── providers/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── base.py                  # Abstract MarketDataProvider (6 methods)
+│   │   │   │   ├── yfinance_provider.py     # YFinanceProvider — delegates to app/providers/
+│   │   │   │   └── provider_factory.py      # ProviderFactory.create() — registry + config lookup
+│   │   │   └── cache/
+│   │   │       ├── __init__.py
+│   │   │       ├── parquet_store.py         # ParquetCacheStore: has_coverage/read/write/get_missing_ranges
+│   │   │       └── cache_metadata.py        # CacheMetadata dataclass + save/load/make helpers
 │   │   ├── models/
 │   │   │   ├── request.py                   # StockAnalysisRequest
 │   │   │   ├── response.py                  # StockAnalysisResult, HorizonRecommendation, SignalProfile, SignalCard, SignalCards, SignalCardLabel
@@ -70,23 +104,30 @@ usingGptStrategy/
 │   │   │   ├── market_regime_service.py       # classify_regime, REGIME_WEIGHT_ADJUSTMENTS
 │   │   │   ├── news_sentiment_service.py
 │   │   │   ├── data_completeness_service.py   # compute_completeness
-│   │   │   ├── signal_card_service.py         # score_all_cards → SignalCards (Story 6)
+│   │   │   ├── signal_card_service.py         # score_all_cards → SignalCards (always computed in router)
 │   │   │   ├── signal_profile_service.py      # build_signal_profile + build_signal_profile_from_cards
 │   │   │   ├── scoring_service.py
 │   │   │   ├── recommendation_service.py
 │   │   │   ├── risk_management_service.py
 │   │   │   └── markdown_report_service.py
 │   │   └── routers/
-│   │       └── stock.py                     # All REST endpoints
+│   │       └── stock.py                     # All REST endpoints; always computes signal_cards; feature-flag dispatch
 │   ├── backtest/
 │   │   ├── config.py                        # Ticker list, date range, BENCHMARK_TICKERS
 │   │   ├── data_loader.py                   # Fetch + pickle-cache 3yr history
 │   │   ├── snapshot.py                      # Time-sliced inputs for a test date
 │   │   ├── runner.py                        # Weekly backtest loop (archetype + regime per snapshot)
-│   │   ├── outcome.py                       # Forward return + QQQ benchmark computation
-│   │   ├── metrics.py                       # Aggregation: win rate, by_regime, by_archetype
+│   │   ├── outcome.py                       # Forward return + QQQ benchmark + mfe_pct; optional entry/exit sim
+│   │   ├── metrics.py                       # Aggregation: win rate, by_regime, by_archetype, by_setup, by_strategy; Sharpe/Sortino/Calmar
 │   │   ├── report.py                        # CSV + self-contained HTML
-│   │   └── run_backtest.py                  # CLI entry point
+│   │   ├── run_backtest.py                  # CLI entry point (+ --experiment-id, --walk-forward flags)
+│   │   ├── entry_simulator.py               # EntrySimulator — 5 entry methods (new — Phase 4)
+│   │   ├── exit_simulator.py                # ExitSimulator — 3 exit methods + MAE/MFE (new — Phase 4)
+│   │   ├── experiment_tracker.py            # ExperimentTracker + ExperimentManifest (new — Phase 4)
+│   │   ├── walk_forward.py                  # WalkForwardValidator — rolling IS/OOS folds (new — Phase 4)
+│   │   ├── run_walk_forward.py              # CLI entry point for walk-forward (new — Phase 4)
+│   │   ├── experiments/                     # ExperimentManifest JSON files (created at runtime)
+│   │   └── results/                         # Backtest output CSVs + report.html
 │   ├── tests/
 │   │   ├── test_technical_analysis.py              # 38 tests
 │   │   ├── test_technical_enhanced.py              # Story 1 — EMA, slopes, perf, distances (57 tests)
@@ -105,8 +146,8 @@ usingGptStrategy/
 │   │   ├── test_revised_scoring.py                 # Story 7 — signal card weights + new labels (19 tests)
 │   │   ├── test_risk_report_updates.py             # Story 8 — risk mgmt + markdown report (13 tests)
 │   │   ├── test_improvements3.py                   # improvements3 — new labels, gates, ATR sizing (102 tests)
-│   │   ├── test_backtest_metrics.py                # 14 tests
-│   │   ├── test_algo_config.py                     # AlgoConfig loader: from_file, from_dict, env override, 12 sections
+│   │   ├── test_backtest_metrics.py                # 14 tests (10 pre-existing failures)
+│   │   ├── test_algo_config.py                     # AlgoConfig loader: from_file, from_dict, env override, 13 sections
 │   │   ├── test_algo_config_technical.py           # Technical indicator params injected via AlgoConfig
 │   │   ├── test_algo_config_signal_cards.py        # Signal card thresholds injected via AlgoConfig
 │   │   ├── test_algo_config_recommendation.py      # Decision logic gates injected via AlgoConfig
@@ -115,7 +156,21 @@ usingGptStrategy/
 │   │   ├── test_algo_config_market_regime.py       # VIX thresholds + regime weights via AlgoConfig
 │   │   ├── test_algo_config_stock_archetype.py     # Archetype classification thresholds via AlgoConfig
 │   │   ├── test_algo_config_data_completeness.py   # Completeness deductions + confidence caps via AlgoConfig
-│   │   └── test_algo_config_valuation.py           # Valuation score thresholds via AlgoConfig
+│   │   ├── test_algo_config_valuation.py           # Valuation score thresholds via AlgoConfig
+│   │   ├── test_rule_engine.py                     # Phase 1 — RuleEngine operators + nested logic (36 tests)
+│   │   ├── test_feature_builder.py                 # Phase 1 — FeatureSnapshot mapping + archetype translation (21 tests)
+│   │   ├── test_technical_signal_detector.py       # Phase 1 — per-signal verification (19 tests)
+│   │   ├── test_setup_detector.py                  # Phase 1 — priority, blocking, optional requirements (16 tests)
+│   │   ├── test_strategy_router.py                 # Phase 2 — routing rules + fallback (13 tests)
+│   │   ├── test_config_driven_strategy_engine.py   # Phase 2 — score rules + decision thresholds (16 tests)
+│   │   ├── test_secondary_tags.py                  # Phase 2 — secondary tag detection (13 tests)
+│   │   ├── test_multi_source_config.py             # Phase 2 — MultiSourceConfig + singleton (16 tests)
+│   │   ├── test_stock_decision_engine.py           # Phase 3 — end-to-end per archetype/regime (13 tests)
+│   │   ├── test_engine_output_parity.py            # Phase 3 — all HorizonRecommendation fields present (68 tests)
+│   │   ├── test_entry_simulator.py                 # Phase 4 — 5 entry methods (11 tests)
+│   │   ├── test_exit_simulator.py                  # Phase 4 — 3 exit methods + MAE/MFE (11 tests)
+│   │   ├── test_experiment_tracker.py              # Phase 4 — manifest save/compare/list (12 tests)
+│   │   └── test_walk_forward.py                    # Phase 4 — fold generation + consistency score (10 tests)
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -141,11 +196,12 @@ usingGptStrategy/
 │       │       └── DataPanelUpdates.test.tsx  # 22 tests
 │       ├── api/stockApi.ts
 │       └── types/stock.ts
+├── changelog/
+│   ├── 1_plan_backend_rework.md             # Implementation plan (Phases 1–5)
+│   └── 1_plan_progress.md                  # Progress tracker (all phases complete)
 ├── HLD.md
 ├── LLD.md
-├── backtest_plan.md
-├── backtest_readme.md
-├── backtest_results_2024_2026.md
+├── BACKEND_EXPLAINED.md
 └── README.md
 ```
 
@@ -207,6 +263,7 @@ All tunable algorithm parameters — indicator periods, scoring thresholds, deci
 | `data_completeness` | Deduction amounts, confidence cap threshold, avoid-low-confidence cutoff |
 | `risk_management` | ATR stop multipliers per horizon, position sizing factors, entry/target offsets |
 | `valuation` | Archetype-adjusted score thresholds per valuation regime |
+| `feature_flags` | `use_new_strategy_engine: false` — flip to `true` to activate config-driven engine path |
 
 **`AlgoConfig` class interface:**
 
@@ -259,6 +316,43 @@ cfg.data_completeness      # dict
 cfg.risk_management        # dict
 cfg.valuation              # dict
 ```
+
+---
+
+### 2c. Multi-Source Config
+
+**Files:** `backend/config/*.json` · `backend/app/config/config_loader.py`
+
+Five focused JSON files hold all strategy intelligence (loaded independently from `algo_config.json`):
+
+| File | Key Properties |
+|------|---------------|
+| `market_and_universe_config.json` | `universe_filters` (min_price, min_market_cap, min_avg_volume), `market_regime_rules`, `sector_benchmarks`, `data_sources.active_provider` |
+| `stock_classification_config.json` | `archetype_rules` (8 archetypes), `secondary_tag_rules` (11 tags evaluated by RuleEngine) |
+| `technical_setup_config.json` | `signal_definitions` (10 signals with JSON rules), `setup_definitions` (4 setups with required/optional/blocking lists + priority) |
+| `strategy_logic_config.json` | `strategy_router.rules` (5 priority rules), `strategy_engines` (5 engines with score_rules + decision_thresholds + risk_overrides) |
+| `parameter_governance_config.json` | `frozen_params`, `active_tuning_params`, `research_only_params` — parameter change policy |
+
+**`MultiSourceConfig` class interface:**
+
+```python
+from app.config.config_loader import get_multi_config, reset_multi_config
+
+cfg = get_multi_config()                        # singleton, lazy-loaded
+cfg.universe_filters                            # dict
+cfg.market_regime_rules                         # dict
+cfg.archetype_rules                             # dict
+cfg.secondary_tag_rules                         # list of {name, rule} dicts
+cfg.signal_definitions                          # dict[str, rule_dict]
+cfg.setup_definitions                           # list of setup dicts
+cfg.strategy_router_rules                       # list of {priority, rule, strategy} dicts
+cfg.strategy_engines                            # dict[str, engine_config]
+cfg.data_sources                                # dict (includes active_provider)
+
+reset_multi_config()                            # clear singleton (required in test teardown)
+```
+
+**Config package shadowing note:** `backend/app/config/` (package) shadows the old `backend/app/config.py` (module). The package `__init__.py` re-exports `Settings` and `settings` from Pydantic — do not revert this structure.
 
 ---
 
@@ -2113,9 +2207,17 @@ flowchart TD
 
     RN["runner.py\n─────────────────────────────\nPer iteration:\n  price_slice = get_price_slice(full_df, test_date)\n  spy_slice, qqq_slice = sliced benchmark DFs\n  technicals = compute_technicals(slice, spy_slice, sector_slice)\n  fund,val,earn = build_historical_fundamentals(...)\n  fund = classify_and_attach(fund, val)          ← NEW\n  val.archetype_adjusted_score = score_valuation_with_archetype(...) ← NEW\n  fund.fundamental_score = score_fundamentals(fund)\n  real sector_macro_score from compute_relative_strength  ← NEW\n  vix_level = 20.0 (proxy — VIX history not pre-fetched)\n  regime = classify_regime(spy_slice, qqq_slice, vix_level)  ← NEW\n  scores = compute_scores(..., regime_assessment=regime)\n  recs = build_recommendations(...)"]
 
-    OT["outcome.py\n─────────────────────────────\nattach_outcomes(signals, prices) → signals (modified in place)\n_get_price_at_offset(df, from_date, N_trading_days)\n  → Close.iloc[N-1] of rows after from_date\n\nFor each signal:\n  forward_return = (exit_price - entry_price) / entry_price × 100\n  spy_return     = (spy_exit - spy_entry) / spy_entry × 100\n  excess_return  = forward_return - spy_return\n  qqq_return     = (qqq_exit - qqq_entry) / qqq_entry × 100  ← NEW\n  excess_return_vs_qqq = forward_return - qqq_return          ← NEW"]
+    OT["outcome.py\n─────────────────────────────\nattach_outcomes(signals, prices,\n  entry_method=None, exit_method=None) → signals\n_get_price_at_offset(df, from_date, N_trading_days)\n  → Close.iloc[N-1] of rows after from_date\nmfe_pct always computed via _max_favorable_window()\n\nBase columns added:\n  forward_return, spy_return, excess_return,\n  qqq_return, excess_return_vs_qqq, mfe_pct\n\nWith entry_method: adds sim_entry_price, sim_entry_date,\n  sim_entry_wait_days, sim_entry_triggered\nWith exit_method: adds sim_forward_return, sim_exit_date,\n  sim_exit_reason, sim_holding_days, mae_pct, mfe_sim_pct"]
 
-    MT["metrics.py\n─────────────────────────────\nbuild_metrics(signals, horizon) → dict\n  by_decision: win rate, avg/median return, best/worst, vs SPY\n  by_score_bucket: [0-40, 40-55, 55-70, 70-85, 85-100]\n  by_ticker: sorted by avg_return desc\n  monthly_breakdown: by YYYY-MM period\n  by_regime: win rate, avg_return, avg_excess_vs_qqq, n_signals ← NEW\n  by_archetype: win rate, avg_return, best_decision, avg_score  ← NEW\n  portfolio_simulation: BUY_NOW+BUY_STARTER only\n  overall_stats: correlation, best/worst signal"]
+    MT["metrics.py\n─────────────────────────────\nbuild_metrics(signals, horizon) → dict\n  by_decision: win rate, avg/median return, best/worst, vs SPY\n  by_score_bucket: [0-40, 40-55, 55-70, 70-85, 85-100]\n  by_ticker: sorted by avg_return desc\n  monthly_breakdown: by YYYY-MM period\n  by_regime: win rate, avg_return, avg_excess_vs_qqq, n_signals\n  by_archetype: win rate, avg_return, best_decision, avg_score\n  by_setup: win rate per setup name (when setup column present)\n  by_strategy: win rate per strategy name (when column present)\n  portfolio_simulation: BUY_NOW+BUY_STARTER only\n  overall_stats: Sharpe + Sortino + Calmar per horizon\n    ANNUALIZATION_FACTORS = {short:13, medium:4, long:1}"]
+
+    ENT["entry_simulator.py (Phase 4)\n─────────────────────────────\nEntrySimulator.simulate_entry(\n  signal_date, price_df, method, max_wait_days=10)\n  → EntryResult(entry_price, entry_date, method_used,\n                wait_days, not_triggered)\n\nMethods:\n  NEXT_CLOSE — first bar after signal_date\n  NEXT_OPEN  — open price of first bar after\n  PULLBACK_TO_SMA20/50 — waits for Low ≤ SMA; enters at min(Close,SMA)\n  BREAKOUT_CONFIRMATION — resistance=max of last 20 closes;\n    triggers when close > resistance AND volume > avg_vol"]
+
+    EXT["exit_simulator.py (Phase 4)\n─────────────────────────────\nExitSimulator.simulate_exit(\n  entry_date, entry_price, price_df, method, horizon,\n  atr_stop_multiplier=2.0, atr_target_multiplier=3.0,\n  trailing_pct=0.15) → ExitResult\n\nMethods:\n  FIXED_HORIZON — exit at holding_days based on horizon\n  ATR_STOP_TARGET — stop=entry-N*ATR; target=entry+M*ATR\n    (14-bar ATR from before entry; falls back to FIXED_HORIZON)\n  TRAILING_STOP — peak=max(peak,high); stop when low≤peak*(1-pct)\n\nAlways computes: pnl_pct, mae_pct, mfe_pct"]
+
+    EXP["experiment_tracker.py (Phase 4)\n─────────────────────────────\nExperimentManifest dataclass:\n  experiment_id, description, created_at, code_version,\n  config_hash (SHA256[:16] of algo_config.json),\n  changed_params, cli_args, primary_metric,\n  primary_metric_value, baseline_id, tags\n\nExperimentTracker(experiments_dir)\n  start_experiment(id, description, changed_params, cli_args)\n  save_results(id, all_metrics) → writes *_summary.json\n  compare_to_baseline(id, baseline_id) → delta dict\n  list_experiments() → list[ExperimentManifest]"]
+
+    WF["walk_forward.py (Phase 4)\n─────────────────────────────\nWalkForwardFold: fold dates + is_metrics + oos_metrics\nWalkForwardResult: folds + summary + oos_vs_is_consistency\n\nWalkForwardValidator(\n  train_window_weeks=104, test_window_weeks=26,\n  step_weeks=13, phase, risk_profile, algo_config)\n  .run(data, tickers, start, end, horizon) → WalkForwardResult\n\n_generate_folds(): pd.Timedelta steps from start to end\n_compute_consistency(): fraction of folds where\n  OOS return ≥ 50% of IS return (or OOS ≥ IS when both negative)\n_summarize(): averages win rates and returns across folds"]
 ```
 
 ### Historical Fundamentals Construction (snapshot.py)
@@ -2247,7 +2349,9 @@ flowchart TD
 
 ## 23. Test Coverage Map
 
-**Total: 768 tests across 27 test files** (10 pre-existing failures in `test_backtest_metrics.py` — unrelated to improvements3; 131 new tests from algo_config suite)
+**Total: 1043 tests across 39 test files** (1032 passing; 11 pre-existing failures: 10 in `test_backtest_metrics.py`, 1 in `test_improvements3.py`; not caused by the backend rework)
+
+Phase additions: +92 tests (Phase 1 — 4 files), +58 tests (Phase 2 — 4 files), +81 tests (Phase 3 — 2 files), +44 tests (Phase 4 — 4 files)
 
 ```mermaid
 flowchart LR
@@ -2618,4 +2722,592 @@ vix_level = float(vix_slice["Close"].iloc[-1]) if not vix_slice.empty else 20.0
 
 ---
 
-*Last updated: 2026-05-04 | Reflects US-001 through US-010. 241 Python tests passing · 0 TypeScript errors.*
+### J. Add a New Config-Driven Strategy Engine
+
+The config-driven path allows adding new strategies entirely in JSON, with no Python code changes.
+
+```json
+// In backend/config/strategy_logic_config.json:
+// 1. Add a routing rule (evaluated before the watchlist_low_confidence fallback)
+{
+  "strategy_router": {
+    "rules": [
+      {
+        "id": "earnings_beat_momentum",
+        "priority": 15,
+        "rule": {
+          "all": [
+            {"field": "primary_category", "op": "in", "value": ["PROFITABLE_GROWTH_LEADER"]},
+            {"field": "secondary_tags", "op": "contains", "value": "EARNINGS_NEAR"}
+          ]
+        },
+        "strategy": "earnings_beat_momentum"
+      }
+    ]
+  }
+}
+
+// 2. Add the engine config under "strategy_engines":
+{
+  "strategy_engines": {
+    "earnings_beat_momentum": {
+      "score_rules": [
+        {"id": "beat_rate_high", "rule": {"field": "beat_rate", "op": ">=", "value": 0.75}, "points": 30},
+        {"id": "rsi_healthy",    "rule": {"field": "rsi14", "op": "between", "value": [50, 70]}, "points": 20}
+      ],
+      "decision_thresholds": [
+        {"min_score": 60, "decision": "BUY_BEFORE_EARNINGS"},
+        {"min_score": 40, "decision": "WATCHLIST"}
+      ],
+      "risk_overrides": []
+    }
+  }
+}
+```
+
+No Python changes needed. The `StrategyRouter` and `ConfigDrivenStrategyEngine` pick up the new config on next `reset_multi_config()` or server restart.
+
+---
+
+### K. Add a New Abstract Data Provider
+
+To plug in an alternative data source (Polygon, Alpha Vantage, etc.):
+
+```python
+# 1. Create backend/app/data/providers/polygon_provider.py
+from app.data.providers.base import MarketDataProvider
+
+class PolygonProvider(MarketDataProvider):
+    @property
+    def name(self) -> str:
+        return "polygon"
+
+    @property
+    def supports_point_in_time_fundamentals(self) -> bool:
+        return True   # Polygon supports true point-in-time data
+
+    def get_price_history(self, ticker, start, end, interval="1d") -> pd.DataFrame:
+        # Call Polygon REST API, return DataFrame with Open/High/Low/Close/Volume
+        ...
+
+    def get_fundamentals(self, ticker) -> FundamentalData: ...
+    # ... implement remaining abstract methods
+
+# 2. Register in provider_factory.py _load_registry():
+from app.data.providers.polygon_provider import PolygonProvider
+_REGISTRY["polygon"] = PolygonProvider
+
+# 3. Switch active provider (no code change — config only):
+# In backend/config/market_and_universe_config.json:
+# "data_sources": {"active_provider": "polygon"}
+
+# Verify with:
+# from app.data.providers.provider_factory import ProviderFactory
+# print(ProviderFactory.available_providers())  # ['polygon', 'yfinance']
+```
+
+---
+
+*Last updated: 2026-06-02 | Reflects US-001 through US-010 + Backend Rework Phases 1–5. 1032 Python tests passing · 0 TypeScript errors.*
+
+---
+
+## 25. Config-Driven Strategy Engine Internals
+
+**Files:** `backend/app/features/` · `backend/app/engine/` · `backend/config/`
+
+### 25.1 FeatureSnapshot & FeatureBuilder
+
+**`feature_snapshot.py`** — Pydantic model with ~120 flat fields, grouped by category:
+
+| Group | Sample Fields |
+|-------|--------------|
+| Technical | `rsi14`, `sma50_relative`, `sma20_relative`, `volume_dryup_ratio`, `rs_vs_spy_20d`, `atr_percent`, `sma50_slope` |
+| Fundamental | `sales_growth_yoy`, `operating_margin`, `gross_margin`, `roe`, `free_cash_flow` |
+| Valuation | `forward_pe`, `peg_ratio`, `price_to_sales`, `archetype_adjusted_score` |
+| Classification | `primary_category` (archetype translated), `secondary_tags` (set of tag strings) |
+| Context | `market_regime`, `selected_setup`, `strategy_score`, `earnings_days_away` |
+
+`.to_dict()` returns a flat Python dict suitable for rule engine evaluation (None fields included as None).
+
+**`feature_builder.py`** — Pure adapter, no logic duplication:
+
+```python
+def build_feature_snapshot(
+    ticker: str,
+    price: float,
+    technicals: TechnicalIndicators,
+    fundamentals: FundamentalData,
+    valuation: ValuationData,
+    earnings: EarningsData,
+    regime_assessment: Optional[MarketRegimeAssessment],
+) -> FeatureSnapshot
+```
+
+Key mapping: `technicals.rsi_14 → rsi14`, `fundamentals.revenue_growth_yoy → sales_growth_yoy`, archetype enum → `_ARCHETYPE_TO_CATEGORY` translation dict (e.g. `PROFITABLE_GROWTH_LEADER`, `HYPER_GROWTH_STORY`).
+
+### 25.2 RuleEngine
+
+**`rule_engine.py`** — `RuleEngine.evaluate(rule: dict, snapshot: dict) → RuleEvaluationResult`
+
+```python
+@dataclass
+class RuleEvaluationResult:
+    matched: bool
+    reasons: list[str]          # human-readable match/no-match explanations
+    missing_fields: list[str]   # fields that were None during evaluation
+    confidence_penalty: float   # 0–1 fractional penalty from missing fields
+```
+
+**Supported operators (leaf rules):**
+
+| Operator | Example | Notes |
+|----------|---------|-------|
+| `>=`, `<=`, `>`, `<` | `{"field": "rsi14", "op": ">=", "value": 50}` | None field → no match + missing |
+| `==`, `!=` | `{"field": "market_regime", "op": "==", "value": "BULL_RISK_ON"}` | |
+| `in`, `not_in` | `{"field": "primary_category", "op": "in", "value": ["HYPER_GROWTH_STORY"]}` | |
+| `between` | `{"field": "rsi14", "op": "between", "value": [40, 58]}` | inclusive |
+| `exists` | `{"field": "atr_percent", "op": "exists"}` | True when field is not None |
+| `missing` | `{"field": "peg_ratio", "op": "missing"}` | True when field is None |
+| `contains` | `{"field": "secondary_tags", "op": "contains", "value": "HIGH_MOMENTUM"}` | for list/set fields |
+
+**Nested combinators:**
+
+```json
+{"all": [rule1, rule2, rule3]}   // all must match
+{"any": [rule1, rule2]}          // at least one must match
+{"not": rule1}                   // negation
+```
+
+### 25.3 TechnicalSignalDetector
+
+**`technical_signal_detector.py`**
+
+```python
+class TechnicalSignalDetector:
+    def __init__(self, signal_definitions: dict, rule_engine: RuleEngine)
+    def detect(self, snapshot: FeatureSnapshot) -> SignalDetectionResult
+
+@dataclass
+class SignalDetectionResult:
+    active_signals: set[str]       # names of signals that matched
+    signal_reasons: dict[str, list[str]]
+    missing_fields: list[str]      # aggregated across all signals
+    confidence_penalty: float
+```
+
+10 named signals from `technical_setup_config.json`:
+
+| Signal | Key Conditions |
+|--------|---------------|
+| `STRONG_UPTREND` | sma50_slope > 0, price above SMA50+SMA200, rs_vs_spy positive |
+| `SMA50_PULLBACK` | sma50_relative ∈ [−3, +5] |
+| `RSI_PULLBACK_ZONE` | rsi14 ∈ [40, 58] |
+| `VOLUME_DRY_UP` | volume_dryup_ratio < 0.85 |
+| `BREAKOUT_CONFIRMED` | close above resistance + volume > avg |
+| `RS_LEADER_VS_SECTOR` | rs_vs_sector_20d ≥ 2%, rs_vs_spy_63d ≥ 5% |
+| `TRUE_BROKEN_CHART` | death cross + SMA200 falling + RS weak |
+| `BROKEN_SUPPORT` | perf_1w < −3 AND breakout_volume_multiple ≥ 1.5 AND rsi_slope < 0 |
+| `OVERSOLD_REVERSAL` | rsi14 ∈ [25, 42] + rsi_slope > 0 + volume expanding |
+| `EXTENDED_ABOVE_SMA20` | sma20_relative > 8% |
+
+### 25.4 SetupDetector
+
+**`setup_detector.py`**
+
+```python
+class SetupDetector:
+    def __init__(self, setup_definitions: list[dict])
+    def detect(self, active_signals: set[str]) -> SetupDetectionResult
+
+@dataclass
+class SetupDetectionResult:
+    selected_setup: Optional[str]
+    all_matching_setups: list[str]
+    blocked_by: Optional[str]       # blocking signal that prevented match
+    confidence: float
+```
+
+4 setups in priority order:
+
+| Priority | Setup | Required | Optional | Blocking |
+|----------|-------|----------|----------|---------|
+| 1 | `TRUE_BROKEN_CHART_AVOID` | TRUE_BROKEN_CHART | — | — |
+| 2 | `GROWTH_LEADER_PULLBACK` | STRONG_UPTREND + SMA50_PULLBACK + RSI_PULLBACK_ZONE | VOLUME_DRY_UP | TRUE_BROKEN_CHART |
+| 3 | `BREAKOUT_MOMENTUM` | BREAKOUT_CONFIRMED + RS_LEADER_VS_SECTOR | — | TRUE_BROKEN_CHART |
+| 4 | `DOWNTREND_REBOUND_CANDIDATE` | OVERSOLD_REVERSAL | — | — |
+
+### 25.5 StrategyRouter
+
+**`strategy_router.py`**
+
+```python
+class StrategyRouter:
+    def __init__(self, config: MultiSourceConfig, rule_engine: RuleEngine)
+    def route(self, snapshot: FeatureSnapshot) -> StrategyRoutingResult
+
+@dataclass
+class StrategyRoutingResult:
+    selected_strategy: str
+    matched_rule_id: Optional[str]
+    confidence: float
+    debug_info: dict
+```
+
+Evaluates `strategy_logic_config.strategy_router.rules` in priority order (lowest number = highest priority). First match wins. Fallback: `watchlist_low_confidence`.
+
+### 25.6 ConfigDrivenStrategyEngine
+
+**`config_driven_strategy_engine.py`**
+
+```python
+class ConfigDrivenStrategyEngine:
+    def __init__(self, engine_name: str, engine_config: dict, rule_engine: RuleEngine)
+    def score(self, snapshot: FeatureSnapshot) -> StrategyEngineResult
+
+@dataclass
+class StrategyEngineResult:
+    strategy_name: str
+    strategy_score: float        # 0–100 from score_rules
+    recommendation: str          # decision label
+    reasons: list[str]
+    missing_data: list[str]
+    confidence: float
+    risk_inputs: dict
+```
+
+**Scoring flow:**
+1. For each rule in `score_rules`: evaluate condition → add `points` if matched
+2. Sum points, normalize to 0–100
+3. Evaluate `decision_thresholds` in order → first threshold where `score >= min_score` wins
+4. Apply `risk_overrides`: if secondary_tag in snapshot → override decision or scale score
+
+### 25.7 StockDecisionEngine
+
+**`stock_decision_engine.py`** — Single orchestrating entry point.
+
+```python
+class StockDecisionEngine:
+    def decide(
+        self,
+        ticker: str,
+        price: float,
+        technicals: TechnicalIndicators,
+        fundamentals: FundamentalData,
+        valuation: ValuationData,
+        earnings: EarningsData,
+        news: NewsSummary,
+        signal_cards: SignalCards,
+        horizons: list[str],
+        risk_profile: str,
+        regime_assessment: Optional[MarketRegimeAssessment],
+        has_options_data: bool,
+    ) -> list[HorizonRecommendation]
+```
+
+**Internal pipeline:**
+1. `build_feature_snapshot(...)` → `FeatureSnapshot`
+2. `_detect_secondary_tags(snapshot)` via RuleEngine + `secondary_tag_rules` → updates `snapshot.secondary_tags`
+3. `signal_detector.detect(snapshot)` → `active_signals`
+4. `setup_detector.detect(active_signals)` → updates `snapshot.selected_setup`
+5. `strategy_router.route(snapshot)` → `selected_strategy`
+6. For each horizon: `strategy_engines[selected_strategy].score(snapshot)` → `StrategyEngineResult`
+7. Map to `HorizonRecommendation` — reuses `compute_risk_management()` for entry/exit/sizing
+8. Reuses `compute_completeness()` for `confidence_score` and data warnings
+
+**All 3 horizons receive the same strategy decision** (Phase 3 accepted simplification). Horizon-specific scoring can be added to `strategy_logic_config.json` in a future iteration.
+
+**Singleton accessor:**
+```python
+from app.engine.stock_decision_engine import get_decision_engine
+engine = get_decision_engine()   # cached instance
+```
+
+---
+
+## 26. Backtest Phase 4 Internals
+
+### 26.1 EntrySimulator
+
+**File:** `backend/backtest/entry_simulator.py`
+
+```python
+@dataclass
+class EntryResult:
+    entry_price: float
+    entry_date: pd.Timestamp
+    method_used: str
+    wait_days: int
+    not_triggered: bool   # True when max_wait_days exceeded
+
+class EntrySimulator:
+    def simulate_entry(
+        self,
+        signal_date: Any,
+        price_df: pd.DataFrame,
+        method: str,
+        max_wait_days: int = 10,
+    ) -> EntryResult
+```
+
+**Method details:**
+
+| Method | Logic |
+|--------|-------|
+| `NEXT_CLOSE` | `searchsorted(side="right")` to find first bar after signal_date; uses Close |
+| `NEXT_OPEN` | Same bar selection; uses Open |
+| `PULLBACK_TO_SMA20` | Iterates up to `max_wait_days`; triggers when `Low ≤ rolling(20).mean()`; enters at `min(Close, SMA)` |
+| `PULLBACK_TO_SMA50` | Same as SMA20 but rolling(50) |
+| `BREAKOUT_CONFIRMATION` | resistance = max of last 20 closes before signal; triggers when `close > resistance AND volume > avg_vol`; enters at close |
+
+`_normalize_ts()` strips timezone from timestamps for consistent comparison.
+
+### 26.2 ExitSimulator
+
+**File:** `backend/backtest/exit_simulator.py`
+
+```python
+@dataclass
+class ExitResult:
+    exit_price: float
+    exit_date: pd.Timestamp
+    method_used: str
+    holding_days: int
+    exit_reason: str       # "stop_loss" | "target" | "trailing_stop" | "horizon"
+    pnl_pct: float
+    mae_pct: float         # Maximum Adverse Excursion
+    mfe_pct: float         # Maximum Favorable Excursion
+
+class ExitSimulator:
+    def simulate_exit(
+        self,
+        entry_date: Any,
+        entry_price: float,
+        price_df: pd.DataFrame,
+        method: str,
+        horizon: str,
+        atr_stop_multiplier: float = 2.0,
+        atr_target_multiplier: float = 3.0,
+        trailing_pct: float = 0.15,
+    ) -> ExitResult
+```
+
+**Method details:**
+
+| Method | Logic |
+|--------|-------|
+| `FIXED_HORIZON` | Exit at bar N after entry_date (short=20, medium=65, long=252 trading days) |
+| `ATR_STOP_TARGET` | ATR computed from 14 bars before entry (true range formula); stop=entry−N×ATR; target=entry+M×ATR; exits whichever triggers first; falls back to FIXED_HORIZON if ATR unavailable |
+| `TRAILING_STOP` | `peak = max(peak, high)` each bar; stop triggered when `low ≤ peak × (1 − trailing_pct)`; exits at stop level or horizon |
+
+`_compute_mae_mfe()` scans all bars in the holding window:
+- `mae_pct = min(0, min((low - entry) / entry × 100))` — worst intrabar drawdown
+- `mfe_pct = max(0, max((high - entry) / entry × 100))` — best intrabar gain
+
+### 26.3 ExperimentTracker
+
+**File:** `backend/backtest/experiment_tracker.py`
+
+```python
+@dataclass
+class ExperimentManifest:
+    experiment_id: str
+    description: str
+    created_at: str              # ISO 8601 UTC
+    code_version: str            # git rev-parse --short HEAD
+    config_hash: str             # SHA256(algo_config.json)[:16]
+    changed_params: dict
+    cli_args: dict
+    primary_metric: str
+    primary_metric_value: Optional[float]
+    baseline_id: Optional[str]
+    tags: list[str]
+
+class ExperimentTracker:
+    def __init__(self, experiments_dir: str = "backtest/experiments/")
+    def start_experiment(id, description, changed_params, cli_args) → ExperimentManifest
+    def save_results(id, all_metrics) → None           # writes {id}_summary.json
+    def compare_to_baseline(id, baseline_id) → dict   # delta on primary metric
+    def list_experiments() → list[ExperimentManifest]
+```
+
+`code_version` is obtained via `subprocess.run(["git", "rev-parse", "--short", "HEAD"])`. When git is unavailable, falls back to `"unknown"`.
+
+### 26.4 WalkForwardValidator
+
+**File:** `backend/backtest/walk_forward.py`
+
+```python
+@dataclass
+class WalkForwardFold:
+    fold_number: int
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+    is_metrics: dict      # full metrics dict for IS period
+    oos_metrics: dict     # full metrics dict for OOS period
+    is_win_rate: float
+    oos_win_rate: float
+    is_avg_return: float
+    oos_avg_return: float
+
+@dataclass
+class WalkForwardResult:
+    folds: list[WalkForwardFold]
+    summary: dict                # avg IS/OOS win rates + returns across folds
+    oos_vs_is_consistency: float # fraction of folds with OOS ≥ 50% of IS return
+
+class WalkForwardValidator:
+    def __init__(self, train_window_weeks=104, test_window_weeks=26, step_weeks=13,
+                 phase=1, risk_profile="moderate", algo_config=None)
+    def run(self, data, tickers, start, end, horizon="short_term") → WalkForwardResult
+```
+
+**Fold generation:** Starting from `start`, advance by `step_weeks` until `test_end > end`. Train window goes `[cursor, cursor + train]`; test window goes `[cursor + train, cursor + train + test]`.
+
+**Consistency score:**
+- For each fold, compare `oos_avg_return` to `is_avg_return`
+- Fold is "consistent" when: `oos_avg_return ≥ 0.5 × is_avg_return` (or when both are negative and `oos ≥ is`)
+- `oos_vs_is_consistency = consistent_folds / total_folds`
+
+`run_backtest` is imported lazily **inside** `run()` to avoid circular imports with `runner.py`.
+
+---
+
+## 27. Data Layer Abstraction Internals
+
+### 27.1 Abstract MarketDataProvider
+
+**File:** `backend/app/data/providers/base.py`
+
+```python
+class MarketDataProvider(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    def supports_point_in_time_fundamentals(self) -> bool:
+        return False   # override to True for point-in-time sources
+
+    @abstractmethod
+    def get_price_history(self, ticker: str, start: str, end: str, interval: str = "1d") -> pd.DataFrame: ...
+    @abstractmethod
+    def get_benchmark_history(self, ticker: str, start: str, end: str) -> pd.DataFrame: ...
+    @abstractmethod
+    def get_fundamentals(self, ticker: str) -> FundamentalData: ...
+    @abstractmethod
+    def get_valuation(self, ticker: str, market_cap: Optional[float]) -> ValuationData: ...
+    @abstractmethod
+    def get_earnings(self, ticker: str) -> EarningsData: ...
+    @abstractmethod
+    def get_news(self, ticker: str, limit: int = 20) -> list[NewsItem]: ...
+    @abstractmethod
+    def get_company_profile(self, ticker: str) -> dict: ...
+```
+
+### 27.2 YFinanceProvider
+
+**File:** `backend/app/data/providers/yfinance_provider.py`
+
+Delegation pattern — no business logic:
+
+| Method | Delegates to |
+|--------|-------------|
+| `get_price_history` | `yf.download(start=, end=, auto_adjust=True)` directly |
+| `get_fundamentals` | `fundamental_provider.get_fundamental_data()` |
+| `get_valuation` | `fundamental_provider.get_valuation_data()` |
+| `get_earnings` | `earnings_provider.get_earnings_data()` |
+| `get_news` | `news_provider.get_news_items()` |
+| `get_company_profile` | `market_data_provider.get_ticker_info()` |
+| `get_benchmark_history` | `yf.download()` directly (no period-based shortcut) |
+
+### 27.3 ProviderFactory
+
+**File:** `backend/app/data/providers/provider_factory.py`
+
+```python
+class ProviderFactory:
+    @staticmethod
+    def create(provider_name: Optional[str] = None) -> MarketDataProvider:
+        # 1. Ensure _REGISTRY is populated (lazy load)
+        # 2. provider_name = provider_name or _active_provider_from_config()
+        # 3. cls = _REGISTRY.get(name); if None → warn + fallback to yfinance
+        # 4. return cls()
+
+    @staticmethod
+    def available_providers() -> list[str]:
+        return sorted(_REGISTRY)
+```
+
+`_active_provider_from_config()` reads `data_sources.active_provider` from `MultiSourceConfig`. Falls back to `"yfinance"` when config fails.
+
+**Registering a new provider:**
+
+```python
+# In provider_factory.py _load_registry():
+from app.data.providers.my_provider import MyProvider
+_REGISTRY["myprovider"] = MyProvider
+```
+
+### 27.4 ParquetCacheStore
+
+**File:** `backend/app/data/cache/parquet_store.py`
+
+```python
+SCHEMA_VERSION = 1
+
+class ParquetCacheStore:
+    def __init__(self, cache_dir: Optional[str] = None)
+    # Default: backend/data/cache/raw/
+
+    def has_coverage(self, ticker, provider, data_type, interval, start, end) -> bool
+    # Checks file exists + meta.schema_version == SCHEMA_VERSION
+
+    def read(self, ticker, provider, data_type, interval, start, end) -> pd.DataFrame
+    # pd.read_parquet + tz stripping (tz_localize(None))
+
+    def write(self, df, ticker, provider, data_type, interval, start, end,
+              adjusted_prices=True) -> Path
+    # Copies df, strips tz, saves parquet (snappy), writes companion .meta.json
+
+    def get_missing_ranges(self, ticker, provider, data_type, interval,
+                           requested_start, requested_end) -> list[tuple[str, str]]
+    # Simple model: returns [] if has_coverage, else [(start, end)]
+    # No partial-coverage detection
+
+    def metadata(self, ...) -> Optional[CacheMetadata]
+```
+
+**File layout:** `{root}/{provider}/{data_type}/{ticker}_{interval}_{start}_{end}.parquet`
+
+Example: `data/cache/raw/yfinance/price/AAPL_1d_2023-01-01_2023-06-01.parquet`
+
+### 27.5 CacheMetadata
+
+**File:** `backend/app/data/cache/cache_metadata.py`
+
+```python
+@dataclass
+class CacheMetadata:
+    ticker: str
+    provider: str
+    data_type: str          # "price" | "fundamentals" | "earnings" | ...
+    interval: str           # "1d", "1h", etc.
+    start: str              # ISO date
+    end: str                # ISO date
+    fetched_at: str         # ISO 8601 UTC (datetime.now(timezone.utc).isoformat())
+    schema_version: int     # bump when parquet schema changes
+    adjusted_prices: bool
+    row_count: int
+    columns: list[str]
+    notes: Optional[str] = None
+
+# Companion file: {parquet_path}.meta.json
+save_metadata(parquet_path: Path, metadata: CacheMetadata) -> None
+load_metadata(parquet_path: Path) -> Optional[CacheMetadata]
+make_metadata(...) -> CacheMetadata   # factory with current UTC timestamp
+```
+
+**Schema versioning:** When `parquet_store.SCHEMA_VERSION` is bumped, `has_coverage()` returns `False` for all old files (forcing re-fetch), since `meta.schema_version != SCHEMA_VERSION`. Old files remain on disk until manually cleared.

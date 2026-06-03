@@ -69,19 +69,24 @@ def compute_sma_relative(series: pd.Series, window: int) -> Optional[float]:
     return round((price - float(sma_val)) / float(sma_val) * 100, 4)
 
 
-def compute_performance_periods(series: pd.Series) -> dict[str, Optional[float]]:
+def compute_performance_periods(
+    series: pd.Series,
+    bars: Optional[dict] = None,
+) -> dict[str, Optional[float]]:
     """Compute % returns over multiple look-back periods.
 
-    Uses positional indexing: 1W=5 bars, 1M=21, 3M=63, 6M=126, 1Y=252,
-    3Y=756, 5Y=1260. YTD uses the DatetimeIndex year boundary if available.
+    `bars` maps period names to bar counts; defaults match algo_config perf_bars.
+    YTD uses the DatetimeIndex year boundary if available.
     """
+    if bars is None:
+        bars = {"1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252, "3Y": 756, "5Y": 1260}
     n = len(series)
     price = float(series.iloc[-1])
 
-    def perf(bars: int) -> Optional[float]:
-        if n <= bars:
+    def perf(n_bars: int) -> Optional[float]:
+        if n <= n_bars:
             return None
-        prev = float(series.iloc[-(bars + 1)])
+        prev = float(series.iloc[-(n_bars + 1)])
         if prev == 0:
             return None
         return round((price / prev - 1) * 100, 4)
@@ -98,14 +103,14 @@ def compute_performance_periods(series: pd.Series) -> dict[str, Optional[float]]
                 perf_ytd = round((price / ytd_prev - 1) * 100, 4)
 
     return {
-        "perf_1w": perf(5),
-        "perf_1m": perf(21),
-        "perf_3m": perf(63),
-        "perf_6m": perf(126),
+        "perf_1w": perf(bars["1W"]),
+        "perf_1m": perf(bars["1M"]),
+        "perf_3m": perf(bars["3M"]),
+        "perf_6m": perf(bars["6M"]),
         "perf_ytd": perf_ytd,
-        "perf_1y": perf(252),
-        "perf_3y": perf(756),
-        "perf_5y": perf(1260),
+        "perf_1y": perf(bars["1Y"]),
+        "perf_3y": perf(bars["3Y"]),
+        "perf_5y": perf(bars["5Y"]),
     }
 
 
@@ -183,12 +188,13 @@ def compute_range_distances(
 
 def compute_volatility_metrics(
     series: pd.Series,
+    weekly_min_bars: int = 10,
+    monthly_min_bars: int = 24,
 ) -> tuple[Optional[float], Optional[float]]:
     """Return (weekly_volatility, monthly_volatility) as annualized percentages.
 
     Weekly: std of 5-bar (weekly) returns × sqrt(52) × 100
     Monthly: std of 21-bar (monthly) returns × sqrt(12) × 100
-    Requires at least 10 bars for weekly, 24 bars for monthly.
     """
     n = len(series)
 
@@ -196,14 +202,14 @@ def compute_volatility_metrics(
     monthly_vol: Optional[float] = None
 
     # Weekly returns: sample every 5 bars
-    if n >= 10:
+    if n >= weekly_min_bars:
         weekly_prices = series.iloc[::5]
         weekly_returns = weekly_prices.pct_change().dropna()
         if len(weekly_returns) >= 2:
             weekly_vol = round(float(weekly_returns.std() * np.sqrt(52)) * 100, 4)
 
     # Monthly returns: sample every 21 bars
-    if n >= 24:
+    if n >= monthly_min_bars:
         monthly_prices = series.iloc[::21]
         monthly_returns = monthly_prices.pct_change().dropna()
         if len(monthly_returns) >= 2:
@@ -1065,42 +1071,55 @@ def compute_technicals(
 
     price = float(close.iloc[-1])
 
+    sma_periods = ti["sma_periods"]   # [10, 20, 50, 100, 200]
+    ema_periods = ti["ema_periods"]   # [8, 21]
+    slope_bars = ti["sma_slope_bars"]
+
     # --- Existing MAs ---
-    ma_10 = _sma(close, 10)
-    ma_20 = _sma(close, 20)
-    ma_50 = _sma(close, 50)
-    ma_100 = _sma(close, 100)
-    ma_200 = _sma(close, 200)
+    ma_10 = _sma(close, sma_periods[0])
+    ma_20 = _sma(close, sma_periods[1])
+    ma_50 = _sma(close, sma_periods[2])
+    ma_100 = _sma(close, sma_periods[3])
+    ma_200 = _sma(close, sma_periods[4])
 
     # --- EMA relatives ---
-    ema8_rel = compute_ema_relative(close, 8)
-    ema21_rel = compute_ema_relative(close, 21)
+    ema8_rel = compute_ema_relative(close, ema_periods[0])
+    ema21_rel = compute_ema_relative(close, ema_periods[1])
 
     # --- SMA relatives ---
-    sma20_rel = compute_sma_relative(close, 20)
-    sma50_rel = compute_sma_relative(close, 50)
-    sma200_rel = compute_sma_relative(close, 200)
+    sma20_rel = compute_sma_relative(close, sma_periods[1])
+    sma50_rel = compute_sma_relative(close, sma_periods[2])
+    sma200_rel = compute_sma_relative(close, sma_periods[4])
 
     # --- SMA slopes ---
-    sma20_slope = compute_sma_slope(close, 20)
-    sma50_slope = compute_sma_slope(close, 50)
-    sma200_slope = compute_sma_slope(close, 200)
+    sma20_slope = compute_sma_slope(close, sma_periods[1], slope_bars=slope_bars)
+    sma50_slope = compute_sma_slope(close, sma_periods[2], slope_bars=slope_bars)
+    sma200_slope = compute_sma_slope(close, sma_periods[4], slope_bars=slope_bars)
 
     # --- Momentum indicators ---
     rsi = compute_rsi(close, period=ti["rsi_period"])
     rsi_slope_val = compute_rsi_slope(close, rsi_period=ti["rsi_period"], slope_bars=ti["rsi_slope_bars"])
     macd_val, macd_sig, macd_hist = compute_macd(close, fast=ti["macd_fast"], slow=ti["macd_slow"], signal=ti["macd_signal"])
-    adx_val = compute_adx(high, low, close)
-    stoch_rsi = compute_stochastic_rsi(close)
+    adx_val = compute_adx(high, low, close, period=ti["adx_period"])
+    stoch_rsi = compute_stochastic_rsi(
+        close,
+        period=ti["stochrsi_period"],
+        smooth_k=ti["stochrsi_smooth_k"],
+        smooth_d=ti["stochrsi_smooth_d"],
+    )
 
     # --- Volatility ---
     atr = compute_atr(high, low, close, period=ti["atr_period"])
     atr_pct = compute_atr_percent(atr, price)
     bb_position, bb_width = compute_bollinger_bands(close, period=ti["bb_period"], std_dev=ti["bb_std_dev"])
-    weekly_vol, monthly_vol = compute_volatility_metrics(close)
+    weekly_vol, monthly_vol = compute_volatility_metrics(
+        close,
+        weekly_min_bars=ti["weekly_vol_min_bars"],
+        monthly_min_bars=ti["monthly_vol_min_bars"],
+    )
 
     # --- Performance periods ---
-    perfs = compute_performance_periods(close)
+    perfs = compute_performance_periods(close, bars=ti["perf_bars"])
 
     # --- Gap / intraday metrics ---
     open_price = float(df["Open"].squeeze().iloc[-1]) if "Open" in df.columns else price
@@ -1116,9 +1135,13 @@ def compute_technicals(
     cmf = compute_chaikin_money_flow(high, low, close, volume, period=ti["cmf_period"])
     vwap_dev = compute_vwap_deviation(high, low, close, volume, period=ti["vwap_period"])
     anchored_vwap_dev: Optional[float] = None  # populated externally when earnings date known
-    vol_dryup = compute_volume_dryup_ratio(volume)
-    breakout_vol_mult = _compute_breakout_volume_multiple(volume)
-    updown_vol = compute_updown_volume_ratio(close, volume)
+    vol_dryup = compute_volume_dryup_ratio(
+        volume,
+        recent_bars=ti["volume_dryup_recent_bars"],
+        ref_bars=ti["volume_dryup_ref_bars"],
+    )
+    breakout_vol_mult = _compute_breakout_volume_multiple(volume, period=ti["breakout_vol_ref_period"])
+    updown_vol = compute_updown_volume_ratio(close, volume, period=ti["updown_vol_period"])
 
     # --- Existing derivations ---
     trend = classify_trend(close, ma_50, ma_200)
@@ -1131,32 +1154,34 @@ def compute_technicals(
     rs_spy_63d = None
     if spy_df is not None and not spy_df.empty:
         spy_close = spy_df["Close"].squeeze()
-        rs_spy = compute_relative_strength(close, spy_close)
-        rs_spy_20d = compute_rs_vs_benchmark(close, spy_close, period=20)
-        rs_spy_63d = compute_rs_vs_benchmark(close, spy_close, period=63)
+        rs_spy = compute_relative_strength(close, spy_close, period=ti["rs_spy_period"])
+        rs_spy_20d = compute_rs_vs_benchmark(close, spy_close, period=ti["rs_benchmark_20d"])
+        rs_spy_63d = compute_rs_vs_benchmark(close, spy_close, period=ti["rs_benchmark_63d"])
 
     rs_qqq = None
     if qqq_df is not None and not qqq_df.empty:
         qqq_close = qqq_df["Close"].squeeze()
-        rs_qqq = compute_rs_vs_benchmark(close, qqq_close, period=63)
+        rs_qqq = compute_rs_vs_benchmark(close, qqq_close, period=ti["rs_benchmark_63d"])
 
     rs_sector = None
     rs_sector_20d = None
     rs_sector_63d = None
     if sector_df is not None and not sector_df.empty:
         sector_close = sector_df["Close"].squeeze()
-        rs_sector = compute_relative_strength(close, sector_close)
-        rs_sector_20d = compute_rs_vs_benchmark(close, sector_close, period=20)
-        rs_sector_63d = compute_rs_vs_benchmark(close, sector_close, period=63)
+        rs_sector = compute_relative_strength(close, sector_close, period=ti["rs_spy_period"])
+        rs_sector_20d = compute_rs_vs_benchmark(close, sector_close, period=ti["rs_benchmark_20d"])
+        rs_sector_63d = compute_rs_vs_benchmark(close, sector_close, period=ti["rs_benchmark_63d"])
 
     # --- Story 3: Percentile ranks, drawdown, gap fill, post-earnings drift ---
-    rank_20d = compute_return_percentile_rank(close, return_bars=20, lookback=252)
-    rank_63d = compute_return_percentile_rank(close, return_bars=63, lookback=252)
-    rank_126d = compute_return_percentile_rank(close, return_bars=126, lookback=252)
-    rank_252d = compute_return_percentile_rank(close, return_bars=252, lookback=252)
+    rank_bars = ti["rank_return_bars"]  # [20, 63, 126, 252]
+    rank_lookback = ti["rank_lookback"]
+    rank_20d = compute_return_percentile_rank(close, return_bars=rank_bars[0], lookback=rank_lookback)
+    rank_63d = compute_return_percentile_rank(close, return_bars=rank_bars[1], lookback=rank_lookback)
+    rank_126d = compute_return_percentile_rank(close, return_bars=rank_bars[2], lookback=rank_lookback)
+    rank_252d = compute_return_percentile_rank(close, return_bars=rank_bars[3], lookback=rank_lookback)
 
-    dd_3m = compute_max_drawdown(close, bars=63)
-    dd_1y = compute_max_drawdown(close, bars=252)
+    dd_3m = compute_max_drawdown(close, bars=ti["drawdown_3m_bars"])
+    dd_1y = compute_max_drawdown(close, bars=ti["drawdown_1y_bars"])
 
     open_series = df["Open"].squeeze() if "Open" in df.columns else close
     gap_fill = compute_gap_fill_status(open_series, close)

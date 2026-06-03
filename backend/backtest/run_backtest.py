@@ -12,6 +12,12 @@ Usage (from backend/ directory):
   # Force re-download of all cached data
   python -m backtest.run_backtest --force-refresh
 
+  # Track as a named experiment
+  python -m backtest.run_backtest --experiment-id my_experiment_01
+
+  # Run walk-forward validation instead of a standard backtest
+  python -m backtest.run_backtest --walk-forward --tickers AAPL,MSFT --start 2019-01-01 --end 2024-01-01
+
 Options:
   --tickers        Comma-separated ticker list (default: all 20 in config)
   --start          Backtest start date  YYYY-MM-DD (default: config.BACKTEST_START)
@@ -22,6 +28,11 @@ Options:
   --output-dir     Directory for results (default: backtest/results/)
   --no-report      Skip HTML report generation (still writes CSVs)
   --algo-config    Path to a custom algo_config.json (default: backend/algo_config.json)
+  --experiment-id  Name this run for experiment tracking (writes manifest + summary)
+  --walk-forward   Run walk-forward validation instead of a standard backtest
+  --train-weeks    Walk-forward training window in weeks (default: 104)
+  --test-weeks     Walk-forward test window in weeks (default: 26)
+  --step-weeks     Walk-forward fold step in weeks (default: 13)
 """
 from __future__ import annotations
 
@@ -45,6 +56,7 @@ from backtest.runner import run_backtest
 from backtest.outcome import attach_outcomes
 from backtest.metrics import build_all_horizons_metrics
 from backtest.report import generate_report
+from backtest.experiment_tracker import ExperimentTracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,6 +91,16 @@ def _parse_args() -> argparse.Namespace:
                    help="Skip HTML report generation")
     p.add_argument("--algo-config",   default=None,
                    help="Path to a custom algo_config.json (default: backend/algo_config.json)")
+    p.add_argument("--experiment-id", default=None,
+                   help="Tag this run with an experiment ID for tracking")
+    p.add_argument("--walk-forward",  action="store_true",
+                   help="Run walk-forward validation instead of a standard backtest")
+    p.add_argument("--train-weeks",   default=104, type=int,
+                   help="Walk-forward training window in weeks (default: 104)")
+    p.add_argument("--test-weeks",    default=26,  type=int,
+                   help="Walk-forward test window in weeks (default: 26)")
+    p.add_argument("--step-weeks",    default=13,  type=int,
+                   help="Walk-forward fold step in weeks (default: 13)")
     return p.parse_args()
 
 
@@ -103,11 +125,67 @@ def main() -> None:
         logger.info("Custom algo config: %s", args.algo_config)
 
     # ── Step 1: Load / download data ──────────────────────────────────────
-    logger.info("Step 1/5: Loading data…")
+    logger.info("Step 1: Loading data…")
     data = load_all_data(force_refresh=args.force_refresh, extra_tickers=tickers)
+
+    # ── Walk-forward shortcut ──────────────────────────────────────────────
+    if args.walk_forward:
+        from backtest.walk_forward import WalkForwardValidator
+        import json
+
+        logger.info("Walk-forward mode: train=%dwk, test=%dwk, step=%dwk",
+                    args.train_weeks, args.test_weeks, args.step_weeks)
+        validator = WalkForwardValidator(
+            train_window_weeks=args.train_weeks,
+            test_window_weeks=args.test_weeks,
+            step_weeks=args.step_weeks,
+            phase=args.phase,
+            risk_profile=args.risk_profile,
+            algo_config=algo_cfg,
+        )
+        result = validator.run(
+            data=data, tickers=tickers,
+            start=args.start, end=args.end,
+        )
+        logger.info(
+            "Walk-forward complete: %d folds, consistency=%.3f",
+            len(result.folds), result.oos_vs_is_consistency,
+        )
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output = {
+            "summary":               result.summary,
+            "oos_vs_is_consistency": result.oos_vs_is_consistency,
+            "folds": [
+                {
+                    "fold_index":     f.fold_index,
+                    "train_start":    f.train_start,  "train_end":    f.train_end,
+                    "test_start":     f.test_start,   "test_end":     f.test_end,
+                    "is_win_rate":    f.is_win_rate,  "oos_win_rate": f.oos_win_rate,
+                    "is_avg_return":  f.is_avg_return, "oos_avg_return": f.oos_avg_return,
+                }
+                for f in result.folds
+            ],
+        }
+        wf_path = out_dir / "walk_forward_results.json"
+        wf_path.write_text(json.dumps(output, indent=2))
+        logger.info("Walk-forward results written to %s", wf_path)
+        return
 
     # ── Step 2: Run backtest ──────────────────────────────────────────────
     logger.info("Step 2/5: Running backtest loop…")
+
+    # Start experiment tracking if requested
+    tracker: ExperimentTracker | None = None
+    if args.experiment_id:
+        tracker = ExperimentTracker()
+        tracker.start_experiment(
+            experiment_id=args.experiment_id,
+            cli_args=vars(args),
+            algo_config_path=args.algo_config,
+        )
+        logger.info("Experiment tracking started: %s", args.experiment_id)
+
     signals = run_backtest(
         data=data,
         tickers=tickers,
@@ -133,6 +211,10 @@ def main() -> None:
     # ── Step 4: Compute metrics ───────────────────────────────────────────
     logger.info("Step 4/5: Computing metrics…")
     all_metrics = build_all_horizons_metrics(signals)
+
+    # Save experiment results if tracking
+    if tracker and args.experiment_id:
+        tracker.save_results(args.experiment_id, all_metrics)
 
     # ── Step 5: Generate report ───────────────────────────────────────────
     if not args.no_report:

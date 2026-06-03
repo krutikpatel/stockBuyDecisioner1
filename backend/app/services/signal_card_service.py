@@ -246,37 +246,32 @@ def score_trend(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = Non
 
 def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on entry quality: RSI, StochRSI, VWAP, Bollinger, gap."""
+    cfg = algo_config or get_algo_config()
+    ec = cfg.signal_cards["entry_timing"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # RSI: context-aware split (Improvements 3)
-    # 55–68  → continuation ideal  (+25)
-    # 40–55  → pullback sweet spot  (+20)
-    # 25–42  → rebound candidate    (+15)
-    # 68–76  → extended but buyable (+15)
-    # > 76   → overbought, avoid    (+5)
-    # < 25   → extreme oversold     (+3)
     rsi = ti.rsi_14
     if rsi is not None:
-        total += 25
-        if 55.0 <= rsi <= 68.0:
-            raw += 25
-            pos.append(f"RSI {rsi:.0f} — continuation entry zone (55–68)")
-        elif 40.0 <= rsi < 55.0:
-            raw += 20
-            pos.append(f"RSI {rsi:.0f} — pullback sweet spot (40–55)")
-        elif 25.0 <= rsi < 42.0:
-            raw += 15
-            pos.append(f"RSI {rsi:.0f} — rebound candidate zone (25–42)")
-        elif 68.0 < rsi <= 76.0:
-            raw += 15
-            pos.append(f"RSI {rsi:.0f} — extended but buyable (68–76)")
-        elif rsi > 76.0:
-            raw += 5
+        total += ec["rsi_weight"]
+        if ec["rsi_ideal_min"] <= rsi <= ec["rsi_ideal_max"]:
+            raw += ec["rsi_ideal_pts"]
+            pos.append(f"RSI {rsi:.0f} — continuation entry zone ({ec['rsi_ideal_min']:.0f}–{ec['rsi_ideal_max']:.0f})")
+        elif ec["rsi_pullback_min"] <= rsi < ec["rsi_ideal_min"]:
+            raw += ec["rsi_pullback_pts"]
+            pos.append(f"RSI {rsi:.0f} — pullback sweet spot ({ec['rsi_pullback_min']:.0f}–{ec['rsi_ideal_min']:.0f})")
+        elif ec["rsi_oversold_min"] <= rsi < ec["rsi_oversold_max"]:
+            raw += ec["rsi_oversold_pts"]
+            pos.append(f"RSI {rsi:.0f} — rebound candidate zone ({ec['rsi_oversold_min']:.0f}–{ec['rsi_oversold_max']:.0f})")
+        elif ec["rsi_extended_min"] < rsi <= ec["rsi_extended_max"]:
+            raw += ec["rsi_extended_pts"]
+            pos.append(f"RSI {rsi:.0f} — extended but buyable ({ec['rsi_extended_min']:.0f}–{ec['rsi_extended_max']:.0f})")
+        elif rsi > ec["rsi_overbought_threshold"]:
+            raw += ec["rsi_overbought_pts"]
             neg.append(f"RSI {rsi:.0f} — overbought, avoid new entries")
         else:
-            raw += 3
+            raw += ec["rsi_deep_oversold_pts"]
             neg.append(f"RSI {rsi:.0f} — extreme oversold, high risk")
     else:
         warn.append("RSI unavailable")
@@ -284,97 +279,103 @@ def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig
     # Stochastic RSI
     srsi = ti.stochastic_rsi
     if srsi is not None:
-        total += 15
-        if 0.2 <= srsi <= 0.6:
-            raw += 15
+        w = ec["stochrsi_weight"]
+        total += w
+        if ec["stochrsi_mid_min"] <= srsi <= ec["stochrsi_mid_max"]:
+            raw += w
             pos.append("StochRSI in healthy range")
         elif srsi > 0.8:
-            raw += 5
+            raw += round(w / 3)
             neg.append("StochRSI overbought")
-        elif srsi < 0.2:
-            raw += 8
+        elif srsi < ec["stochrsi_mid_min"]:
+            raw += round(w * 8 / 15)
         else:
-            raw += 10
+            raw += round(w * 2 / 3)
     else:
         warn.append("StochRSI unavailable")
 
     # VWAP position
     vwap_dev = ti.vwap_deviation
     if vwap_dev is not None:
-        total += 15
-        if 0 <= vwap_dev <= 0.03:
-            raw += 15
+        w = ec["vwap_weight"]
+        total += w
+        if 0 <= vwap_dev <= ec["vwap_dev_good_max"]:
+            raw += w
             pos.append("Price near/above VWAP — institutional support")
-        elif vwap_dev > 0.03:
-            raw += 8
+        elif vwap_dev > ec["vwap_dev_good_max"]:
+            raw += round(w * 8 / 15)
             neg.append("Price extended above VWAP")
         else:
-            raw += 5
+            raw += round(w / 3)
             neg.append("Price below VWAP")
     else:
         warn.append("VWAP deviation unavailable")
 
-    # Bollinger Band position (0 = lower band, 1 = upper band; 0.3–0.7 is healthy)
+    # Bollinger Band position (0 = lower band, 1 = upper band)
     bb_pos = ti.bollinger_band_position
     if bb_pos is not None:
-        total += 10
-        if 0.3 <= bb_pos <= 0.7:
-            raw += 10
+        w = ec["bb_weight"]
+        total += w
+        if ec["bb_ideal_min"] <= bb_pos <= ec["bb_ideal_max"]:
+            raw += w
             pos.append("Price within Bollinger Band midrange")
-        elif bb_pos > 0.85:
-            raw += 3
+        elif bb_pos > ec["bb_extended_threshold"]:
+            raw += round(w * 0.3)
             neg.append("Price at upper Bollinger Band — extended")
-        elif bb_pos < 0.15:
-            raw += 5
+        elif bb_pos < ec["bb_oversold_threshold"]:
+            raw += round(w * 0.5)
         else:
-            raw += 7
+            raw += round(w * 0.7)
     else:
         warn.append("Bollinger Band position unavailable")
 
     # EMA8 relative (near-term support)
     ema8 = ti.ema8_relative
     if ema8 is not None:
-        total += 10
-        if 0 <= ema8 <= 0.03:
-            raw += 10
+        w = ec["ema8_weight"]
+        total += w
+        if 0 <= ema8 <= ec["ema8_dev_good_max"]:
+            raw += w
             pos.append("Price close to EMA8 — tight entry")
-        elif ema8 > 0.03:
-            raw += 5
+        elif ema8 > ec["ema8_dev_good_max"]:
+            raw += round(w * 0.5)
             neg.append("Price extended above EMA8")
         else:
-            raw += 3
+            raw += round(w * 0.3)
     else:
         warn.append("EMA8 relative unavailable")
 
-    # RSI slope (entry is better when momentum is recovering/building)
+    # RSI slope
     rsi_slope = ti.rsi_slope
     if rsi_slope is not None:
-        total += 10
-        if rsi_slope >= 3:
-            raw += 10
+        total += ec["rsi_slope_weight"]
+        slope_pts = ec["rsi_slope_pts"]  # [strong_up, mild_up, mild_down, strong_down]
+        if rsi_slope >= ec["rsi_slope_up_strong"]:
+            raw += slope_pts[0]
             pos.append(f"RSI slope +{rsi_slope:.1f} — momentum building, good entry")
-        elif rsi_slope >= 0:
-            raw += 7
-        elif rsi_slope >= -3:
-            raw += 3
+        elif rsi_slope >= ec["rsi_slope_up_mild"]:
+            raw += slope_pts[1]
+        elif rsi_slope >= ec["rsi_slope_down"]:
+            raw += slope_pts[2]
             neg.append(f"RSI slope {rsi_slope:.1f} — momentum fading at entry")
         else:
-            raw += 1
+            raw += slope_pts[3]
             neg.append(f"RSI slope {rsi_slope:.1f} — avoid entry, momentum declining")
     else:
         warn.append("RSI slope unavailable")
 
-    # Gap %: small gap up is fine, large gap up is extended
+    # Gap %
     gap = ti.gap_percent
     if gap is not None:
-        total += 5
-        if -1 <= gap <= 1:
-            raw += 5
-        elif gap > 3:
-            raw += 1
+        w = ec["gap_weight"]
+        total += w
+        if ec["gap_ideal_min"] <= gap <= ec["gap_ideal_max"]:
+            raw += w
+        elif gap > ec["gap_chasing_threshold"]:
+            raw += round(w * 0.2)
             neg.append(f"Large gap up {gap:.1f}% — risky entry")
         else:
-            raw += 3
+            raw += round(w * 0.6)
     else:
         warn.append("Gap% unavailable")
 
@@ -388,6 +389,8 @@ def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig
 
 def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on OBV, A/D, CMF, relative volume, up/down ratio."""
+    cfg = algo_config or get_algo_config()
+    vc = cfg.signal_cards["volume_accumulation"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
@@ -395,55 +398,59 @@ def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[Alg
     # OBV trend
     obv = ti.obv_trend
     if obv is not None:
-        total += 20
+        w = vc["obv_weight"]
+        total += w
         if obv == 1:
-            raw += 20
+            raw += w
             pos.append("OBV rising — accumulation confirmed")
         elif obv == -1:
             neg.append("OBV falling — distribution signal")
         else:
-            raw += 10
+            raw += round(w * 0.5)
 
     # A/D trend
     ad = ti.ad_trend
     if ad is not None:
-        total += 15
+        w = vc["ad_weight"]
+        total += w
         if ad == 1:
-            raw += 15
+            raw += w
             pos.append("A/D line rising")
         elif ad == -1:
             neg.append("A/D line falling — institutional selling")
         else:
-            raw += 7
+            raw += round(w * 0.47)
 
     # Chaikin Money Flow
     cmf = ti.chaikin_money_flow
     if cmf is not None:
-        total += 20
-        if cmf > 0.1:
-            raw += 20
+        w = vc["cmf_weight"]
+        total += w
+        if cmf > vc["cmf_bullish"]:
+            raw += w
             pos.append(f"CMF {cmf:.2f} — strong buying pressure")
-        elif cmf > 0:
-            raw += 12
+        elif cmf > vc["cmf_moderate"]:
+            raw += round(w * 0.6)
             pos.append(f"CMF {cmf:.2f} — mild buying pressure")
-        elif cmf < -0.1:
+        elif cmf < vc["cmf_bearish"]:
             neg.append(f"CMF {cmf:.2f} — distribution")
         else:
-            raw += 5
+            raw += round(w * 0.25)
     else:
         warn.append("Chaikin Money Flow unavailable")
 
     # Breakout volume multiple
     bvol = ti.breakout_volume_multiple
     if bvol is not None:
-        total += 20
-        if bvol >= 1.5:
-            raw += 20
+        w = vc["breakout_vol_weight"]
+        total += w
+        if bvol >= vc["breakout_vol_strong"]:
+            raw += w
             pos.append(f"Volume {bvol:.1f}× avg — breakout confirmation")
-        elif bvol >= 1.0:
-            raw += 12
+        elif bvol >= vc["breakout_vol_normal"]:
+            raw += round(w * 0.6)
         else:
-            raw += 5
+            raw += round(w * 0.25)
             neg.append(f"Volume {bvol:.1f}× avg — below average")
     else:
         warn.append("Breakout volume multiple unavailable")
@@ -451,12 +458,13 @@ def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[Alg
     # Up/down volume ratio
     udv = ti.updown_volume_ratio
     if udv is not None:
-        total += 15
-        if udv >= 1.3:
-            raw += 15
+        w = vc["updown_vol_weight"]
+        total += w
+        if udv >= vc["updown_vol_strong"]:
+            raw += w
             pos.append(f"Up/down volume ratio {udv:.1f} — buyers in control")
-        elif udv >= 1.0:
-            raw += 10
+        elif udv >= vc["updown_vol_normal"]:
+            raw += round(w * 0.67)
         else:
             neg.append(f"Up/down volume ratio {udv:.1f} — sellers dominant")
     else:
@@ -465,15 +473,16 @@ def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[Alg
     # Volume dry-up (low volume on pullback = bullish)
     vdu = ti.volume_dryup_ratio
     if vdu is not None:
-        total += 10
-        if vdu < 0.7:
-            raw += 10
+        w = vc["dryup_weight"]
+        total += w
+        if vdu < vc["dryup_low"]:
+            raw += w
             pos.append("Volume dry-up on pullback — healthy consolidation")
-        elif vdu > 1.2:
-            raw += 3
+        elif vdu > vc["dryup_high"]:
+            raw += round(w * 0.3)
             neg.append("Heavy volume on pullback — distribution concern")
         else:
-            raw += 6
+            raw += round(w * 0.6)
     else:
         warn.append("Volume dry-up ratio unavailable")
 
@@ -487,24 +496,29 @@ def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[Alg
 
 def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on drawdown, ATR%, weekly vol, beta, distance from highs."""
+    cfg = algo_config or get_algo_config()
+    vrc = cfg.signal_cards["volatility_risk"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # Max drawdown 3M (less negative = better)
+    # Max drawdown 3M (less negative = better; tiers are descending negative values)
     dd3m = ti.max_drawdown_3m
     if dd3m is not None:
-        total += 25
-        if dd3m >= -5:
-            raw += 25
+        w = vrc["dd3m_weight"]
+        tiers = vrc["dd3m_tiers"]   # e.g. [-5, -10, -20]
+        pts = vrc["dd3m_pts"]       # e.g. [25, 18, 10, 3]
+        total += w
+        if dd3m >= tiers[0]:
+            raw += pts[0]
             pos.append(f"3M max drawdown {dd3m:.1f}% — contained")
-        elif dd3m >= -10:
-            raw += 18
-        elif dd3m >= -20:
-            raw += 10
+        elif dd3m >= tiers[1]:
+            raw += pts[1]
+        elif dd3m >= tiers[2]:
+            raw += pts[2]
             neg.append(f"3M drawdown {dd3m:.1f}% — notable")
         else:
-            raw += 3
+            raw += pts[3]
             neg.append(f"3M drawdown {dd3m:.1f}% — severe")
     else:
         warn.append("3M drawdown unavailable")
@@ -512,76 +526,90 @@ def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoCon
     # Max drawdown 1Y
     dd1y = ti.max_drawdown_1y
     if dd1y is not None:
-        total += 15
-        if dd1y >= -10:
-            raw += 15
-        elif dd1y >= -25:
-            raw += 8
+        w = vrc["dd1y_weight"]
+        tiers = vrc["dd1y_tiers"]   # e.g. [-10, -25]
+        pts = vrc["dd1y_pts"]       # e.g. [15, 8, 2]
+        total += w
+        if dd1y >= tiers[0]:
+            raw += pts[0]
+        elif dd1y >= tiers[1]:
+            raw += pts[1]
         else:
-            raw += 2
+            raw += pts[2]
             neg.append(f"1Y drawdown {dd1y:.1f}% — high risk")
     else:
         warn.append("1Y drawdown unavailable")
 
-    # ATR%
+    # ATR% (lower is better)
     atr_pct = ti.atr_percent
     if atr_pct is not None:
-        total += 20
-        if atr_pct <= 1.5:
-            raw += 20
+        w = vrc["atr_weight"]
+        tiers = vrc["atr_tiers"]    # e.g. [1.5, 3.0, 5.0]
+        pts = vrc["atr_pts"]        # e.g. [20, 13, 7, 2]
+        total += w
+        if atr_pct <= tiers[0]:
+            raw += pts[0]
             pos.append(f"ATR {atr_pct:.1f}% — low intraday risk")
-        elif atr_pct <= 3.0:
-            raw += 13
-        elif atr_pct <= 5.0:
-            raw += 7
+        elif atr_pct <= tiers[1]:
+            raw += pts[1]
+        elif atr_pct <= tiers[2]:
+            raw += pts[2]
             neg.append(f"ATR {atr_pct:.1f}% — elevated volatility")
         else:
-            raw += 2
+            raw += pts[3]
             neg.append(f"ATR {atr_pct:.1f}% — very high volatility")
     else:
         warn.append("ATR% unavailable")
 
-    # Weekly volatility
+    # Weekly volatility (annualised %; lower is better)
     wvol = ti.volatility_weekly
     if wvol is not None:
-        total += 15
-        if wvol <= 0.20:
-            raw += 15
-            pos.append(f"Weekly vol {wvol*100:.0f}% ann — moderate")
-        elif wvol <= 0.40:
-            raw += 8
+        w = vrc["vol_weekly_weight"]
+        tiers = vrc["vol_weekly_tiers"]  # e.g. [20, 40] (as whole-number %)
+        pts = vrc["vol_weekly_pts"]      # e.g. [15, 8, 2]
+        total += w
+        wvol_pct = wvol * 100 if wvol < 5 else wvol  # normalise if stored as fraction
+        if wvol_pct <= tiers[0]:
+            raw += pts[0]
+            pos.append(f"Weekly vol {wvol_pct:.0f}% ann — moderate")
+        elif wvol_pct <= tiers[1]:
+            raw += pts[1]
         else:
-            raw += 2
-            neg.append(f"Weekly vol {wvol*100:.0f}% ann — high")
+            raw += pts[2]
+            neg.append(f"Weekly vol {wvol_pct:.0f}% ann — high")
     else:
         warn.append("Weekly volatility unavailable")
 
-    # Beta (not on TechnicalIndicators — gracefully skip)
+    # Beta
     beta = getattr(ti, "beta", None)
     if beta is not None:
-        total += 15
-        if 0.5 <= beta <= 1.3:
-            raw += 15
+        w = vrc["beta_weight"]
+        pts = vrc["beta_pts"]  # e.g. [15, 8, 3]
+        total += w
+        if vrc["beta_ideal_min"] <= beta <= vrc["beta_ideal_max"]:
+            raw += pts[0]
             pos.append(f"Beta {beta:.1f} — market-aligned risk")
-        elif beta <= 1.8:
-            raw += 8
+        elif beta <= vrc["beta_extended_max"]:
+            raw += pts[1]
         else:
-            raw += 3
+            raw += pts[2]
             neg.append(f"Beta {beta:.1f} — high market sensitivity")
     else:
         warn.append("Beta unavailable")
 
-    # Distance from 52W high (far from high = survived big drawdown)
+    # Distance from 52W high
     d52h = ti.dist_from_52w_high
     if d52h is not None:
-        total += 10
-        if d52h >= -5:
-            raw += 10
+        w = vrc["dist_52w_weight"]
+        pts = vrc["dist52_pts"]  # e.g. [10, 6, 2]
+        total += w
+        if d52h >= vrc["dist52_good"]:
+            raw += pts[0]
             pos.append("Near 52-week high — relative strength")
-        elif d52h >= -15:
-            raw += 6
+        elif d52h >= vrc["dist52_ok"]:
+            raw += pts[1]
         else:
-            raw += 2
+            raw += pts[2]
             neg.append(f"{abs(d52h):.0f}% below 52W high")
     else:
         warn.append("52W high distance unavailable")
@@ -596,6 +624,8 @@ def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoCon
 
 def score_relative_strength(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on RS vs QQQ, return percentile ranks."""
+    cfg = algo_config or get_algo_config()
+    rc = cfg.signal_cards["relative_strength"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
@@ -603,40 +633,45 @@ def score_relative_strength(ti: TechnicalIndicators, algo_config: Optional[AlgoC
     # RS vs QQQ
     rs_qqq = ti.rs_vs_qqq
     if rs_qqq is not None:
-        total += 30
-        if rs_qqq >= 5:
-            raw += 30
+        w = rc["rs_qqq_weight"]
+        pts = rc["rs_qqq_pts"]   # e.g. [30, 18, 10, 0]
+        total += w
+        if rs_qqq >= rc["rs_qqq_strong"]:
+            raw += pts[0]
             pos.append(f"RS vs QQQ +{rs_qqq:.1f}% — strong outperformance")
-        elif rs_qqq >= 0:
-            raw += 18
+        elif rs_qqq >= rc["rs_qqq_neutral"]:
+            raw += pts[1]
             pos.append(f"RS vs QQQ +{rs_qqq:.1f}%")
-        elif rs_qqq >= -5:
-            raw += 10
+        elif rs_qqq >= rc["rs_qqq_weak"]:
+            raw += pts[2]
             neg.append(f"RS vs QQQ {rs_qqq:.1f}%")
         else:
+            raw += pts[3]
             neg.append(f"RS vs QQQ {rs_qqq:.1f}% — underperforming badly")
     else:
         warn.append("RS vs QQQ unavailable (QQQ benchmark data not fetched)")
 
-    # Return percentile ranks
-    for attr, label, weight in [
-        ("return_pct_rank_20d", "20D", 15),
-        ("return_pct_rank_63d", "63D", 20),
-        ("return_pct_rank_126d", "126D", 15),
-        ("return_pct_rank_252d", "252D", 20),
-    ]:
+    # Return percentile ranks — weights and tier points from config
+    rank_cfg = [
+        ("return_pct_rank_20d",  "20D",  rc["rank_20d_weight"],  rc["rank_pts_high"][0],  rc["rank_pts_mid"][0],  rc["rank_pts_low"][0],  rc["rank_pts_bottom"][0]),
+        ("return_pct_rank_63d",  "63D",  rc["rank_63d_weight"],  rc["rank_pts_high"][1],  rc["rank_pts_mid"][1],  rc["rank_pts_low"][1],  rc["rank_pts_bottom"][1]),
+        ("return_pct_rank_126d", "126D", rc["rank_126d_weight"], rc["rank_pts_high"][2],  rc["rank_pts_mid"][2],  rc["rank_pts_low"][2],  rc["rank_pts_bottom"][2]),
+        ("return_pct_rank_252d", "252D", rc["rank_252d_weight"], rc["rank_pts_high"][3],  rc["rank_pts_mid"][3],  rc["rank_pts_low"][3],  rc["rank_pts_bottom"][3]),
+    ]
+    for attr, label, weight, p_high, p_mid, p_low, p_bottom in rank_cfg:
         val = getattr(ti, attr, None)
         if val is not None:
             total += weight
-            if val >= 75:
-                raw += weight
+            if val >= rc["rank_pct_high"]:
+                raw += p_high
                 pos.append(f"{label} return rank {val:.0f}th percentile — top quartile")
-            elif val >= 50:
-                raw += weight * 0.65
-            elif val >= 25:
-                raw += weight * 0.35
+            elif val >= rc["rank_pct_mid"]:
+                raw += p_mid
+            elif val >= rc["rank_pct_low"]:
+                raw += p_low
                 neg.append(f"{label} return rank {val:.0f}th percentile")
             else:
+                raw += p_bottom
                 neg.append(f"{label} return rank {val:.0f}th percentile — bottom quartile")
         else:
             warn.append(f"{label} return percentile rank unavailable")
@@ -651,6 +686,8 @@ def score_relative_strength(ti: TechnicalIndicators, algo_config: Optional[AlgoC
 
 def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on EPS/revenue growth rates and earnings surprise history."""
+    cfg = algo_config or get_algo_config()
+    gc = cfg.signal_cards["growth"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
@@ -658,15 +695,16 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Revenue growth YoY
     rev_yoy = fd.revenue_growth_yoy
     if rev_yoy is not None:
-        total += 20
-        if rev_yoy >= 0.20:
-            raw += 20
+        w = gc["rev_yoy_weight"]
+        total += w
+        if rev_yoy >= gc["rev_yoy_strong"]:
+            raw += w
             pos.append(f"Revenue growth {rev_yoy*100:.0f}% YoY — strong")
-        elif rev_yoy >= 0.10:
-            raw += 14
+        elif rev_yoy >= gc["rev_yoy_moderate"]:
+            raw += round(w * 0.7)
             pos.append(f"Revenue growth {rev_yoy*100:.0f}% YoY")
-        elif rev_yoy >= 0:
-            raw += 8
+        elif rev_yoy >= gc["rev_yoy_slow"]:
+            raw += round(w * 0.4)
         else:
             neg.append(f"Revenue declining {rev_yoy*100:.0f}% YoY")
     else:
@@ -675,12 +713,13 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # QoQ revenue growth (acceleration signal)
     rev_qoq = fd.revenue_growth_qoq
     if rev_qoq is not None:
-        total += 10
-        if rev_qoq >= 0.05:
-            raw += 10
+        w = gc["rev_qoq_weight"]
+        total += w
+        if rev_qoq >= gc["rev_qoq_strong"]:
+            raw += w
             pos.append(f"Revenue accelerating QoQ +{rev_qoq*100:.1f}%")
         elif rev_qoq >= 0:
-            raw += 7
+            raw += round(w * 0.7)
         else:
             neg.append(f"Revenue decelerating QoQ {rev_qoq*100:.1f}%")
     else:
@@ -689,14 +728,15 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # EPS growth YoY
     eps_yoy = fd.eps_growth_yoy
     if eps_yoy is not None:
-        total += 20
-        if eps_yoy >= 0.20:
-            raw += 20
+        w = gc["eps_yoy_weight"]
+        total += w
+        if eps_yoy >= gc["eps_yoy_strong"]:
+            raw += w
             pos.append(f"EPS growth {eps_yoy*100:.0f}% YoY")
-        elif eps_yoy >= 0.10:
-            raw += 13
+        elif eps_yoy >= gc["eps_yoy_moderate"]:
+            raw += round(w * 0.65)
         elif eps_yoy >= 0:
-            raw += 8
+            raw += round(w * 0.4)
         else:
             neg.append(f"EPS declining {eps_yoy*100:.0f}% YoY")
     else:
@@ -705,12 +745,13 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # EPS next year estimate
     eps_ny = fd.eps_growth_next_year
     if eps_ny is not None:
-        total += 10
-        if eps_ny >= 0.15:
-            raw += 10
+        w = gc["eps_next_yr_weight"]
+        total += w
+        if eps_ny >= gc["eps_next_yr_strong"]:
+            raw += w
             pos.append(f"EPS next year est. +{eps_ny*100:.0f}%")
         elif eps_ny >= 0:
-            raw += 6
+            raw += round(w * 0.6)
         else:
             neg.append(f"EPS next year est. {eps_ny*100:.0f}%")
     else:
@@ -719,28 +760,30 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Sales growth TTM
     sg_ttm = fd.sales_growth_ttm
     if sg_ttm is not None:
-        total += 10
-        if sg_ttm >= 0.15:
-            raw += 10
+        w = gc["sales_ttm_weight"]
+        total += w
+        if sg_ttm >= gc["sales_ttm_strong"]:
+            raw += w
             pos.append(f"Sales TTM growth {sg_ttm*100:.0f}%")
         elif sg_ttm >= 0:
-            raw += 6
+            raw += round(w * 0.6)
         else:
             neg.append(f"Sales TTM {sg_ttm*100:.0f}%")
     else:
         warn.append("Sales growth TTM unavailable")
 
-    # Multi-year EPS durability (3Y and 5Y EPS growth)
+    # Multi-year EPS durability (3Y EPS growth)
     eps_3y = fd.eps_growth_3y
     if eps_3y is not None:
-        total += 10
-        if eps_3y >= 0.15:
-            raw += 10
+        w = gc["eps_3y_weight"]
+        total += w
+        if eps_3y >= gc["eps_3y_strong"]:
+            raw += w
             pos.append(f"EPS 3Y CAGR {eps_3y*100:.0f}% — durable growth")
-        elif eps_3y >= 0.05:
-            raw += 6
+        elif eps_3y >= gc["eps_3y_moderate"]:
+            raw += round(w * 0.6)
         elif eps_3y >= 0:
-            raw += 3
+            raw += round(w * 0.3)
         else:
             neg.append(f"EPS 3Y CAGR {eps_3y*100:.0f}% — declining trend")
     else:
@@ -749,14 +792,15 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Multi-year sales durability (3Y sales growth)
     sg_3y = fd.sales_growth_3y
     if sg_3y is not None:
-        total += 8
-        if sg_3y >= 0.10:
-            raw += 8
+        w = gc["sales_3y_weight"]
+        total += w
+        if sg_3y >= gc["sales_3y_strong"]:
+            raw += w
             pos.append(f"Sales 3Y CAGR {sg_3y*100:.0f}% — durable revenue")
-        elif sg_3y >= 0.05:
-            raw += 5
+        elif sg_3y >= gc["sales_3y_moderate"]:
+            raw += round(w * 0.625)
         elif sg_3y >= 0:
-            raw += 2
+            raw += round(w * 0.25)
         else:
             neg.append(f"Sales 3Y CAGR {sg_3y*100:.0f}%")
     else:
@@ -765,14 +809,15 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Forward EPS durability (next 5Y)
     eps_next5y = fd.eps_growth_next_5y
     if eps_next5y is not None:
-        total += 7
-        if eps_next5y >= 0.15:
-            raw += 7
+        w = gc["eps_5y_weight"]
+        total += w
+        if eps_next5y >= gc["eps_5y_strong"]:
+            raw += w
             pos.append(f"EPS next 5Y est. {eps_next5y*100:.0f}% — strong forward growth")
-        elif eps_next5y >= 0.08:
-            raw += 4
+        elif eps_next5y >= gc["eps_5y_moderate"]:
+            raw += round(w * 0.57)
         else:
-            raw += 1
+            raw += round(w * 0.14)
             neg.append(f"EPS next 5Y est. {eps_next5y*100:.0f}% — weak outlook")
     else:
         warn.append("EPS next-5-year estimate unavailable")
@@ -780,12 +825,13 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Earnings beat rate
     beat_rate = earnings.beat_rate
     if beat_rate is not None:
-        total += 20
-        if beat_rate >= 0.75:
-            raw += 20
+        w = gc["beat_rate_weight"]
+        total += w
+        if beat_rate >= gc["beat_rate_high"] / 100:
+            raw += w
             pos.append(f"Earnings beat rate {beat_rate*100:.0f}% — consistent")
-        elif beat_rate >= 0.5:
-            raw += 12
+        elif beat_rate >= gc["beat_rate_moderate"] / 100:
+            raw += round(w * 0.6)
         else:
             neg.append(f"Beat rate {beat_rate*100:.0f}% — misses common")
     else:
@@ -794,14 +840,15 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
     # Avg earnings surprise
     surprise = earnings.avg_eps_surprise_pct
     if surprise is not None:
-        total += 10
-        if surprise >= 5:
-            raw += 10
+        w = gc["eps_surprise_weight"]
+        total += w
+        if surprise >= gc["eps_surprise_strong"]:
+            raw += w
             pos.append(f"Avg earnings surprise +{surprise:.1f}%")
-        elif surprise >= 2:
-            raw += 7
+        elif surprise >= gc["eps_surprise_moderate"]:
+            raw += round(w * 0.7)
         elif surprise >= 0:
-            raw += 4
+            raw += round(w * 0.4)
         else:
             neg.append(f"Avg earnings surprise {surprise:.1f}% — misses")
     else:
@@ -817,113 +864,134 @@ def score_growth(fd: FundamentalData, earnings: EarningsData, algo_config: Optio
 
 def score_valuation(vd: ValuationData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on P/E, PEG, P/S, EV/EBITDA, P/FCF, EV/Sales."""
+    cfg = algo_config or get_algo_config()
+    vc = cfg.signal_cards["valuation"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # Forward P/E
+    # Forward P/E (lower is better)
     fpe = vd.forward_pe
     if fpe is not None:
-        total += 20
-        if fpe <= 15:
-            raw += 20
+        w = vc["fpe_weight"]
+        tiers = vc["fpe_tiers"]   # e.g. [15, 25, 40]
+        pts = vc["fpe_pts"]       # e.g. [20, 13, 7, 2]
+        total += w
+        if fpe <= tiers[0]:
+            raw += pts[0]
             pos.append(f"Forward P/E {fpe:.1f} — attractive")
-        elif fpe <= 25:
-            raw += 13
-        elif fpe <= 40:
-            raw += 7
+        elif fpe <= tiers[1]:
+            raw += pts[1]
+        elif fpe <= tiers[2]:
+            raw += pts[2]
             neg.append(f"Forward P/E {fpe:.1f} — elevated")
         else:
-            raw += 2
+            raw += pts[3]
             neg.append(f"Forward P/E {fpe:.1f} — expensive")
     else:
         warn.append("Forward P/E unavailable")
 
-    # PEG ratio
+    # PEG ratio (lower is better)
     peg = vd.peg_ratio
     if peg is not None:
-        total += 20
-        if peg <= 1.0:
-            raw += 20
+        w = vc["peg_weight"]
+        tiers = vc["peg_tiers"]   # e.g. [1.0, 1.5, 2.5]
+        pts = vc["peg_pts"]       # e.g. [20, 14, 8, 2]
+        total += w
+        if peg <= tiers[0]:
+            raw += pts[0]
             pos.append(f"PEG {peg:.2f} — undervalued vs growth")
-        elif peg <= 1.5:
-            raw += 14
+        elif peg <= tiers[1]:
+            raw += pts[1]
             pos.append(f"PEG {peg:.2f} — reasonable")
-        elif peg <= 2.5:
-            raw += 8
+        elif peg <= tiers[2]:
+            raw += pts[2]
             neg.append(f"PEG {peg:.2f} — slightly rich")
         else:
-            raw += 2
+            raw += pts[3]
             neg.append(f"PEG {peg:.2f} — overvalued vs growth")
     else:
         warn.append("PEG ratio unavailable")
 
-    # P/S ratio
+    # P/S ratio (lower is better)
     ps = vd.price_to_sales
     if ps is not None:
-        total += 15
-        if ps <= 3:
-            raw += 15
+        w = vc["ps_weight"]
+        tiers = vc["ps_tiers"]   # e.g. [3, 8, 15]
+        pts = vc["ps_pts"]       # e.g. [15, 9, 5, 1]
+        total += w
+        if ps <= tiers[0]:
+            raw += pts[0]
             pos.append(f"P/S {ps:.1f} — value territory")
-        elif ps <= 8:
-            raw += 9
-        elif ps <= 15:
-            raw += 5
+        elif ps <= tiers[1]:
+            raw += pts[1]
+        elif ps <= tiers[2]:
+            raw += pts[2]
             neg.append(f"P/S {ps:.1f} — premium")
         else:
-            raw += 1
+            raw += pts[3]
             neg.append(f"P/S {ps:.1f} — very expensive")
     else:
         warn.append("Price/Sales unavailable")
 
-    # EV/EBITDA
+    # EV/EBITDA (lower is better)
     ev_ebitda = vd.ev_to_ebitda
     if ev_ebitda is not None:
-        total += 15
-        if ev_ebitda <= 12:
-            raw += 15
+        w = vc["ev_ebitda_weight"]
+        tiers = vc["ev_ebitda_tiers"]   # e.g. [12, 20, 35]
+        pts = vc["ev_ebitda_pts"]       # e.g. [15, 9, 4, 1]
+        total += w
+        if ev_ebitda <= tiers[0]:
+            raw += pts[0]
             pos.append(f"EV/EBITDA {ev_ebitda:.1f} — attractive")
-        elif ev_ebitda <= 20:
-            raw += 9
-        elif ev_ebitda <= 35:
-            raw += 4
+        elif ev_ebitda <= tiers[1]:
+            raw += pts[1]
+        elif ev_ebitda <= tiers[2]:
+            raw += pts[2]
             neg.append(f"EV/EBITDA {ev_ebitda:.1f} — elevated")
         else:
-            raw += 1
+            raw += pts[3]
             neg.append(f"EV/EBITDA {ev_ebitda:.1f} — expensive")
     else:
         warn.append("EV/EBITDA unavailable")
 
-    # FCF yield
+    # FCF yield (higher is better)
     fcfy = vd.fcf_yield
     if fcfy is not None:
-        total += 15
-        if fcfy >= 5:
-            raw += 15
+        w = vc["fcf_yield_weight"]
+        tiers = vc["fcf_yield_tiers"]   # e.g. [5, 2, 0]
+        pts = vc["fcf_yield_pts"]       # e.g. [15, 9, 4, 0]
+        total += w
+        if fcfy >= tiers[0]:
+            raw += pts[0]
             pos.append(f"FCF yield {fcfy:.1f}% — strong cash return")
-        elif fcfy >= 2:
-            raw += 9
-        elif fcfy >= 0:
-            raw += 4
+        elif fcfy >= tiers[1]:
+            raw += pts[1]
+        elif fcfy >= tiers[2]:
+            raw += pts[2]
         else:
+            raw += pts[3]
             neg.append("Negative FCF yield")
     else:
         warn.append("FCF yield unavailable")
 
-    # EV/Sales
+    # EV/Sales (lower is better)
     evs = vd.ev_sales
     if evs is not None:
-        total += 15
-        if evs <= 3:
-            raw += 15
+        w = vc["ev_sales_weight"]
+        tiers = vc["ev_sales_tiers"]   # e.g. [3, 8, 15]
+        pts = vc["ev_sales_pts"]       # e.g. [15, 9, 4, 1]
+        total += w
+        if evs <= tiers[0]:
+            raw += pts[0]
             pos.append(f"EV/Sales {evs:.1f} — low multiple")
-        elif evs <= 8:
-            raw += 9
-        elif evs <= 15:
-            raw += 4
+        elif evs <= tiers[1]:
+            raw += pts[1]
+        elif evs <= tiers[2]:
+            raw += pts[2]
             neg.append(f"EV/Sales {evs:.1f} — premium multiple")
         else:
-            raw += 1
+            raw += pts[3]
             neg.append(f"EV/Sales {evs:.1f} — very expensive")
     else:
         warn.append("EV/Sales unavailable")
@@ -938,21 +1006,24 @@ def score_valuation(vd: ValuationData, algo_config: Optional[AlgoConfig] = None)
 
 def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on margins, ROE, ROIC, ROA, balance sheet health."""
+    cfg = algo_config or get_algo_config()
+    qc = cfg.signal_cards["quality"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # Gross margin
+    # Gross margin (stored as fraction e.g. 0.50 = 50%)
     gm = fd.gross_margin
     if gm is not None:
-        total += 15
-        if gm >= 0.50:
-            raw += 15
+        w = qc["gross_margin_weight"]
+        total += w
+        if gm >= qc["gross_margin_high"]:
+            raw += w
             pos.append(f"Gross margin {gm*100:.0f}% — excellent")
-        elif gm >= 0.30:
-            raw += 9
+        elif gm >= qc["gross_margin_moderate"]:
+            raw += round(w * 0.6)
         else:
-            raw += 3
+            raw += round(w * 0.2)
             neg.append(f"Gross margin {gm*100:.0f}% — thin")
     else:
         warn.append("Gross margin unavailable")
@@ -960,62 +1031,66 @@ def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None)
     # Operating margin
     om = fd.operating_margin
     if om is not None:
-        total += 15
-        if om >= 0.20:
-            raw += 15
+        w = qc["op_margin_weight"]
+        total += w
+        if om >= qc["op_margin_high"]:
+            raw += w
             pos.append(f"Operating margin {om*100:.0f}%")
-        elif om >= 0.10:
-            raw += 9
+        elif om >= qc["op_margin_moderate"]:
+            raw += round(w * 0.6)
         elif om >= 0:
-            raw += 4
+            raw += round(w * 0.27)
         else:
             neg.append(f"Operating margin {om*100:.0f}% — loss-making")
     else:
         warn.append("Operating margin unavailable")
 
-    # ROE
+    # ROE (stored as fraction)
     roe = fd.roe
     if roe is not None:
-        total += 15
-        if roe >= 0.20:
-            raw += 15
+        w = qc["roe_weight"]
+        total += w
+        if roe >= qc["roe_high"] / 100:
+            raw += w
             pos.append(f"ROE {roe*100:.0f}% — high return")
-        elif roe >= 0.10:
-            raw += 9
+        elif roe >= qc["roe_moderate"] / 100:
+            raw += round(w * 0.6)
         elif roe >= 0:
-            raw += 4
+            raw += round(w * 0.27)
         else:
             neg.append(f"ROE {roe*100:.0f}% — negative")
     else:
         warn.append("ROE unavailable")
 
-    # ROIC
+    # ROIC (stored as fraction)
     roic = fd.roic
     if roic is not None:
-        total += 15
-        if roic >= 0.15:
-            raw += 15
+        w = qc["roic_weight"]
+        total += w
+        if roic >= qc["roic_high"] / 100:
+            raw += w
             pos.append(f"ROIC {roic*100:.0f}% — above cost of capital")
-        elif roic >= 0.08:
-            raw += 9
+        elif roic >= qc["roic_moderate"] / 100:
+            raw += round(w * 0.6)
         elif roic >= 0:
-            raw += 4
+            raw += round(w * 0.27)
         else:
             neg.append(f"ROIC {roic*100:.0f}% — destroying value")
     else:
         warn.append("ROIC unavailable")
 
-    # ROA
+    # ROA (stored as fraction)
     roa = fd.roa
     if roa is not None:
-        total += 10
-        if roa >= 0.10:
-            raw += 10
+        w = qc["roa_weight"]
+        total += w
+        if roa >= qc["roa_high"] / 100:
+            raw += w
             pos.append(f"ROA {roa*100:.0f}% — efficient assets")
-        elif roa >= 0.05:
-            raw += 6
+        elif roa >= qc["roa_moderate"] / 100:
+            raw += round(w * 0.6)
         elif roa >= 0:
-            raw += 3
+            raw += round(w * 0.3)
         else:
             neg.append(f"ROA {roa*100:.0f}% — negative")
     else:
@@ -1024,14 +1099,15 @@ def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None)
     # Current ratio
     cr = fd.current_ratio
     if cr is not None:
-        total += 10
-        if cr >= 2.0:
-            raw += 10
+        w = qc["current_ratio_weight"]
+        total += w
+        if cr >= qc["current_ratio_good"]:
+            raw += w
             pos.append(f"Current ratio {cr:.1f} — strong liquidity")
-        elif cr >= 1.2:
-            raw += 7
+        elif cr >= qc["current_ratio_ok"]:
+            raw += round(w * 0.7)
         else:
-            raw += 2
+            raw += round(w * 0.2)
             neg.append(f"Current ratio {cr:.1f} — liquidity risk")
     else:
         warn.append("Current ratio unavailable")
@@ -1039,46 +1115,55 @@ def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None)
     # Quick ratio
     qr = fd.quick_ratio
     if qr is not None:
-        total += 10
-        if qr >= 1.5:
-            raw += 10
+        w = qc["quick_ratio_weight"]
+        total += w
+        if qr >= qc["quick_ratio_high"]:
+            raw += w
             pos.append(f"Quick ratio {qr:.1f} — excellent liquidity")
-        elif qr >= 1.0:
-            raw += 7
+        elif qr >= qc["quick_ratio_moderate"]:
+            raw += round(w * 0.7)
         else:
-            raw += 2
+            raw += round(w * 0.2)
             neg.append(f"Quick ratio {qr:.1f} — tight")
     else:
         warn.append("Quick ratio unavailable")
 
-    # Debt/equity (total)
+    # Debt/equity (data comes as percentage e.g. 50 = 50%; config stores as ratio 0.5)
     de = fd.debt_to_equity
     if de is not None:
-        total += 7
-        if de <= 50:
-            raw += 7
+        w = qc["debt_equity_weight"]
+        total += w
+        de_low = qc["debt_equity_low"] * 100
+        de_mid = qc["debt_equity_mid"] * 100
+        de_high = qc["debt_equity_high"] * 100
+        if de <= de_low:
+            raw += w
             pos.append(f"D/E {de:.0f}% — low leverage")
-        elif de <= 100:
-            raw += 4
-        elif de <= 200:
-            raw += 2
+        elif de <= de_mid:
+            raw += round(w * 0.57)
+        elif de <= de_high:
+            raw += round(w * 0.29)
             neg.append(f"D/E {de:.0f}% — high leverage")
         else:
             neg.append(f"D/E {de:.0f}% — very high leverage")
     else:
         warn.append("Debt/equity unavailable")
 
-    # Long-term debt/equity (more conservative balance sheet measure)
+    # Long-term debt/equity (data as percentage; config stores as ratio)
     ltde = fd.long_term_debt_equity
     if ltde is not None:
-        total += 8
-        if ltde <= 30:
-            raw += 8
+        w = qc["lt_debt_equity_weight"]
+        total += w
+        ltde_low = qc["lt_debt_equity_low"] * 100
+        ltde_mod = qc["lt_debt_equity_moderate"] * 100
+        ltde_high = qc["lt_debt_equity_high"] * 100
+        if ltde <= ltde_low:
+            raw += w
             pos.append(f"LT Debt/Equity {ltde:.0f}% — conservative long-term leverage")
-        elif ltde <= 80:
-            raw += 5
-        elif ltde <= 150:
-            raw += 2
+        elif ltde <= ltde_mod:
+            raw += round(w * 0.625)
+        elif ltde <= ltde_high:
+            raw += round(w * 0.25)
             neg.append(f"LT Debt/Equity {ltde:.0f}% — elevated long-term debt")
         else:
             neg.append(f"LT Debt/Equity {ltde:.0f}% — heavy long-term debt load")
@@ -1095,22 +1180,25 @@ def score_quality(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None)
 
 def score_ownership(fd: FundamentalData, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
     """Score based on insider/institutional ownership, short float."""
+    cfg = algo_config or get_algo_config()
+    oc = cfg.signal_cards["ownership"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # Insider ownership
+    # Insider ownership (data as fraction; config in whole-number %)
     ins_own = fd.insider_ownership
     if ins_own is not None:
-        total += 15
-        if ins_own >= 0.10:
-            raw += 15
+        w = oc["insider_own_weight"]
+        total += w
+        if ins_own >= oc["insider_own_high"] / 100:
+            raw += w
             pos.append(f"Insider ownership {ins_own*100:.0f}% — strong alignment")
-        elif ins_own >= 0.03:
-            raw += 10
+        elif ins_own >= oc["insider_own_mid"] / 100:
+            raw += round(w * 0.67)
             pos.append(f"Insider ownership {ins_own*100:.0f}%")
         else:
-            raw += 5
+            raw += round(w * 0.33)
             neg.append(f"Low insider ownership {ins_own*100:.1f}%")
     else:
         warn.append("Insider ownership unavailable")
@@ -1118,76 +1206,86 @@ def score_ownership(fd: FundamentalData, algo_config: Optional[AlgoConfig] = Non
     # Insider transactions (net buying)
     ins_tx = fd.insider_transactions
     if ins_tx is not None:
-        total += 20
+        w = oc["insider_txn_weight"]
+        total += w
         if ins_tx > 0:
-            raw += 20
+            raw += w
             pos.append("Insiders net buying — bullish signal")
         elif ins_tx < 0:
             neg.append("Insiders net selling")
         else:
-            raw += 10
+            raw += round(w * 0.5)
     else:
         warn.append("Insider transactions unavailable")
 
-    # Institutional ownership
+    # Institutional ownership (data as fraction; config in whole-number %)
     inst_own = fd.institutional_ownership
     if inst_own is not None:
-        total += 15
-        if 0.50 <= inst_own <= 0.90:
-            raw += 15
+        w = oc["inst_own_weight"]
+        total += w
+        inst_low = oc["inst_own_low"] / 100
+        inst_hi_min = oc["inst_own_high_min"] / 100
+        inst_hi_max = oc["inst_own_high_max"] / 100
+        if inst_hi_min <= inst_own <= inst_hi_max:
+            raw += w
             pos.append(f"Institutional ownership {inst_own*100:.0f}% — well-sponsored")
-        elif inst_own < 0.30:
-            raw += 5
+        elif inst_own < inst_low:
+            raw += round(w * 0.33)
             neg.append(f"Low institutional ownership {inst_own*100:.0f}%")
         else:
-            raw += 9
+            raw += round(w * 0.6)
     else:
         warn.append("Institutional ownership unavailable")
 
     # Institutional transactions (net buying)
     inst_tx = fd.institutional_transactions
     if inst_tx is not None:
-        total += 20
+        w = oc["inst_txn_weight"]
+        total += w
         if inst_tx > 0:
-            raw += 20
+            raw += w
             pos.append("Institutions net accumulating")
         elif inst_tx < 0:
             neg.append("Institutions net distributing")
         else:
-            raw += 10
+            raw += round(w * 0.5)
     else:
         warn.append("Institutional transactions unavailable")
 
-    # Short float
+    # Short float (data as fraction; config in whole-number %)
     sf = fd.short_float
     if sf is not None:
-        total += 20
-        if sf <= 0.05:
-            raw += 20
+        w = oc["short_float_weight"]
+        total += w
+        sf_low = oc["short_float_low"] / 100
+        sf_mid = oc["short_float_mid"] / 100
+        sf_high = oc["short_float_high"] / 100
+        if sf <= sf_low:
+            raw += w
             pos.append(f"Short float {sf*100:.1f}% — low short interest")
-        elif sf <= 0.10:
-            raw += 12
-        elif sf <= 0.20:
-            raw += 6
+        elif sf <= sf_mid:
+            raw += round(w * 0.6)
+        elif sf <= sf_high:
+            raw += round(w * 0.3)
             neg.append(f"Short float {sf*100:.0f}% — elevated")
         else:
-            # High short float: squeeze potential — note as dual signal
-            raw += 8
+            raw += round(w * 0.4)
             pos.append(f"Short float {sf*100:.0f}% — squeeze potential")
             neg.append(f"Short float {sf*100:.0f}% — high risk signal")
     else:
         warn.append("Short float unavailable")
 
-    # Short ratio (days to cover)
+    # Short ratio (days to cover; config already in days)
     sr = fd.short_ratio
     if sr is not None:
-        total += 10
-        if sr <= 3:
-            raw += 10
-        elif sr <= 7:
-            raw += 6
+        w = oc["short_ratio_weight"]
+        total += w
+        if sr <= oc["short_ratio_low"]:
+            raw += w
+        elif sr <= oc["short_ratio_mid"]:
+            raw += round(w * 0.6)
         else:
-            raw += 2
+            raw += round(w * 0.2)
             neg.append(f"Short ratio {sr:.1f} days — crowded short")
     else:
         warn.append("Short ratio unavailable")
@@ -1212,19 +1310,23 @@ def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummar
     # Analyst recommendation (1=Strong Buy, 5=Strong Sell)
     rec = fd.analyst_recommendation
     if rec is not None:
-        total += 25
-        if rec <= 1.5:
-            raw += 25
+        w = cc["analyst_rec_weight"]
+        tiers = cc["analyst_rec_tiers"]   # e.g. [1.5, 2.5, 3.5, 4.0]
+        pts = cc["analyst_rec_pts"]       # e.g. [25, 18, 10, 4, 0]
+        total += w
+        if rec <= tiers[0]:
+            raw += pts[0]
             pos.append(f"Analyst consensus {rec:.1f} — Strong Buy")
-        elif rec <= 2.5:
-            raw += 18
+        elif rec <= tiers[1]:
+            raw += pts[1]
             pos.append(f"Analyst consensus {rec:.1f} — Buy")
-        elif rec <= 3.5:
-            raw += 10
-        elif rec <= 4.0:
-            raw += 4
+        elif rec <= tiers[2]:
+            raw += pts[2]
+        elif rec <= tiers[3]:
+            raw += pts[3]
             neg.append(f"Analyst consensus {rec:.1f} — Underperform")
         else:
+            raw += pts[4]
             neg.append(f"Analyst consensus {rec:.1f} — Sell")
     else:
         warn.append("Analyst recommendation unavailable")
@@ -1232,16 +1334,20 @@ def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummar
     # Target price distance
     tpd = fd.target_price_distance
     if tpd is not None:
-        total += 20
-        if tpd >= 20:
-            raw += 20
+        w = cc["target_dist_weight"]
+        tiers = cc["target_dist_tiers"]   # e.g. [20, 10, 0]
+        pts = cc["target_dist_pts"]       # e.g. [20, 14, 8, 0]
+        total += w
+        if tpd >= tiers[0]:
+            raw += pts[0]
             pos.append(f"Analyst target +{tpd:.0f}% upside")
-        elif tpd >= 10:
-            raw += 14
+        elif tpd >= tiers[1]:
+            raw += pts[1]
             pos.append(f"Analyst target +{tpd:.0f}% upside")
-        elif tpd >= 0:
-            raw += 8
+        elif tpd >= tiers[2]:
+            raw += pts[2]
         else:
+            raw += pts[3]
             neg.append(f"Analyst target {tpd:.0f}% — stock above consensus")
     else:
         warn.append("Analyst target price unavailable")
@@ -1272,13 +1378,17 @@ def score_catalyst(fd: FundamentalData, earnings: EarningsData, news: NewsSummar
     # Earnings beat rate (recent catalyst quality)
     beat_rate = earnings.beat_rate
     if beat_rate is not None:
-        total += 15
-        if beat_rate >= 0.75:
-            raw += 15
+        w = cc["beat_rate_weight"]
+        tiers = cc["beat_rate_tiers"]   # e.g. [75, 50] (whole-number %)
+        pts = cc["beat_rate_pts"]       # e.g. [15, 9, 0]
+        total += w
+        if beat_rate * 100 >= tiers[0]:
+            raw += pts[0]
             pos.append(f"Beat rate {beat_rate*100:.0f}% — reliable catalyst")
-        elif beat_rate >= 0.50:
-            raw += 9
+        elif beat_rate * 100 >= tiers[1]:
+            raw += pts[1]
         else:
+            raw += pts[2]
             neg.append(f"Beat rate {beat_rate*100:.0f}% — inconsistent")
     else:
         warn.append("Earnings beat rate unavailable")

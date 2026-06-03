@@ -8,7 +8,11 @@ and computes:
   - qqq_return           : QQQ % change over the same period
   - excess_return        : forward_return - spy_return
   - excess_return_vs_qqq : forward_return - qqq_return
-  - max_drawdown_period  : worst intra-period trough from entry price
+  - max_drawdown_period  : worst intra-period trough from entry price (MAE proxy)
+  - mfe_pct              : best intra-period peak from entry price (MFE)
+
+Optional entry/exit method params activate simulation paths that write additional
+`sim_` columns alongside the default columns (backward-compatible).
 """
 from __future__ import annotations
 
@@ -79,6 +83,34 @@ def _max_drawdown_window(
     return round(dd, 4)
 
 
+def _max_favorable_window(
+    price_df: pd.DataFrame,
+    from_date: pd.Timestamp,
+    trading_days: int,
+    entry_price: float,
+) -> Optional[float]:
+    """Compute the maximum intra-period favorable excursion from *entry_price*.
+
+    Returns the best peak as a positive percentage (e.g. 12.5 means +12.5%).
+    Returns None if data is unavailable.
+    """
+    if price_df.empty or entry_price <= 0:
+        return None
+
+    norm_from = _normalize_ts(from_date)
+    pos = price_df.index.searchsorted(norm_from, side="right")
+    window = price_df.iloc[pos : pos + trading_days]
+
+    if window.empty:
+        return None
+
+    closes   = window["Close"].values
+    highs    = window["High"].values if "High" in window.columns else closes
+    max_high = float(highs.max())
+    mfe      = (max_high - entry_price) / entry_price * 100
+    return round(mfe, 4)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -86,12 +118,22 @@ def _max_drawdown_window(
 def attach_outcomes(
     signals: list[dict],
     prices: dict[str, pd.DataFrame],
+    entry_method: Optional[str] = None,
+    exit_method: Optional[str] = None,
 ) -> list[dict]:
     """Fill forward-return fields for every signal record in-place.
 
     Args:
-        signals: List of signal dicts produced by runner.run_backtest().
-        prices:  Price dict from data_loader (includes SPY, QQQ, and all stocks).
+        signals:      List of signal dicts produced by runner.run_backtest().
+        prices:       Price dict from data_loader (includes SPY, QQQ, and all stocks).
+        entry_method: Optional entry simulation method (e.g. "NEXT_OPEN",
+                      "PULLBACK_TO_SMA20").  When None, uses the signal's own
+                      closing price as entry (current behavior, backward-compatible).
+                      When specified, writes additional `sim_entry_*` columns.
+        exit_method:  Optional exit simulation method (e.g. "ATR_STOP_TARGET",
+                      "TRAILING_STOP").  When None, uses fixed-horizon exit
+                      (current behavior, backward-compatible).
+                      When specified, writes additional `sim_exit_*` columns.
 
     Returns:
         The same list with outcome columns filled where data is available.
@@ -100,8 +142,18 @@ def attach_outcomes(
     spy_df = prices.get("SPY", pd.DataFrame())
     qqq_df = prices.get("QQQ", pd.DataFrame())
 
-    resolved     = 0
-    unresolved   = 0
+    # Lazy-import simulators only when needed to avoid cost at import time
+    entry_sim = None
+    exit_sim  = None
+    if entry_method is not None:
+        from backtest.entry_simulator import EntrySimulator
+        entry_sim = EntrySimulator()
+    if exit_method is not None:
+        from backtest.exit_simulator import ExitSimulator
+        exit_sim = ExitSimulator()
+
+    resolved   = 0
+    unresolved = 0
 
     for sig in signals:
         ticker       = sig["ticker"]
@@ -116,7 +168,7 @@ def attach_outcomes(
             unresolved += 1
             continue
 
-        # Forward prices
+        # Forward prices (default fixed-horizon)
         exit_price = _get_price_at_offset(price_df, signal_date, holding_days)
         spy_entry  = _get_price_at_offset(spy_df,   signal_date - pd.Timedelta(days=1), 1)
         spy_exit   = _get_price_at_offset(spy_df,   signal_date, holding_days)
@@ -140,7 +192,7 @@ def attach_outcomes(
             if sig["forward_return"] is not None:
                 sig["excess_return"] = round(sig["forward_return"] - spy_ret, 4)
         else:
-            sig["spy_return"]   = None
+            sig["spy_return"]    = None
             sig["excess_return"] = None
 
         # QQQ benchmark return
@@ -150,13 +202,50 @@ def attach_outcomes(
             if sig["forward_return"] is not None:
                 sig["excess_return_vs_qqq"] = round(sig["forward_return"] - qqq_ret, 4)
         else:
-            sig["qqq_return"]          = None
+            sig["qqq_return"]           = None
             sig["excess_return_vs_qqq"] = None
 
-        # Max drawdown during the holding period
+        # Max drawdown during the holding period (MAE proxy)
         sig["max_drawdown_period"] = _max_drawdown_window(
             price_df, signal_date, holding_days, entry_price
         )
+
+        # MFE — maximum favorable excursion
+        sig["mfe_pct"] = _max_favorable_window(
+            price_df, signal_date, holding_days, entry_price
+        )
+
+        # ── Optional: simulated entry ──────────────────────────────────────
+        if entry_sim is not None:
+            er = entry_sim.simulate_entry(
+                signal_date=signal_date,
+                price_df=price_df,
+                method=entry_method,
+            )
+            sig["sim_entry_price"]       = er.entry_price
+            sig["sim_entry_date"]        = er.entry_date
+            sig["sim_entry_wait_days"]   = er.wait_days
+            sig["sim_entry_triggered"]   = not er.not_triggered
+
+        # ── Optional: simulated exit ───────────────────────────────────────
+        if exit_sim is not None:
+            # Use simulated entry price/date if available, else default
+            sim_ep    = sig.get("sim_entry_price") or entry_price
+            sim_edate = pd.Timestamp(sig["sim_entry_date"]) if sig.get("sim_entry_date") else signal_date
+
+            xr = exit_sim.simulate_exit(
+                entry_date=sim_edate,
+                entry_price=sim_ep,
+                price_df=price_df,
+                method=exit_method,
+                horizon=horizon,
+            )
+            sig["sim_forward_return"] = xr.pnl_pct
+            sig["sim_exit_date"]      = xr.exit_date
+            sig["sim_exit_reason"]    = xr.exit_reason
+            sig["sim_holding_days"]   = xr.holding_days
+            sig["mae_pct"]            = xr.mae_pct
+            sig["mfe_sim_pct"]        = xr.mfe_pct
 
     logger.info(
         "Outcomes attached: %d resolved, %d unresolved (future or missing data)",

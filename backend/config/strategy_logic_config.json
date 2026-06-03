@@ -1,0 +1,357 @@
+{
+  "strategy_router": {
+    "method": "priority_first_match",
+    "rules": [
+      {
+        "id": "avoid_broken_chart_any_category",
+        "priority": 100,
+        "description": "Any broken chart always routes to avoid engine regardless of category",
+        "logic": { "field": "selected_setup", "operator": "==", "value": "TRUE_BROKEN_CHART_AVOID" },
+        "strategy": "true_broken_chart_avoid"
+      },
+      {
+        "id": "growth_leader_pullback_route",
+        "priority": 80,
+        "description": "Growth/hyper-growth with pullback setup in non-bear regime",
+        "logic": {
+          "all": [
+            { "field": "primary_category", "operator": "in", "value": ["HYPER_GROWTH_STORY", "PROFITABLE_GROWTH_LEADER"] },
+            { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
+            { "field": "market_regime", "operator": "!=", "value": "BEAR_RISK_OFF" }
+          ]
+        },
+        "strategy": "growth_leader_pullback"
+      },
+      {
+        "id": "breakout_momentum_growth",
+        "priority": 75,
+        "description": "Breakout setup for growth/momentum stocks",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "BREAKOUT_MOMENTUM" },
+            { "field": "market_regime", "operator": "not_in", "value": ["BEAR_RISK_OFF"] }
+          ]
+        },
+        "strategy": "growth_leader_pullback"
+      },
+      {
+        "id": "expensive_but_working",
+        "priority": 70,
+        "description": "Expensive growth leader still showing relative strength",
+        "logic": {
+          "all": [
+            { "field": "secondary_tags", "operator": "contains", "value": "EXPENSIVE_VALUATION" },
+            { "field": "secondary_tags", "operator": "contains", "value": "SECTOR_LEADER" },
+            { "field": "market_regime", "operator": "not_in", "value": ["BEAR_RISK_OFF"] }
+          ]
+        },
+        "strategy": "quality_growth_expensive_but_working"
+      },
+      {
+        "id": "rebound_candidate_any",
+        "priority": 50,
+        "description": "Oversold reversal candidate for any stock type",
+        "logic": {
+          "field": "selected_setup", "operator": "==", "value": "DOWNTREND_REBOUND_CANDIDATE"
+        },
+        "strategy": "downtrend_rebound"
+      }
+    ],
+    "fallback_strategy": "watchlist_low_confidence"
+  },
+
+  "strategy_engines": {
+    "growth_leader_pullback": {
+      "description": "Profitable/hyper-growth stock in SMA50 pullback zone with volume drying up",
+      "horizons": ["medium_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [
+        {
+          "id": "sma50_pullback_zone",
+          "points": 20,
+          "logic": {
+            "all": [
+              { "field": "sma50_relative", "operator": ">=", "value": -5 },
+              { "field": "sma50_relative", "operator": "<=", "value": 5 }
+            ]
+          },
+          "reason": "Price in SMA50 pullback zone"
+        },
+        {
+          "id": "rsi_pullback_zone",
+          "points": 20,
+          "logic": {
+            "all": [
+              { "field": "rsi14", "operator": ">=", "value": 38 },
+              { "field": "rsi14", "operator": "<=", "value": 58 }
+            ]
+          },
+          "reason": "RSI in healthy pullback zone"
+        },
+        {
+          "id": "volume_dry_up",
+          "points": 15,
+          "logic": { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+          "reason": "Volume drying up on pullback — low seller conviction"
+        },
+        {
+          "id": "sector_relative_strength",
+          "points": 15,
+          "logic": {
+            "all": [
+              { "field": "rs_vs_sector_20d", "operator": ">=", "value": 1.5 },
+              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+            ]
+          },
+          "reason": "Outperforming sector and market on 20-day basis"
+        },
+        {
+          "id": "growth_quality",
+          "points": 15,
+          "logic": {
+            "all": [
+              { "field": "sales_growth_yoy", "operator": ">=", "value": 0.10 },
+              { "field": "operating_margin", "operator": ">", "value": 0.0 }
+            ]
+          },
+          "reason": "Profitable revenue growth"
+        },
+        {
+          "id": "sma50_slope_rising",
+          "points": 10,
+          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0 },
+          "reason": "SMA50 rising — uptrend structurally intact"
+        },
+        {
+          "id": "regime_supportive",
+          "points": 5,
+          "logic": {
+            "field": "market_regime", "operator": "in",
+            "value": ["BULL_RISK_ON", "BULL_NARROW_LEADERSHIP", "LIQUIDITY_RALLY"]
+          },
+          "reason": "Bullish market regime adds tailwind"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "recommendation": "BUY_ON_PULLBACK",
+          "logic": {
+            "all": [
+              { "field": "strategy_score", "operator": ">=", "value": 65 },
+              { "field": "confidence", "operator": ">=", "value": 50 }
+            ]
+          },
+          "summary_template": "Growth leader in SMA50 pullback. Score {score}. Ideal entry zone."
+        },
+        {
+          "recommendation": "WAIT_FOR_PULLBACK",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 40 },
+          "summary_template": "Partial setup. Score {score}. Watch for deeper pullback to SMA50."
+        }
+      ],
+      "fallback_recommendation": "WATCHLIST",
+      "risk_overrides": {
+        "HIGH_ATR": { "starter_size_cap_pct": 50 },
+        "EARNINGS_NEAR": { "starter_size_cap_pct": 25 },
+        "EXPENSIVE_VALUATION": { "note": "Consider starter size only" }
+      }
+    },
+
+    "downtrend_rebound": {
+      "description": "Oversold stock showing early reversal signals — not confirmed uptrend",
+      "horizons": ["short_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [
+        {
+          "id": "rsi_oversold_recovery",
+          "points": 25,
+          "logic": {
+            "all": [
+              { "field": "rsi14", "operator": ">=", "value": 25 },
+              { "field": "rsi14", "operator": "<=", "value": 42 }
+            ]
+          },
+          "reason": "RSI in classic oversold recovery zone"
+        },
+        {
+          "id": "rsi_slope_positive",
+          "points": 20,
+          "logic": { "field": "rsi_slope", "operator": ">", "value": 0 },
+          "reason": "RSI momentum turning positive"
+        },
+        {
+          "id": "volume_expanding_on_up_days",
+          "points": 20,
+          "logic": { "field": "updown_volume_ratio", "operator": ">", "value": 1.0 },
+          "reason": "Up-day volume exceeding down-day volume"
+        },
+        {
+          "id": "perf_recovering",
+          "points": 20,
+          "logic": { "field": "perf_1w", "operator": ">=", "value": 0 },
+          "reason": "Positive price action this week — sellers easing"
+        },
+        {
+          "id": "sma200_not_crashing",
+          "points": 15,
+          "logic": { "field": "sma200_slope", "operator": ">=", "value": -0.5 },
+          "reason": "200-day SMA not in steep decline — structural floor intact"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "recommendation": "OVERSOLD_REBOUND_CANDIDATE",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 60 },
+          "summary_template": "Oversold reversal candidate. Score {score}. Starter position only."
+        },
+        {
+          "recommendation": "WATCHLIST",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 35 },
+          "summary_template": "Early reversal signs but insufficient confirmation. Score {score}."
+        }
+      ],
+      "fallback_recommendation": "WATCHLIST",
+      "risk_overrides": {
+        "HIGH_ATR": { "starter_size_cap_pct": 25 },
+        "EARNINGS_NEAR": { "starter_size_cap_pct": 0, "note": "Avoid — binary earnings risk" }
+      }
+    },
+
+    "true_broken_chart_avoid": {
+      "description": "Confirmed downtrend — always avoid regardless of valuation",
+      "horizons": ["short_term", "medium_term", "long_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [
+        {
+          "id": "broken_support_signal",
+          "points": 50,
+          "logic": {
+            "all": [
+              { "field": "perf_1w", "operator": "<", "value": -3 },
+              { "field": "breakout_volume_multiple", "operator": ">=", "value": 1.5 }
+            ]
+          },
+          "reason": "Heavy-volume support breakdown this week"
+        },
+        {
+          "id": "downtrend_depth",
+          "points": 50,
+          "logic": {
+            "all": [
+              { "field": "sma50_relative", "operator": "<", "value": -10 },
+              { "field": "sma200_relative", "operator": "<", "value": -5 }
+            ]
+          },
+          "reason": "Severe chart breakdown — far below both moving averages"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "recommendation": "BROKEN_SUPPORT_AVOID",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 50 },
+          "summary_template": "Heavy-volume support breakdown. Score {score}. Avoid all entries."
+        }
+      ],
+      "fallback_recommendation": "TRUE_DOWNTREND_AVOID",
+      "risk_overrides": {}
+    },
+
+    "quality_growth_expensive_but_working": {
+      "description": "High-quality growth stock with elevated valuation but strong RS momentum",
+      "horizons": ["medium_term", "long_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [
+        {
+          "id": "rs_leader_strength",
+          "points": 30,
+          "logic": {
+            "all": [
+              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 },
+              { "field": "rs_vs_sector_20d", "operator": ">=", "value": 2.0 }
+            ]
+          },
+          "reason": "Clear sector and market leader"
+        },
+        {
+          "id": "strong_growth_rate",
+          "points": 25,
+          "logic": {
+            "all": [
+              { "field": "sales_growth_yoy", "operator": ">=", "value": 0.15 },
+              { "field": "eps_growth_yoy", "operator": ">=", "value": 0.10 }
+            ]
+          },
+          "reason": "Revenue and EPS growing at premium rates"
+        },
+        {
+          "id": "quality_fundamentals",
+          "points": 25,
+          "logic": {
+            "any": [
+              { "field": "roic", "operator": ">=", "value": 15.0 },
+              { "field": "operating_margin", "operator": ">=", "value": 0.20 }
+            ]
+          },
+          "reason": "High ROIC or operating margin — quality business"
+        },
+        {
+          "id": "atr_manageable",
+          "points": 20,
+          "logic": { "field": "atr_percent", "operator": "<=", "value": 3.5 },
+          "reason": "Volatility is manageable for a full position"
+        }
+      ],
+      "valuation_penalty_rules": [
+        {
+          "id": "extreme_pe_penalty",
+          "points": -15,
+          "logic": { "field": "forward_pe", "operator": ">", "value": 80 },
+          "reason": "Forward P/E > 80 — extreme valuation risk"
+        },
+        {
+          "id": "extreme_ps_penalty",
+          "points": -10,
+          "logic": { "field": "price_to_sales", "operator": ">", "value": 25 },
+          "reason": "P/S > 25 — very high revenue multiple"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "recommendation": "BUY_STARTER_STRONG_BUT_EXTENDED",
+          "logic": {
+            "all": [
+              { "field": "strategy_score", "operator": ">=", "value": 60 },
+              { "field": "confidence", "operator": ">=", "value": 50 }
+            ]
+          },
+          "summary_template": "Expensive but working. RS leader with quality growth. Score {score}. Starter size only."
+        },
+        {
+          "recommendation": "WAIT_FOR_PULLBACK",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 40 },
+          "summary_template": "Quality growth but extended. Score {score}. Wait for SMA20/SMA50 pullback."
+        }
+      ],
+      "fallback_recommendation": "WATCHLIST",
+      "risk_overrides": {
+        "HIGH_ATR": { "starter_size_cap_pct": 25 },
+        "EARNINGS_NEAR": { "starter_size_cap_pct": 25 }
+      }
+    },
+
+    "watchlist_low_confidence": {
+      "description": "Fallback strategy when no routing rule matches",
+      "horizons": ["short_term", "medium_term", "long_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [],
+      "decision_thresholds": [],
+      "fallback_recommendation": "WATCHLIST",
+      "risk_overrides": {}
+    }
+  }
+}

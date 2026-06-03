@@ -99,12 +99,14 @@ LONG_TERM_DECISIONS = {
 ALL_DECISIONS = ALL_DECISIONS | SHORT_TERM_DECISIONS | MEDIUM_TERM_DECISIONS | LONG_TERM_DECISIONS
 
 
-def _confidence(score: float) -> str:
-    if score >= 80:
+def _confidence(score: float, algo_config: Optional[AlgoConfig] = None) -> str:
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    if score >= dl["confidence_high_threshold"]:
         return "high"
-    if score >= 65:
+    if score >= dl["confidence_medium_high_threshold"]:
         return "medium_high"
-    if score >= 50:
+    if score >= dl["confidence_medium_threshold"]:
         return "medium"
     return "low"
 
@@ -121,83 +123,94 @@ def _is_bear_regime(regime: Optional[MarketRegimeAssessment]) -> bool:
     return regime.regime == MarketRegime.BEAR_RISK_OFF
 
 
-def _chart_is_weak(technicals: TechnicalIndicators) -> bool:
+def _chart_is_weak(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> bool:
     """Price below 200DMA (downtrend) AND weak relative strength."""
+    cfg = algo_config or get_algo_config()
+    rs_threshold = cfg.decision_logic["chart_weak_rs_threshold"]
     downtrend = technicals.trend.label == "downtrend"
-    weak_rs = technicals.rs_vs_spy is not None and technicals.rs_vs_spy < 0.8
+    weak_rs = technicals.rs_vs_spy is not None and technicals.rs_vs_spy < rs_threshold
     return downtrend and weak_rs
 
 
-def _business_deteriorating(fundamentals: FundamentalData, earnings: EarningsData) -> bool:
+def _business_deteriorating(
+    fundamentals: FundamentalData,
+    earnings: EarningsData,
+    algo_config: Optional[AlgoConfig] = None,
+) -> bool:
     """Revenue declining + earnings miss history → bad business signal."""
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    margin_threshold = dl["business_deteriorating_margin_threshold"]
+    beat_threshold = dl["business_deteriorating_beat_rate_threshold"]
     rev_declining = (
         fundamentals.revenue_growth_yoy is not None
         and fundamentals.revenue_growth_yoy < 0
     )
     op_margin_negative = (
         fundamentals.operating_margin is not None
-        and fundamentals.operating_margin < -0.05
+        and fundamentals.operating_margin < margin_threshold
     )
-    poor_beats = earnings.beat_rate is not None and earnings.beat_rate < 0.40
+    poor_beats = earnings.beat_rate is not None and earnings.beat_rate < beat_threshold
     return rev_declining and (op_margin_negative or poor_beats)
 
 
-def _classify_52w_position(technicals: TechnicalIndicators) -> str:
+def _classify_52w_position(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> str:
     """Return a bucket label based on distance from the 52-week high.
 
     Buckets (dist_from_52w_high is negative, e.g. -5 means 5% below high):
-    - "near_52w_high"      : 0 to -3%   (breakout candidate territory)
-    - "healthy_pullback"   : -3% to -10%
-    - "extended_pullback"  : -10% to -15%
-    - "rebound_territory"  : -15% to -35%
-    - "avoid_zone"         : < -35%
+    - "near_52w_high"      : 0 to dist_52w_near_high
+    - "healthy_pullback"   : to dist_52w_healthy
+    - "extended_pullback"  : to dist_52w_extended
+    - "rebound_territory"  : to dist_52w_rebound
+    - "avoid_zone"         : beyond rebound
     - "unknown"            : field is None
     """
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
     dist = technicals.dist_from_52w_high
     if dist is None:
         return "unknown"
-    # dist is negative (price below 52W high)
-    if dist >= -3.0:
+    if dist >= dl["dist_52w_near_high"]:
         return "near_52w_high"
-    if dist >= -10.0:
+    if dist >= dl["dist_52w_healthy"]:
         return "healthy_pullback"
-    if dist >= -15.0:
+    if dist >= dl["dist_52w_extended"]:
         return "extended_pullback"
-    if dist >= -35.0:
+    if dist >= dl["dist_52w_rebound"]:
         return "rebound_territory"
     return "avoid_zone"
 
 
-def _classify_bad_chart(technicals: TechnicalIndicators) -> str:
+def _classify_bad_chart(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> str:
     """Split old AVOID_BAD_CHART into three precise sub-labels.
 
     Priority order:
-    1. OVERSOLD_REBOUND_CANDIDATE — RSI 25-42 turning up with improving price action
-    2. BROKEN_SUPPORT_AVOID      — heavy-volume break of SMA50 with weak close
+    1. OVERSOLD_REBOUND_CANDIDATE — RSI turning up with improving price action
+    2. BROKEN_SUPPORT_AVOID      — heavy-volume break of support with weak close
     3. TRUE_DOWNTREND_AVOID      — full confirmed downtrend (default)
     """
+    cfg = algo_config or get_algo_config()
+    bg = cfg.decision_logic["bad_chart_gates"]
     t = technicals
     rsi = t.rsi_14
     rsi_slope = t.rsi_slope
 
     # --- Check OVERSOLD_REBOUND_CANDIDATE first (most actionable) ---
-    rsi_in_rebound_range = rsi is not None and 25.0 <= rsi <= 42.0
+    rsi_in_rebound_range = rsi is not None and bg["oversold_rsi_min"] <= rsi <= bg["oversold_rsi_max"]
     rsi_turning_up = rsi_slope is not None and rsi_slope > 0
-    # Price action improving: perf_1w > 0 or green close
     perf_5d_ok = (t.perf_1w is not None and t.perf_1w >= 0) or (
         t.change_from_open_percent is not None and t.change_from_open_percent > 0
     )
-    rel_vol_ok = t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= 1.2
-    # Not in active crash (SMA200 not steeply falling)
-    sma200_not_crashing = t.sma200_slope is None or t.sma200_slope >= -0.5
+    rel_vol_ok = t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= bg["oversold_vol_min"]
+    sma200_not_crashing = t.sma200_slope is None or t.sma200_slope >= bg["oversold_sma200_slope_min"]
 
     if rsi_in_rebound_range and rsi_turning_up and perf_5d_ok and rel_vol_ok and sma200_not_crashing:
         return "OVERSOLD_REBOUND_CANDIDATE"
 
     # --- Check BROKEN_SUPPORT_AVOID ---
-    heavy_vol_break = t.volume_dryup_ratio is not None and t.volume_dryup_ratio > 1.5
-    weak_close = t.change_from_open_percent is not None and t.change_from_open_percent < -1.0
-    rsi_falling = rsi is not None and rsi < 40.0 and (rsi_slope is None or rsi_slope < 0)
+    heavy_vol_break = t.volume_dryup_ratio is not None and t.volume_dryup_ratio > bg["broken_support_dryup_min"]
+    weak_close = t.change_from_open_percent is not None and t.change_from_open_percent < bg["broken_support_change_max"]
+    rsi_falling = rsi is not None and rsi < bg["broken_support_rsi_max"] and (rsi_slope is None or rsi_slope < 0)
 
     if heavy_vol_break and weak_close and rsi_falling:
         return "BROKEN_SUPPORT_AVOID"
@@ -229,39 +242,47 @@ def _rs_continuation_ok(technicals: TechnicalIndicators) -> bool:
     return True
 
 
-def _rs_leader(technicals: TechnicalIndicators) -> bool:
+def _rs_leader(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> bool:
     """Return True when stock is clearly outperforming (leader) across all RS dimensions."""
+    cfg = algo_config or get_algo_config()
+    rg = cfg.decision_logic["rs_leader_gates"]
     t = technicals
     spy20 = t.rs_vs_spy_20d
     spy63 = t.rs_vs_spy_63d
     sector20 = t.rs_vs_sector_20d
     if spy20 is None or spy63 is None or sector20 is None:
         return False
-    return spy20 >= 3.0 and spy63 >= 5.0 and sector20 >= 2.0
+    return spy20 >= rg["spy_20d_min"] and spy63 >= rg["spy_63d_min"] and sector20 >= rg["sector_20d_min"]
 
 
-def _rs_avoid(technicals: TechnicalIndicators) -> bool:
+def _rs_avoid(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> bool:
     """Return True when RS is weak enough to warrant avoidance."""
+    cfg = algo_config or get_algo_config()
+    ag = cfg.decision_logic["rs_avoid_gates"]
     t = technicals
     spy20 = t.rs_vs_spy_20d
     spy63 = t.rs_vs_spy_63d
     sector20 = t.rs_vs_sector_20d
-    if spy20 is not None and spy20 < -5.0:
+    if spy20 is not None and spy20 < ag["spy_20d_max"]:
         return True
-    if spy63 is not None and spy63 < -10.0:
+    if spy63 is not None and spy63 < ag["spy_63d_max"]:
         return True
-    if sector20 is not None and sector20 < -5.0:
+    if sector20 is not None and sector20 < ag["sector_20d_max"]:
         return True
     return False
 
 
-def _perf_gates(technicals: TechnicalIndicators, context: str) -> bool:
+def _perf_gates(technicals: TechnicalIndicators, context: str, algo_config: Optional[AlgoConfig] = None) -> bool:
     """Gate performance-based filters.
 
     context == "continuation": returns True if perf is in ideal continuation range
     context == "chasing":      returns True if performance is too hot (chasing signal)
     context == "rebound":      returns True if stock has been weak enough for rebound setup
     """
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    cont = dl["buy_now_continuation_gates"]
+    wait = dl["wait_for_pullback_gates"]
     t = technicals
     p1w = t.perf_1w
     p1m = t.perf_1m
@@ -270,12 +291,12 @@ def _perf_gates(technicals: TechnicalIndicators, context: str) -> bool:
     if context == "continuation":
         if p1w is None or p1m is None:
             return True  # insufficient data → don't block
-        return 0.0 <= p1w <= 6.0 and 3.0 <= p1m <= 15.0
+        return cont["perf_1w_min"] <= p1w <= cont["perf_1w_max"] and cont["perf_1m_min"] <= p1m <= cont["perf_1m_max"]
 
     if context == "chasing":
-        if p1w is not None and p1w > 10.0:
+        if p1w is not None and p1w > wait["perf_1w_chasing"]:
             return True
-        if p1m is not None and p1m > 25.0:
+        if p1m is not None and p1m > wait["perf_1m_chasing"]:
             return True
         return False
 
@@ -292,34 +313,24 @@ def _perf_gates(technicals: TechnicalIndicators, context: str) -> bool:
 def _is_pullback_to_sma50(
     technicals: TechnicalIndicators,
     archetype: Optional[str] = None,
+    algo_config: Optional[AlgoConfig] = None,
 ) -> bool:
     """Return True when price is in a clean pullback-to-SMA50 zone.
 
-    Standard criteria:
-    - sma50_relative in [-3%, +5%]
-    - sma20_relative <= +8%
-    - RSI between 40 and 58
-    - RSI slope >= -2 (stabilizing or rising)
-    - perf_1m >= -12%
-    - perf_3m > 0
-    - volume_dryup_ratio < 0.85
-    - rs_vs_sector_20d >= -3%
-    - price above SMA200 (sma200_relative > -100 is always true; use trend)
-    - SMA50 slope >= 0
-
-    Hyper-growth override (archetype == "HYPER_GROWTH"):
-    - sma50_relative in [-5%, +8%]
-    - RSI between 38 and 62
+    Standard criteria are read from algo_config.decision_logic["pullback_gates"].
+    Hyper-growth override uses sma50_hyper_min/max and rsi_hyper_min/max.
     """
+    cfg = algo_config or get_algo_config()
+    pg = cfg.decision_logic["pullback_gates"]
     t = technicals
 
     # SMA50 distance boundaries
     if archetype == "HYPER_GROWTH":
-        sma50_low, sma50_high = -5.0, 8.0
-        rsi_low, rsi_high = 38.0, 62.0
+        sma50_low, sma50_high = pg["sma50_hyper_min"], pg["sma50_hyper_max"]
+        rsi_low, rsi_high = pg["rsi_hyper_min"], pg["rsi_hyper_max"]
     else:
-        sma50_low, sma50_high = -3.0, 5.0
-        rsi_low, rsi_high = 40.0, 58.0
+        sma50_low, sma50_high = pg["sma50_min"], pg["sma50_max"]
+        rsi_low, rsi_high = pg["rsi_min"], pg["rsi_max"]
 
     # SMA50 distance check
     if t.sma50_relative is None:
@@ -328,7 +339,7 @@ def _is_pullback_to_sma50(
         return False
 
     # SMA20 not too extended
-    if t.sma20_relative is not None and t.sma20_relative > 8.0:
+    if t.sma20_relative is not None and t.sma20_relative > pg["sma20_max"]:
         return False
 
     # RSI range
@@ -338,11 +349,11 @@ def _is_pullback_to_sma50(
         return False
 
     # RSI slope stabilizing or rising
-    if t.rsi_slope is not None and t.rsi_slope < -2.0:
+    if t.rsi_slope is not None and t.rsi_slope < pg["rsi_slope_min"]:
         return False
 
-    # 1M return not worse than -12%
-    if t.perf_1m is not None and t.perf_1m < -12.0:
+    # 1M return not worse than min
+    if t.perf_1m is not None and t.perf_1m < pg["perf_1m_min"]:
         return False
 
     # 3M return positive
@@ -350,11 +361,11 @@ def _is_pullback_to_sma50(
         return False
 
     # Volume dry-up: pullback should have drying volume
-    if t.volume_dryup_ratio is not None and t.volume_dryup_ratio >= 0.85:
+    if t.volume_dryup_ratio is not None and t.volume_dryup_ratio >= pg["volume_dryup_max"]:
         return False
 
     # RS vs sector not too weak
-    if t.rs_vs_sector_20d is not None and t.rs_vs_sector_20d < -3.0:
+    if t.rs_vs_sector_20d is not None and t.rs_vs_sector_20d < pg["rs_vs_sector_20d_min"]:
         return False
 
     # SMA50 slope should be non-negative (not a falling 50MA)
@@ -594,39 +605,46 @@ def _decide_short_term_v2(
     regime_str = regime.regime if regime is not None else MarketRegime.BULL_RISK_ON
     thresholds = _get_regime_thresholds(regime_str, algo_config=algo_config)
 
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    score_min = dl["short_term_score_min"]
+    wait = dl["wait_for_pullback_gates"]
+    cont = dl["buy_now_continuation_gates"]
+
     # --- 1. Bad chart / avoid overrides ---
-    if _chart_is_weak(t) and score < 50:
-        return _classify_bad_chart(t)
+    if _chart_is_weak(t, algo_config=algo_config) and score < 50:
+        return _classify_bad_chart(t, algo_config=algo_config)
     if score < 40:
-        return _classify_bad_chart(t)
+        return _classify_bad_chart(t, algo_config=algo_config)
 
     # --- 2. Oversold rebound candidate (even for low scores) ---
+    bg = dl["bad_chart_gates"]
     if (
-        t.rsi_14 is not None and 25.0 <= t.rsi_14 <= 42.0
+        t.rsi_14 is not None and bg["oversold_rsi_min"] <= t.rsi_14 <= bg["oversold_rsi_max"]
         and t.rsi_slope is not None and t.rsi_slope > 0
         and (
             (t.perf_1w is not None and t.perf_1w >= 0)
             or (t.change_from_open_percent is not None and t.change_from_open_percent > 0)
         )
-        and t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= 1.2
+        and t.breakout_volume_multiple is not None and t.breakout_volume_multiple >= bg["oversold_vol_min"]
     ):
         return "OVERSOLD_REBOUND_CANDIDATE"
 
     # --- WAIT_FOR_PULLBACK: chasing / over-extended gates (check before scoring gates) ---
-    is_chasing = _perf_gates(t, "chasing")
-    sma20_above_10 = t.sma20_relative is not None and t.sma20_relative > 10.0
-    rsi_too_hot = t.rsi_14 is not None and t.rsi_14 > 72.0
-    if is_chasing or sma20_above_10:
+    is_chasing = _perf_gates(t, "chasing", algo_config=algo_config)
+    sma20_above_extended = t.sma20_relative is not None and t.sma20_relative > wait["sma20_extended"]
+    rsi_too_hot = t.rsi_14 is not None and t.rsi_14 > wait["rsi_hot"]
+    if is_chasing or sma20_above_extended:
         return "WAIT_FOR_PULLBACK"
 
     # --- 3. BUY_ON_PULLBACK priority in SIDEWAYS_CHOPPY ---
     # In sideways regimes, prefer pullback entries over continuation buys
     if regime_str == MarketRegime.SIDEWAYS_CHOPPY and score >= 55:
-        if _is_pullback_to_sma50(t, archetype=archetype):
+        if _is_pullback_to_sma50(t, archetype=archetype, algo_config=algo_config):
             return "BUY_ON_PULLBACK"
 
     # --- 3. BUY_NOW_CONTINUATION (all gates must pass) ---
-    if score >= 70 and not t.is_extended:
+    if score >= score_min and not t.is_extended:
         rsi = t.rsi_14
         sma20 = t.sma20_relative
         sma50 = t.sma50_relative
@@ -635,7 +653,7 @@ def _decide_short_term_v2(
 
         rsi_ok = rsi is None or (thresholds.rsi_min <= rsi <= thresholds.rsi_max)
         sma20_ok = sma20 is None or (0.0 <= sma20 <= thresholds.sma20_max)
-        sma50_ok = sma50 is None or sma50 <= 12.0
+        sma50_ok = sma50 is None or sma50 <= cont["sma50_relative_max"]
         slopes_ok = (t.sma20_slope is None or t.sma20_slope >= 0) and (
             t.sma50_slope is None or t.sma50_slope >= 0
         )
@@ -644,8 +662,8 @@ def _decide_short_term_v2(
         rs_ok = _rs_continuation_ok(t)
         # In BULL_NARROW_LEADERSHIP, require leader RS
         if regime_str == MarketRegime.BULL_NARROW_LEADERSHIP:
-            rs_ok = _rs_leader(t)
-        perf_ok = _perf_gates(t, "continuation")
+            rs_ok = _rs_leader(t, algo_config=algo_config)
+        perf_ok = _perf_gates(t, "continuation", algo_config=algo_config)
 
         if rsi_ok and sma20_ok and sma50_ok and slopes_ok and rsi_slope_ok and vol_ok and rs_ok and perf_ok:
             return "BUY_NOW_CONTINUATION"
@@ -653,16 +671,16 @@ def _decide_short_term_v2(
         # Not all gates passed — fall through to extended / pullback checks
 
     # --- 4. BUY_STARTER_STRONG_BUT_EXTENDED ---
-    if score >= 70:
+    if score >= score_min:
         sma20 = t.sma20_relative
         rsi = t.rsi_14
-        extended_sma20 = sma20 is not None and 5.0 < sma20 <= 10.0
+        extended_sma20 = sma20 is not None and 5.0 < sma20 <= wait["sma20_extended"]
         extended_rsi = rsi is not None and thresholds.rsi_max < rsi <= 76.0
         if t.is_extended or extended_sma20 or extended_rsi:
             return "BUY_STARTER_STRONG_BUT_EXTENDED"
 
         # High score but RS or perf gate failed → prefer pullback
-        if _is_pullback_to_sma50(t, archetype=archetype):
+        if _is_pullback_to_sma50(t, archetype=archetype, algo_config=algo_config):
             return "BUY_ON_PULLBACK"
         return "WAIT_FOR_PULLBACK"
 
@@ -671,7 +689,7 @@ def _decide_short_term_v2(
         return "WAIT_FOR_PULLBACK"
 
     # --- 6. BUY_ON_PULLBACK (score 55+ with precise pullback criteria) ---
-    if score >= 55 and _is_pullback_to_sma50(t, archetype=archetype):
+    if score >= 55 and _is_pullback_to_sma50(t, archetype=archetype, algo_config=algo_config):
         return "BUY_ON_PULLBACK"
 
     # --- 7. Fallback ---
@@ -836,7 +854,7 @@ def build_recommendations(
 
         bullish, bearish = _build_factors(technicals, fundamentals, valuation, earnings, news, horizon, regime_assessment)
         summary = _summary(decision, composite, horizon, technicals)
-        confidence = _confidence(composite)
+        confidence = _confidence(composite, algo_config=algo_config)
 
         entry, exit_, rr, sizing = compute_risk_management(
             price=current_price,

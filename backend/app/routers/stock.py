@@ -16,12 +16,15 @@ from app.services.technical_analysis_service import compute_technicals, compute_
 from app.services.fundamental_analysis_service import score_fundamentals
 from app.services.valuation_analysis_service import score_valuation, score_valuation_with_archetype
 from app.services.news_sentiment_service import classify_news
-from app.services.scoring_service import compute_scores
+from app.services.scoring_service import compute_scores, compute_scores_from_signal_cards
+from app.services.signal_card_service import score_all_cards
 from app.services.recommendation_service import build_recommendations
 from app.services.markdown_report_service import generate_markdown
 from app.services.stock_archetype_service import classify_and_attach
 from app.services.market_regime_service import classify_regime
 from app.services.signal_profile_service import build_signal_profile
+from app.algo_config import get_algo_config
+from app.engine.stock_decision_engine import get_decision_engine
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 logger = logging.getLogger(__name__)
@@ -151,32 +154,52 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
         except Exception:
             pass
 
-        # 7. Aggregate scores
-        scores = compute_scores(
+        # 7. Signal cards (always computed — needed for scoring and new engine)
+        signal_cards = score_all_cards(
             technicals=technicals,
             fundamentals=fundamentals,
             valuation=valuation,
             earnings=earnings,
             news=news_summary,
-            catalyst_score=catalyst_score,
-            sector_macro_score=sector_macro_score,
-            regime_assessment=regime_assessment,
         )
 
-        # 8. Recommendations
-        recommendations = build_recommendations(
-            technicals=technicals,
-            fundamentals=fundamentals,
-            valuation=valuation,
-            earnings=earnings,
-            news=news_summary,
-            scores=scores,
-            horizons=request.horizons,
-            risk_profile=request.risk_profile,
-            current_price=price,
-            regime_assessment=regime_assessment,
-            has_options_data=options.available,
-        )
+        # 8. Scores + recommendations (feature-flagged dispatch)
+        algo_cfg = get_algo_config()
+        use_new_engine = algo_cfg.feature_flags.get("use_new_strategy_engine", False)
+
+        if use_new_engine:
+            recommendations = get_decision_engine().decide(
+                ticker=ticker,
+                price=price,
+                technicals=technicals,
+                fundamentals=fundamentals,
+                valuation=valuation,
+                earnings=earnings,
+                news=news_summary,
+                horizons=request.horizons,
+                risk_profile=request.risk_profile,
+                regime_assessment=regime_assessment,
+                has_options_data=options.available,
+            )
+        else:
+            scores = compute_scores_from_signal_cards(
+                cards=signal_cards,
+                regime_assessment=regime_assessment,
+            )
+            recommendations = build_recommendations(
+                technicals=technicals,
+                fundamentals=fundamentals,
+                valuation=valuation,
+                earnings=earnings,
+                news=news_summary,
+                scores=scores,
+                horizons=request.horizons,
+                risk_profile=request.risk_profile,
+                current_price=price,
+                regime_assessment=regime_assessment,
+                has_options_data=options.available,
+                signal_cards=signal_cards,
+            )
 
         # 9. Data quality
         data_quality = _build_data_quality(
@@ -206,6 +229,7 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             market_regime=regime_assessment.regime if regime_assessment else "SIDEWAYS_CHOPPY",
             regime_confidence=regime_assessment.confidence if regime_assessment else 0.0,
             signal_profile=signal_profile,
+            signal_cards=signal_cards,
         )
         result.markdown_report = generate_markdown(result)
 

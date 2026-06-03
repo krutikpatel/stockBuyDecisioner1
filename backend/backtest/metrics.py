@@ -4,8 +4,8 @@ Aggregates backtest signal records into structured performance metrics.
 Public entry point:  build_metrics(signals, horizon) -> dict
 
 Sections produced:
-  overall_stats          — aggregate numbers across all decisions
-  by_decision            — per decision-label performance
+  overall_stats          — aggregate numbers + Sharpe/Sortino/Calmar
+  by_decision            — per decision-label performance (+ MAE/MFE if present)
   by_score_bucket        — performance by score range
   by_ticker              — per-stock performance
   by_horizon             — across all 3 horizons (summary)
@@ -16,6 +16,8 @@ Sections produced:
   by_archetype           — performance per stock archetype (Phase 3)
   by_archetype_decision  — archetype × decision table     (Phase 3)
   by_signal_card         — per-card score correlation with returns (Phase 3)
+  by_setup               — performance per technical setup (new engine)
+  by_strategy            — performance per strategy engine (new engine)
 """
 from __future__ import annotations
 
@@ -25,18 +27,21 @@ import pandas as pd
 
 # Decision label ordering for consistent table display
 DECISION_ORDER = [
-    # New short-term labels (Story 7)
-    "BUY_NOW_MOMENTUM", "BUY_STARTER_STRONG_BUT_EXTENDED",
-    "WAIT_FOR_PULLBACK",
-    # New medium-term labels
-    "BUY_NOW", "BUY_STARTER", "BUY_ON_PULLBACK",
-    "WATCHLIST_NEEDS_CONFIRMATION",
-    # New long-term labels
-    "BUY_NOW_LONG_TERM", "ACCUMULATE_ON_WEAKNESS",
+    # New engine buy labels
+    "BUY_NOW_CONTINUATION", "BUY_ON_PULLBACK",
+    "BUY_STARTER_STRONG_BUT_EXTENDED", "OVERSOLD_REBOUND_CANDIDATE",
+    "ACCUMULATE_ON_WEAKNESS", "BUY_NOW_LONG_TERM",
+    # New engine wait/watchlist labels
+    "WAIT_FOR_PULLBACK", "WATCHLIST_NEEDS_CONFIRMATION",
     "WATCHLIST_VALUATION_TOO_RICH",
-    # Shared / legacy labels
+    # New engine avoid labels
+    "TRUE_DOWNTREND_AVOID", "BROKEN_SUPPORT_AVOID",
+    # Legacy buy labels
+    "BUY_NOW_MOMENTUM", "BUY_NOW", "BUY_STARTER",
     "BUY_STARTER_EXTENDED", "BUY_ON_BREAKOUT", "BUY_AFTER_EARNINGS",
+    # Shared labels
     "WATCHLIST", "WATCHLIST_NEEDS_CATALYST", "HOLD_EXISTING_DO_NOT_ADD",
+    # Shared avoid labels
     "AVOID_BAD_BUSINESS", "AVOID_BAD_CHART", "AVOID_LONG_TERM",
     "AVOID_BAD_RISK_REWARD", "AVOID_LOW_CONFIDENCE", "AVOID",
 ]
@@ -57,6 +62,13 @@ SIGNAL_CARD_NAMES = [
     "volatility_risk", "relative_strength", "growth", "valuation",
     "quality", "ownership", "catalyst",
 ]
+
+# How many signal periods fit in one year (used for risk-adjusted ratio annualisation)
+ANNUALIZATION_FACTORS: dict[str, float] = {
+    "short_term":  13.0,   # 20-day holds ≈ 13 per year
+    "medium_term":  4.0,   # 63-day holds ≈ 4 per year
+    "long_term":    1.0,   # 252-day holds ≈ 1 per year
+}
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +105,11 @@ def _perf_row(sub: pd.DataFrame) -> dict:
         if "max_drawdown_period" in resolved.columns and resolved["max_drawdown_period"].notna().any()
         else None
     )
+    avg_mfe = (
+        round(resolved["mfe_pct"].mean(), 2)
+        if "mfe_pct" in resolved.columns and resolved["mfe_pct"].notna().any()
+        else None
+    )
 
     # Profit factor = sum of gains / |sum of losses|
     gains  = resolved.loc[resolved["forward_return"] > 0, "forward_return"].sum()
@@ -109,6 +126,7 @@ def _perf_row(sub: pd.DataFrame) -> dict:
         "avg_excess_spy_pct":    avg_excess,
         "avg_excess_qqq_pct":    avg_excess_qqq,
         "avg_max_drawdown_pct":  avg_dd,
+        "avg_mfe_pct":           avg_mfe,
         "profit_factor":         profit_factor,
         "best_return_pct":       round(resolved["forward_return"].max(), 2),
         "worst_return_pct":      round(resolved["forward_return"].min(), 2),
@@ -143,12 +161,14 @@ def build_metrics(signals: list[dict], horizon: str) -> dict:
     )
     sc_cols = [f"sc_{n}" for n in SIGNAL_CARD_NAMES if f"sc_{n}" in df_res.columns]
     has_signal_cards = len(sc_cols) > 0
+    has_setup    = "setup" in df_res.columns and df_res["setup"].notna().any()
+    has_strategy = "strategy_name" in df_res.columns and df_res["strategy_name"].notna().any()
 
     result: dict = {
         "horizon":          horizon,
         "total_signals":    len(df),
         "resolved_signals": len(df_res),
-        "overall_stats":    _overall_stats(df_res),
+        "overall_stats":    _overall_stats(df_res, horizon),
         "by_decision":      _by_decision(df_res),
         "by_score_bucket":  _by_score_bucket(df_res),
         "by_ticker":        _by_ticker(df_res),
@@ -169,6 +189,13 @@ def build_metrics(signals: list[dict], horizon: str) -> dict:
     if has_signal_cards:
         result["by_signal_card"] = _by_signal_card(df_res, sc_cols)
 
+    # New engine: setup + strategy sections
+    if has_setup:
+        result["by_setup"] = _by_setup(df_res)
+
+    if has_strategy:
+        result["by_strategy"] = _by_strategy(df_res)
+
     return result
 
 
@@ -185,14 +212,15 @@ def build_all_horizons_metrics(signals: list[dict]) -> dict:
 # Section builders
 # ---------------------------------------------------------------------------
 
-def _overall_stats(df: pd.DataFrame) -> dict:
+def _overall_stats(df: pd.DataFrame, horizon: str = "short_term") -> dict:
     if df.empty:
         return {}
     wins = (df["forward_return"] > 0).sum()
+    avg_ret = float(df["forward_return"].mean())
     row: dict = {
         "total_resolved_signals": len(df),
         "overall_win_rate_pct":   round(wins / len(df) * 100, 1),
-        "avg_return_pct":         round(df["forward_return"].mean(), 2),
+        "avg_return_pct":         round(avg_ret, 2),
         "avg_excess_spy_pct":     (
             round(df["excess_return"].mean(), 2)
             if "excess_return" in df.columns and df["excess_return"].notna().any() else None
@@ -202,6 +230,24 @@ def _overall_stats(df: pd.DataFrame) -> dict:
             if len(df) > 1 else None
         ),
     }
+
+    # Risk-adjusted ratios (annualised)
+    n_per_year = ANNUALIZATION_FACTORS.get(horizon, 13.0)
+    ret_std = float(df["forward_return"].std())
+    if ret_std > 0 and len(df) > 1:
+        sharpe = round(avg_ret / ret_std * (n_per_year ** 0.5), 3)
+        row["sharpe_ratio"] = sharpe
+
+        neg_rets  = df.loc[df["forward_return"] < 0, "forward_return"]
+        down_std  = float(neg_rets.std()) if len(neg_rets) > 1 else None
+        if down_std and down_std > 0:
+            row["sortino_ratio"] = round(avg_ret / down_std * (n_per_year ** 0.5), 3)
+
+        max_loss = float(df["forward_return"].min())
+        if max_loss < 0:
+            ann_ret = avg_ret * n_per_year
+            row["calmar_ratio"] = round(ann_ret / abs(max_loss), 3)
+
     if len(df) > 0:
         best_idx  = df["forward_return"].idxmax()
         worst_idx = df["forward_return"].idxmin()
@@ -384,11 +430,19 @@ def _monthly_breakdown(df: pd.DataFrame) -> list[dict]:
     df2["month"] = pd.to_datetime(df2["date"]).dt.to_period("M")
     rows = []
     buy_labels = {
-        "BUY_NOW", "BUY_NOW_MOMENTUM", "BUY_NOW_LONG_TERM",
-        "BUY_STARTER", "BUY_STARTER_STRONG_BUT_EXTENDED",
-        "ACCUMULATE_ON_WEAKNESS",
+        # New engine
+        "BUY_NOW_CONTINUATION", "BUY_ON_PULLBACK",
+        "BUY_STARTER_STRONG_BUT_EXTENDED", "OVERSOLD_REBOUND_CANDIDATE",
+        "ACCUMULATE_ON_WEAKNESS", "BUY_NOW_LONG_TERM",
+        # Legacy
+        "BUY_NOW", "BUY_NOW_MOMENTUM", "BUY_STARTER",
     }
-    avoid_labels = {"AVOID", "AVOID_BAD_CHART", "AVOID_BAD_BUSINESS", "AVOID_LONG_TERM"}
+    avoid_labels = {
+        # New engine
+        "TRUE_DOWNTREND_AVOID", "BROKEN_SUPPORT_AVOID", "AVOID_LOW_CONFIDENCE",
+        # Legacy
+        "AVOID", "AVOID_BAD_CHART", "AVOID_BAD_BUSINESS", "AVOID_LONG_TERM",
+    }
     for period, group in df2.groupby("month"):
         wins = (group["forward_return"] > 0).sum()
         rows.append({
@@ -405,9 +459,12 @@ def _monthly_breakdown(df: pd.DataFrame) -> list[dict]:
 def _portfolio_simulation(df: pd.DataFrame, horizon: str) -> dict:
     """Simulate equal-weight portfolio of all BUY signals vs SPY."""
     buy_labels = {
-        "BUY_NOW", "BUY_NOW_MOMENTUM", "BUY_NOW_LONG_TERM",
-        "BUY_STARTER", "BUY_STARTER_STRONG_BUT_EXTENDED",
-        "ACCUMULATE_ON_WEAKNESS",
+        # New engine
+        "BUY_NOW_CONTINUATION", "BUY_ON_PULLBACK",
+        "BUY_STARTER_STRONG_BUT_EXTENDED", "OVERSOLD_REBOUND_CANDIDATE",
+        "ACCUMULATE_ON_WEAKNESS", "BUY_NOW_LONG_TERM",
+        # Legacy
+        "BUY_NOW", "BUY_NOW_MOMENTUM", "BUY_STARTER",
     }
     buys = df[df["decision"].isin(buy_labels)].copy()
     if buys.empty:
@@ -432,6 +489,33 @@ def _portfolio_simulation(df: pd.DataFrame, horizon: str) -> dict:
             if avg_spy is not None and pd.notna(avg_trade) else None
         ),
     }
+
+
+def _by_setup(df: pd.DataFrame) -> list[dict]:
+    """Performance per technical setup (populated by the new strategy engine)."""
+    rows = []
+    for setup, group in df.groupby("setup"):
+        row = _perf_row(group)
+        row["setup"]       = str(setup)
+        row["avg_score"]   = round(group["score"].mean(), 1) if not group.empty else None
+        rows.append(row)
+    rows.sort(key=lambda r: r.get("avg_return_pct") or 0, reverse=True)
+    return rows
+
+
+def _by_strategy(df: pd.DataFrame) -> list[dict]:
+    """Performance per strategy engine (populated by the new strategy engine)."""
+    rows = []
+    for strategy, group in df.groupby("strategy_name"):
+        row = _perf_row(group)
+        row["strategy_name"] = str(strategy)
+        row["avg_score"]     = round(group["score"].mean(), 1) if not group.empty else None
+        row["best_decision"] = (
+            group["decision"].mode().iloc[0] if len(group) > 0 else None
+        )
+        rows.append(row)
+    rows.sort(key=lambda r: r.get("avg_return_pct") or 0, reverse=True)
+    return rows
 
 
 def _cross_horizon_summary(signals: list[dict]) -> list[dict]:

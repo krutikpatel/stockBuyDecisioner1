@@ -113,6 +113,10 @@ def _exec_summary(all_metrics: dict, signals: list[dict], phase: int) -> str:
     phase_label = {1: "Technical-only (Phase 1)", 2: "Technical + Regime (Phase 2)",
                    3: "Technical + Regime + Fundamentals (Phase 3)"}.get(phase, f"Phase {phase}")
 
+    engine_label = "New (Config-Driven)" if (
+        "engine" in df.columns and (df["engine"] == "new").any()
+    ) else "Legacy (Signal Cards)"
+
     return f"""
 <div class="summary-grid">
   <div class="summary-card"><div class="kv-label">Total Signals</div><div class="kv-val">{total:,}</div></div>
@@ -121,6 +125,7 @@ def _exec_summary(all_metrics: dict, signals: list[dict], phase: int) -> str:
   <div class="summary-card"><div class="kv-label">Test Dates</div><div class="kv-val">{dates:,}</div></div>
   <div class="summary-card"><div class="kv-label">Date Range</div><div class="kv-val">{date_min} → {date_max}</div></div>
   <div class="summary-card"><div class="kv-label">Phase</div><div class="kv-val">{phase_label}</div></div>
+  <div class="summary-card"><div class="kv-label">Strategy Engine</div><div class="kv-val">{engine_label}</div></div>
 </div>
 <h3 style="margin-top:1.5rem">Performance by Horizon</h3>
 <ul>{"".join(horizon_lines)}</ul>
@@ -324,6 +329,43 @@ def _signal_card_table(by_sc: list[dict]) -> str:
     )
 
 
+def _setup_table(by_setup: list[dict]) -> str:
+    if not by_setup:
+        return "<p>No setup data available (new engine required).</p>"
+    headers = ["Setup", "Signals", "Avg Score", "Avg Return %", "Win Rate %", "Avg Excess SPY %"]
+    rows = []
+    for r in by_setup:
+        ar = r.get("avg_return_pct")
+        rows.append([
+            f"<strong>{r.get('setup', '')}</strong>",
+            r.get("resolved", r.get("count", "—")),
+            _fmt(r.get("avg_score"), ""),
+            f"<span style='{_color_return(ar)}'>{_fmt(ar, '%')}</span>",
+            _fmt(r.get("win_rate_pct"), "%"),
+            f"<span style='{_color_return(r.get('avg_excess_spy_pct'))}'>{_fmt(r.get('avg_excess_spy_pct'), '%')}</span>",
+        ])
+    return _table(headers, rows)
+
+
+def _strategy_table(by_strategy: list[dict]) -> str:
+    if not by_strategy:
+        return "<p>No strategy data available (new engine required).</p>"
+    headers = ["Strategy", "Signals", "Avg Score", "Avg Return %", "Win Rate %", "Avg Excess SPY %", "Best Decision"]
+    rows = []
+    for r in by_strategy:
+        ar = r.get("avg_return_pct")
+        rows.append([
+            f"<strong>{r.get('strategy_name', '')}</strong>",
+            r.get("resolved", r.get("count", "—")),
+            _fmt(r.get("avg_score"), ""),
+            f"<span style='{_color_return(ar)}'>{_fmt(ar, '%')}</span>",
+            _fmt(r.get("win_rate_pct"), "%"),
+            f"<span style='{_color_return(r.get('avg_excess_spy_pct'))}'>{_fmt(r.get('avg_excess_spy_pct'), '%')}</span>",
+            f"<code>{r.get('best_decision', '')}</code>",
+        ])
+    return _table(headers, rows)
+
+
 def _cross_horizon_table(cross: list[dict]) -> str:
     if not cross:
         return "<p>No data.</p>"
@@ -470,6 +512,18 @@ def _build_horizon_html(m: dict, horizon: str) -> str:
             _signal_card_table(m.get("by_signal_card", [])),
         ]
 
+    if "by_setup" in m:
+        parts += [
+            "<h3>Performance by Technical Setup (New Engine)</h3>",
+            _setup_table(m.get("by_setup", [])),
+        ]
+
+    if "by_strategy" in m:
+        parts += [
+            "<h3>Performance by Strategy Engine (New Engine)</h3>",
+            _strategy_table(m.get("by_strategy", [])),
+        ]
+
     parts += [
         "<h3>Per-Ticker Performance</h3>",
         _ticker_table(m.get("by_ticker", [])),
@@ -581,6 +635,10 @@ def _export_csvs(all_metrics: dict, signals: list[dict], output_dir: Path) -> No
             _to_csv("by_archetype_decision", f"{prefix}_by_archetype_decision.csv")
         if "by_signal_card" in m:
             _to_csv("by_signal_card", f"{prefix}_by_signal_card.csv")
+        if "by_setup" in m:
+            _to_csv("by_setup", f"{prefix}_by_setup.csv")
+        if "by_strategy" in m:
+            _to_csv("by_strategy", f"{prefix}_by_strategy.csv")
 
 
 # ---------------------------------------------------------------------------

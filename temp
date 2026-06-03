@@ -1,0 +1,14 @@
+this is existing project you implemented before. you can refer HLD.md and LLD.md for codedetails and architecture. Right now i have set of improvements to be made which are documented in improvements3_finetuningParams.md . So give me comprehensive plan to implement
+this. ask me clarifying questions. save plan like logical sequence of checklist and record your progress for tracking purposes. in the end, generate change-implementation-summary3a.md file with  summary of all hanges you make.
+
+refer these files to resume the work (phase 4 and 5)
+/changelog/1_backendRework.md
+/changelog/1_plan_backend_rework.md
+/changelog/1_plan_progress.md
+And following is status from last session progress:
+- Phases 1–3: all marked COMPLETE ✅ with full file tables and test counts
+  - Test suite status: 988 passed, 11 pre-existing failures explained so the next session isn't confused by them
+  - "NEXT SESSION STARTS HERE" marker at Phase 4 with every file to create/modify, exact change descriptions, and the verification commands to run when done
+  - Phase 5: listed as after Phase 4 with its file table
+  - Key design decisions: 8 permanent notes including the config package shadowing fix, the feature flag caveat, the "same label for all horizons" simplification, and the legacy gap fix — so the next session understands the non-obvious choices without re-deriving them
+

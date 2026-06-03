@@ -684,6 +684,48 @@ flowchart TD
     Metrics --> Output
 ```
 
+### Phase 4 Additions
+
+```mermaid
+flowchart TD
+    subgraph WF["Walk-Forward Validation (walk_forward.py + run_walk_forward.py)"]
+        WFV["WalkForwardValidator\ntrain_window=104wk · test_window=26wk · step=13wk"]
+        FOLD["Per fold: IS backtest on train window\nOOS backtest on test window\n→ WalkForwardFold (is_metrics, oos_metrics)"]
+        CONS["_compute_consistency()\nfraction of folds where OOS return ≥ 50% of IS return\n→ oos_vs_is_consistency score"]
+    end
+
+    subgraph SIM["Entry / Exit Simulation (entry_simulator.py · exit_simulator.py)"]
+        ENTRY["EntrySimulator.simulate_entry()\nNEXT_CLOSE · NEXT_OPEN\nPULLBACK_TO_SMA20 · PULLBACK_TO_SMA50\nBREAKOUT_CONFIRMATION\n→ EntryResult(entry_price, wait_days, triggered)"]
+        EXIT["ExitSimulator.simulate_exit()\nFIXED_HORIZON · ATR_STOP_TARGET · TRAILING_STOP\nAlways computes MAE + MFE\n→ ExitResult(pnl_pct, mae_pct, mfe_pct)"]
+    end
+
+    subgraph EXP["Experiment Tracking (experiment_tracker.py)"]
+        ET["ExperimentTracker\nExperimentManifest saved to backtest/experiments/\nconfig_hash = SHA256(algo_config.json)[:16]\ncode_version = git rev-parse --short HEAD"]
+        COMP["compare_to_baseline(id, baseline_id)\n→ delta on primary metric"]
+    end
+
+    subgraph RMETRICS["Enhanced Metrics"]
+        SHARPE["Sharpe / Sortino / Calmar\nadded to overall_stats (annualized per horizon)\nANNUALIZATION_FACTORS: short=13 · med=4 · long=1"]
+        BYSETUP["by_setup + by_strategy sections\n(populated when new engine emits those columns)"]
+        MFE2["avg_mfe_pct added to every _perf_row"]
+    end
+
+    WFV --> FOLD --> CONS
+    ENTRY --> EXIT
+    ET --> COMP
+    SHARPE --> BYSETUP
+```
+
+**CLI flags added in Phase 4:**
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `--experiment-id` | None | Track run as named `ExperimentManifest` JSON |
+| `--walk-forward` | False | Run `WalkForwardValidator` instead of standard backtest |
+| `--train-weeks` | 104 | IS window size (weeks) |
+| `--test-weeks` | 26 | OOS window size (weeks) |
+| `--step-weeks` | 13 | Fold step size (weeks) |
+
 ---
 
 ## 14. Look-Ahead Bias Prevention (Backtest)
@@ -759,7 +801,8 @@ mindmap
       cachetools TTLCache
       tenacity retry
       pydantic v2
-      algo_config.json — centralized parameter store
+      pyarrow — parquet cache for backtests
+      algo_config.json + 5 strategy config JSONs
     Frontend
       React 18 + TypeScript
       Vite 5
@@ -770,13 +813,18 @@ mindmap
     Backtest
       yfinance historical data
       QQQ + SPY benchmark comparison
-      by_regime + by_archetype metrics
+      by_regime + by_archetype + by_setup + by_strategy metrics
+      Sharpe / Sortino / Calmar risk metrics
+      Walk-forward validation (IS/OOS rolling folds)
+      Entry/exit simulation — 5 entry + 3 exit methods
+      Experiment tracking (config hash + git version)
+      MAE + MFE computation per signal
       matplotlib charts
       pandas DataFrames
-      Pickle disk cache
+      Pickle disk cache + Parquet cache (pyarrow)
     Infrastructure
       No database
-      In-memory cache only
+      In-memory TTLCache + file-based Parquet cache
       No Docker required
       Local dev only
 ```
@@ -789,7 +837,7 @@ All tunable algorithm parameters are stored in `backend/algo_config.json` and lo
 
 ```mermaid
 flowchart LR
-    subgraph Config["algo_config.json (12 sections)"]
+    subgraph Config["algo_config.json (13 sections)"]
         TI["technical_indicators\nRSI, MACD, ATR, MA periods"]
         TS["technical_scoring\nBonus/penalty thresholds"]
         SM["scoring\nSignal card weights per horizon"]
@@ -802,6 +850,15 @@ flowchart LR
         SA["stock_archetype\nClassification rules for 8 archetypes"]
         EX["extension_detection\nSMA extension % thresholds"]
         RS["regime_scoring\nScore multipliers per regime"]
+        FF["feature_flags\nuse_new_strategy_engine (default: false)"]
+    end
+
+    subgraph Config2["5 Strategy Config Files (backend/config/)"]
+        MUC["market_and_universe_config.json\nUniverse filters · regime rules · sector benchmarks · active_provider"]
+        SCC["stock_classification_config.json\nArchetype rules · 11 secondary tag rules"]
+        TSC["technical_setup_config.json\n10 named signals · 4 setup definitions"]
+        SLC["strategy_logic_config.json\nStrategy router (5 rules) · 5 strategy engines"]
+        PGC["parameter_governance_config.json\nFrozen / active / research-only param tiers"]
     end
 
     subgraph Loader["app/algo_config.py"]
@@ -845,3 +902,101 @@ See `backend/ALGO_PARAMS.md` for a full parameter catalog with descriptions, typ
 | **5Y growth rates from yfinance** | `ticker.info` fields inconsistently available | Many stocks will show null for `eps_growth_5y`, `sales_growth_5y`; scored as missing data |
 | **Anchored VWAP requires earnings date** | Fetched from EarningsProvider best-effort | Falls back to null when earnings date unavailable |
 | **Return percentile ranks are self-relative** | Rank stock's return vs its own 252D window | Not a true cross-sectional rank vs all US stocks |
+| **New engine same label for all horizons** | Accepted Phase 3 simplification | `StockDecisionEngine` returns identical decision label for short/medium/long; legacy path produces horizon-specific labels |
+| **Feature flag off by default** | Parity testing needed before cutover | Flip `use_new_strategy_engine: true` only after manual validation on NVDA, AAPL, SPY |
+| **Parquet cache single-shard model** | Simple initial implementation | `get_missing_ranges()` returns entire range as missing if exact shard not found; no partial coverage detection |
+| **Walk-forward uses same VIX proxy** | VIX pre-fetch not yet wired | Each IS/OOS fold uses `vix_level=20.0`; regime quality in walk-forward matches standard backtest |
+
+---
+
+## 19. Config-Driven Strategy Engine
+
+A second decision path sits behind a feature flag (`use_new_strategy_engine` in `algo_config.json`, default `false`). When enabled, all strategy intelligence is evaluated from JSON config files rather than hardcoded Python if/else logic.
+
+```mermaid
+flowchart TD
+    subgraph FlagGate["Feature Flag Gate (routers/stock.py)"]
+        FLAG{"use_new_strategy_engine?"}
+    end
+
+    subgraph NewPath["New Engine Path (app/engine/ + app/features/)"]
+        FS["FeatureSnapshot\nbuild_feature_snapshot(ticker, price, technicals,\nfundamentals, valuation, earnings, regime_assessment)\n~120 flat fields + .to_dict() for rule evaluation"]
+
+        SEC["Secondary Tag Detection\nRuleEngine + stock_classification_config.json\n→ HIGH_MOMENTUM, EXPENSIVE_VALUATION, HIGH_ATR,\n  SECTOR_LEADER, EARNINGS_NEAR, HIGH_QUALITY, …"]
+
+        SIG["TechnicalSignalDetector\ntechnical_setup_config.json (10 named signals)\ndetect(snapshot) → SignalDetectionResult\n(active_signals: set[str], missing_fields, confidence_penalty)"]
+
+        SET["SetupDetector\ntechnical_setup_config.json (4 setup definitions)\nrequired / optional / blocking signals + priority order\nFirst match wins → SetupDetectionResult"]
+
+        SR["StrategyRouter\nstrategy_logic_config.json (5 priority rules)\nroute(snapshot) → StrategyRoutingResult\nFallback: watchlist_low_confidence"]
+
+        ENG["ConfigDrivenStrategyEngine\nstrategy_logic_config.json (per-engine config)\nSums score_rules points, evaluates thresholds\n→ StrategyEngineResult(decision, score, reasons)"]
+
+        SDE["StockDecisionEngine.decide()\nOrchestrates above pipeline\nReuses compute_risk_management() for entry/exit/sizing\nReuses compute_completeness() for confidence\n→ list[HorizonRecommendation]"]
+    end
+
+    subgraph LegacyPath["Legacy Path (services/recommendation_service.py)"]
+        LEG["build_recommendations()\nHardcoded Python if/else per horizon\nAll 14 legacy decision labels supported"]
+    end
+
+    FLAG -->|true| FS
+    FS --> SEC --> SIG --> SET --> SR --> ENG --> SDE
+    FLAG -->|false| LEG
+```
+
+### 5 Strategy Engines in `strategy_logic_config.json`
+
+| Engine | Routing Condition | Key Decisions |
+|--------|------------------|---------------|
+| `growth_leader_pullback` | PROFITABLE_GROWTH / HYPER_GROWTH + GROWTH_LEADER_PULLBACK setup | `BUY_ON_PULLBACK` (score ≥65), `WATCHLIST` (≥40) |
+| `downtrend_rebound` | Any archetype + DOWNTREND_REBOUND_CANDIDATE setup | `OVERSOLD_REBOUND_CANDIDATE` (score ≥60) |
+| `true_broken_chart_avoid` | Priority 100 — always routes broken charts | `TRUE_DOWNTREND_AVOID` or `BROKEN_SUPPORT_AVOID` |
+| `quality_growth_expensive_but_working` | EXPENSIVE_VALUATION tag + strong RS | `BUY_STARTER_STRONG_BUT_EXTENDED`, `WAIT_FOR_PULLBACK` |
+| `watchlist_low_confidence` | Fallback — no routing rule matched | `WATCHLIST` always |
+
+### 10 Named Signals (`technical_setup_config.json`)
+
+`STRONG_UPTREND` · `SMA50_PULLBACK` · `RSI_PULLBACK_ZONE` · `VOLUME_DRY_UP` · `BREAKOUT_CONFIRMED` · `RS_LEADER_VS_SECTOR` · `TRUE_BROKEN_CHART` · `BROKEN_SUPPORT` · `OVERSOLD_REVERSAL` · `EXTENDED_ABOVE_SMA20`
+
+### 11 Secondary Tags (`stock_classification_config.json`)
+
+`HIGH_MOMENTUM` · `EXPENSIVE_VALUATION` · `HIGH_ATR` · `SECTOR_LEADER` · `EARNINGS_NEAR` · `HIGH_QUALITY` · `HIGH_SHORT_INTEREST` · and 4 more — evaluated by RuleEngine from snapshot fields.
+
+---
+
+## 20. Data Layer Abstraction
+
+`backend/app/data/` provides a pluggable provider interface separating the live API and backtests from the concrete yfinance dependency.
+
+```mermaid
+flowchart TD
+    subgraph Interface["Abstract Interface (app/data/providers/base.py)"]
+        ABC["MarketDataProvider (ABC)\n─────────────────────────────\nget_price_history(ticker, start, end, interval) → DataFrame\nget_benchmark_history(ticker, start, end) → DataFrame\nget_fundamentals(ticker) → FundamentalData\nget_valuation(ticker, market_cap) → ValuationData\nget_earnings(ticker) → EarningsData\nget_news(ticker, limit) → list[NewsItem]\nget_company_profile(ticker) → dict\nsupports_point_in_time_fundamentals: bool (default False)"]
+    end
+
+    subgraph Impl["Concrete Implementation"]
+        YF["YFinanceProvider\n─────────────────────────────\nDelegates to existing app/providers/ functions\n(no logic duplication)\nget_price_history → yf.download(start=, end=)\nAll other methods → corresponding provider functions"]
+    end
+
+    subgraph Factory["Provider Factory (provider_factory.py)"]
+        PF["ProviderFactory.create(provider_name=None)\n─────────────────────────────\nReads active_provider from market_and_universe_config.json\nFalls back to yfinance when key absent or config fails\nRegistry: _REGISTRY dict[str, type[MarketDataProvider]]\n(populated lazily on first call)"]
+    end
+
+    subgraph Cache["Parquet Cache (app/data/cache/)"]
+        PCS["ParquetCacheStore(cache_dir)\n─────────────────────────────\nhas_coverage(ticker, provider, data_type, interval, start, end) → bool\nread(...) → pd.DataFrame (tz stripped)\nwrite(df, ...) → Path\nget_missing_ranges(...) → list[tuple[str, str]]\n\nLayout:\n  data/cache/raw/{provider}/{data_type}/\n  {ticker}_{interval}_{start}_{end}.parquet\n  + companion .meta.json"]
+
+        CMD["CacheMetadata (cache_metadata.py)\n─────────────────────────────\nfields: ticker, provider, data_type, interval, start, end,\nfetched_at (ISO UTC), schema_version, adjusted_prices,\nrow_count, columns, notes\nsave_metadata(path, metadata) → writes .meta.json\nload_metadata(path) → CacheMetadata | None\nmake_metadata(...) → CacheMetadata"]
+    end
+
+    Interface --> Impl
+    Factory --> Interface
+    PCS --> CMD
+```
+
+**Adding a new provider:**
+
+1. Create `app/data/providers/my_provider.py` implementing `MarketDataProvider`
+2. Register in `provider_factory.py`'s `_load_registry()`: `_REGISTRY["myprovider"] = MyProvider`
+3. Set `"active_provider": "myprovider"` in `market_and_universe_config.json`
+
+The live API continues to use the old `app/providers/` functions directly. The new abstraction layer is used by backtests and will gradually replace direct provider calls.

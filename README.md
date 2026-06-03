@@ -78,17 +78,43 @@ Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
 ```
 .
 ├── backend/
-│   ├── algo_config.json            # Centralized algorithm parameters (all tunable values)
-│   ├── ALGO_PARAMS.md              # Parameter catalog with descriptions and effects
-│   ├── ALGO_PARAMS_VALUES.md       # Parameter values reference
+│   ├── algo_config.json            # Legacy algorithm parameters (12 sections)
+│   ├── ALGO_PARAMS.md              # Parameter catalog with descriptions
+│   ├── config/                     # Config-driven engine JSON files
+│   │   ├── market_and_universe_config.json     # Universe filters, regime rules, sector benchmarks
+│   │   ├── stock_classification_config.json    # Archetype rules, 11 secondary tag rules
+│   │   ├── technical_setup_config.json         # 10 signals, 4 setup definitions
+│   │   ├── strategy_logic_config.json          # Router rules + 5 strategy engine configs
+│   │   └── parameter_governance_config.json    # Frozen/active/research-only tiers
 │   ├── app/
 │   │   ├── algo_config.py          # AlgoConfig loader — singleton + injection pattern
+│   │   ├── config/                 # MultiSourceConfig: loads all 5 config JSONs
+│   │   │   └── config_loader.py
+│   │   ├── features/               # FeatureSnapshot model + FeatureBuilder adapter
+│   │   │   ├── feature_snapshot.py
+│   │   │   └── feature_builder.py
+│   │   ├── engine/                 # Config-driven strategy engine
+│   │   │   ├── rule_engine.py              # JSON rule evaluator (all/any/not + 12 operators)
+│   │   │   ├── technical_signal_detector.py
+│   │   │   ├── setup_detector.py
+│   │   │   ├── universe_filter.py
+│   │   │   ├── strategy_router.py
+│   │   │   ├── config_driven_strategy_engine.py
+│   │   │   └── stock_decision_engine.py    # Full pipeline orchestrator
 │   │   ├── providers/          # Data fetching (yfinance wrappers)
 │   │   │   ├── market_data_provider.py
 │   │   │   ├── fundamental_provider.py
 │   │   │   ├── earnings_provider.py
 │   │   │   ├── news_provider.py
 │   │   │   └── options_provider.py
+│   │   ├── data/               # Pluggable data source abstraction
+│   │   │   ├── providers/
+│   │   │   │   ├── base.py             # Abstract MarketDataProvider (6 methods)
+│   │   │   │   ├── yfinance_provider.py
+│   │   │   │   └── provider_factory.py
+│   │   │   └── cache/
+│   │   │       ├── parquet_store.py    # Persistent parquet cache for backtests
+│   │   │       └── cache_metadata.py  # Provenance JSON per shard
 │   │   ├── services/           # Analysis and scoring logic
 │   │   │   ├── technical_analysis_service.py
 │   │   │   ├── fundamental_analysis_service.py
@@ -99,31 +125,28 @@ Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
 │   │   │   ├── risk_management_service.py
 │   │   │   └── markdown_report_service.py
 │   │   ├── models/             # Pydantic models
-│   │   ├── cache/              # TTLCache manager
+│   │   ├── cache/              # TTLCache manager (live API)
 │   │   ├── routers/            # FastAPI route handlers
-│   │   │   └── stock.py        # POST /api/stocks/analyze
-│   │   ├── config.py
+│   │   │   └── stock.py        # POST /api/stocks/analyze (feature-flag dispatch)
 │   │   └── main.py
-│   ├── tests/                  # 768 unit tests
-│   │   ├── test_technical_analysis.py          # 38 tests
-│   │   ├── test_fundamental_analysis.py        # 32 tests
-│   │   ├── test_earnings_analysis.py           # 29 tests
-│   │   ├── test_scoring_recommendation.py      # 53 tests
-│   │   ├── test_algo_config.py                 # AlgoConfig loader + all 12 sections
-│   │   ├── test_algo_config_technical.py       # Technical params via AlgoConfig
-│   │   ├── test_algo_config_signal_cards.py    # Signal card thresholds via AlgoConfig
-│   │   ├── test_algo_config_recommendation.py  # Decision logic via AlgoConfig
-│   │   ├── test_algo_config_risk_management.py # Risk sizing via AlgoConfig
-│   │   ├── test_algo_config_scoring.py         # Scoring weights via AlgoConfig
-│   │   ├── test_algo_config_market_regime.py   # Regime thresholds via AlgoConfig
-│   │   ├── test_algo_config_stock_archetype.py # Archetype thresholds via AlgoConfig
-│   │   ├── test_algo_config_data_completeness.py # Completeness deductions via AlgoConfig
-│   │   └── test_algo_config_valuation.py       # Valuation thresholds via AlgoConfig
-│   ├── requirements.txt
-│   └── .env.example
+│   ├── backtest/
+│   │   ├── run_backtest.py         # CLI (--experiment-id, --walk-forward flags)
+│   │   ├── run_walk_forward.py     # Walk-forward validation CLI
+│   │   ├── runner.py               # Backtest loop
+│   │   ├── outcome.py              # Forward returns + MAE + MFE
+│   │   ├── metrics.py              # Sharpe/Sortino/Calmar + by_setup/by_strategy
+│   │   ├── entry_simulator.py      # NEXT_CLOSE/OPEN/PULLBACK/BREAKOUT entry methods
+│   │   ├── exit_simulator.py       # FIXED_HORIZON/ATR_STOP/TRAILING_STOP
+│   │   ├── walk_forward.py         # Rolling IS/OOS folds + consistency score
+│   │   ├── experiment_tracker.py   # ExperimentManifest + baseline comparison
+│   │   ├── data_loader.py
+│   │   ├── indicator_cache.py
+│   │   └── report.py               # HTML report
+│   ├── tests/                  # 1032 unit tests
+│   └── requirements.txt
 └── frontend/
     └── src/
-        ├── pages/Dashboard.tsx       # Main page
+        ├── pages/Dashboard.tsx
         ├── components/
         │   ├── RecommendationCard.tsx
         │   ├── ScoreBreakdown.tsx
@@ -323,7 +346,7 @@ source .venv/bin/activate
 PYTHONPATH=. pytest tests/ -v
 ```
 
-**768 tests across 27 suites:**
+**1032 tests across 39 suites:**
 
 | Test File | Tests | Coverage |
 |-----------|-------|---------|
@@ -345,6 +368,20 @@ PYTHONPATH=. pytest tests/ -v
 | `test_risk_report_updates.py` | 13 | Risk management, signal profile from cards, markdown report |
 | `test_backtest_metrics.py` | 14 | by_regime, by_archetype, portfolio simulation |
 | `test_improvements3.py` | 102 | New labels, gates, ATR sizing, regime thresholds |
+| `test_rule_engine.py` | 36 | All operators, nested all/any/not, missing field handling |
+| `test_feature_builder.py` | 21 | Field mapping, archetype translation, earnings days |
+| `test_technical_signal_detector.py` | 19 | Per-signal verification |
+| `test_setup_detector.py` | 16 | Priority order, blocking signals, optional requirements |
+| `test_strategy_router.py` | 13 | Route selection, fallback, priority rules |
+| `test_config_driven_strategy_engine.py` | 16 | Score rules, valuation penalty, risk overrides |
+| `test_secondary_tags.py` | 13 | All 11 secondary tag rules |
+| `test_multi_source_config.py` | 16 | Config loading, section access, singleton reset |
+| `test_stock_decision_engine.py` | 13 | End-to-end per archetype/regime fixture |
+| `test_engine_output_parity.py` | 68 | All HorizonRecommendation fields present in both engine paths |
+| `test_entry_simulator.py` | 11 | All 5 entry methods, edge cases |
+| `test_exit_simulator.py` | 11 | All 3 exit methods, MAE/MFE computation |
+| `test_experiment_tracker.py` | 12 | Start, save_results, compare_to_baseline, list |
+| `test_walk_forward.py` | 10 | Fold generation, consistency scoring, summarize |
 | `test_algo_config.py` | — | AlgoConfig loader: from_file, from_dict, env override, section validation |
 | `test_algo_config_technical.py` | — | Technical indicator params injected via AlgoConfig |
 | `test_algo_config_signal_cards.py` | — | Signal card thresholds injected via AlgoConfig |
@@ -352,8 +389,6 @@ PYTHONPATH=. pytest tests/ -v
 | `test_algo_config_risk_management.py` | — | Position sizing and ATR multipliers via AlgoConfig |
 | `test_algo_config_scoring.py` | — | Scoring weights injected via AlgoConfig |
 | `test_algo_config_market_regime.py` | — | VIX thresholds and regime weights via AlgoConfig |
-| `test_algo_config_stock_archetype.py` | — | Archetype classification thresholds via AlgoConfig |
-| `test_algo_config_data_completeness.py` | — | Completeness deductions and caps via AlgoConfig |
 
 **Frontend tests (Vitest):**
 

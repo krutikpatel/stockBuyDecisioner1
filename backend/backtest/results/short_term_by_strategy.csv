@@ -1,0 +1,6 @@
+count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,avg_mfe_pct,profit_factor,best_return_pct,worst_return_pct,strategy_name,avg_score,best_decision
+11074,11074,3.23,2.83,62.5,52.8,0.81,0.31,-7.33,10.39,2.08,89.65,-74.71,true_broken_chart_avoid,25.6,TRUE_DOWNTREND_AVOID
+729,729,2.16,1.56,59.0,53.4,1.23,1.13,-6.39,7.86,1.84,50.81,-25.24,quality_growth_expensive_but_working,63.6,BUY_STARTER_STRONG_BUT_EXTENDED
+1387,1387,1.25,1.09,56.7,45.1,-0.3,-0.71,-5.68,6.72,1.5,58.12,-63.52,downtrend_rebound,71.6,OVERSOLD_REBOUND_CANDIDATE
+57928,57928,1.04,1.04,56.2,48.2,0.02,-0.4,-5.85,6.74,1.39,118.5,-72.86,watchlist_low_confidence,0.0,WATCHLIST
+9651,9651,0.7,0.78,54.8,47.6,-0.1,-0.49,-5.49,5.91,1.28,52.95,-49.8,growth_leader_pullback,59.7,WAIT_FOR_PULLBACK

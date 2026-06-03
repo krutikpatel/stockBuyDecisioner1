@@ -1,10 +1,10 @@
 card,n_signals,corr_with_return,quartile_returns,avg_score
-volatility_risk,71079,-0.2284,"{'Q1 Low': np.float64(29.8), 'Q2': np.float64(14.4), 'Q3': np.float64(13.69), 'Q4 High': np.float64(9.26)}",45.3
+volatility_risk,71079,-0.234,"{'Q1 Low': np.float64(29.82), 'Q2': np.float64(14.75), 'Q3': np.float64(11.52), 'Q4 High': np.float64(9.87)}",52.7
 valuation,71079,-0.1294,{},57.2
 growth,71079,0.107,"{'Q1 Low': np.float64(12.96), 'Q2': np.float64(18.97), 'Q3': np.float64(16.9), 'Q4 High': np.float64(30.23)}",58.7
 trend,71079,-0.0518,"{'Q1 Low': np.float64(21.08), 'Q2': np.float64(17.78), 'Q3': np.float64(15.45), 'Q4 High': np.float64(15.94)}",61.6
+entry_timing,71079,-0.0477,"{'Q1 Low': np.float64(19.23), 'Q2': np.float64(19.2), 'Q3': np.float64(17.46), 'Q4 High': np.float64(14.41)}",64.0
 momentum,71079,-0.0287,"{'Q1 Low': np.float64(19.07), 'Q2': np.float64(18.23), 'Q3': np.float64(17.51), 'Q4 High': np.float64(15.66)}",58.6
-entry_timing,71079,-0.0281,"{'Q1 Low': np.float64(18.86), 'Q2': np.float64(17.77), 'Q3': np.float64(18.01), 'Q4 High': np.float64(15.69)}",59.0
 volume_accumulation,71079,-0.0193,"{'Q1 Low': np.float64(18.68), 'Q2': np.float64(17.86), 'Q3': np.float64(17.54), 'Q4 High': np.float64(16.48)}",50.6
 relative_strength,71079,-0.017,"{'Q1 Low': np.float64(20.11), 'Q2': np.float64(16.78), 'Q3': np.float64(15.66), 'Q4 High': np.float64(18.03)}",48.0
 catalyst,71079,-0.0004,{},58.8

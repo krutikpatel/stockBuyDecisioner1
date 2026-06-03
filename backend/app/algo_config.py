@@ -94,6 +94,10 @@ class AlgoConfig:
     def valuation(self) -> dict:
         return self._data["valuation"]
 
+    @property
+    def feature_flags(self) -> dict:
+        return self._data.get("feature_flags", {})
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton

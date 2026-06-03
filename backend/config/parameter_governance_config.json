@@ -1,0 +1,44 @@
+{
+  "tuning_policy": {
+    "max_active_parameters_per_experiment": 6,
+    "max_total_grid_combinations": 250,
+    "require_out_of_sample_validation": true,
+    "require_regime_breakdown": true,
+    "require_archetype_breakdown": true,
+    "require_benchmark_relative_metrics": true
+  },
+  "tiers": {
+    "frozen": [
+      "technical_indicators.rsi_period",
+      "technical_indicators.macd_fast_period",
+      "technical_indicators.macd_slow_period",
+      "technical_indicators.macd_signal_period",
+      "technical_indicators.atr_period",
+      "technical_indicators.adx_period",
+      "technical_indicators.bollinger_period"
+    ],
+    "active": [
+      "technical_setups.GROWTH_LEADER_PULLBACK.required_signals",
+      "signal_definitions.SMA50_PULLBACK.all[0].value",
+      "signal_definitions.SMA50_PULLBACK.all[1].value",
+      "signal_definitions.RSI_PULLBACK_ZONE.all[0].value",
+      "signal_definitions.RSI_PULLBACK_ZONE.all[1].value",
+      "signal_definitions.OVERSOLD_REVERSAL.all[0].value",
+      "signal_definitions.OVERSOLD_REVERSAL.all[1].value",
+      "signal_definitions.RS_LEADER_VS_SECTOR.all[0].value",
+      "signal_definitions.VOLUME_DRY_UP.value",
+      "signal_definitions.EXTENDED_ABOVE_SMA20.value"
+    ],
+    "research_only": [
+      "signal_card_weights",
+      "valuation_thresholds",
+      "indicator_periods",
+      "regime_weight_multipliers"
+    ]
+  },
+  "notes": {
+    "frozen_rationale": "Indicator periods are industry-standard values validated across decades of literature. Changing them requires a full re-baseline of all historical signals.",
+    "active_rationale": "Setup zone thresholds (RSI bounds, SMA proximity bounds, RS minimums) are the primary levers for controlling signal frequency and precision.",
+    "research_only_rationale": "Scoring weights and valuation parameters interact non-linearly with other components and require careful isolation to avoid confounding backtest results."
+  }
+}
