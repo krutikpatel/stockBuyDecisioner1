@@ -76,10 +76,13 @@ class TestByRegime:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_regime(df)
-        assert "BULL_RISK_ON" in result
-        assert "BEAR_RISK_OFF" in result
-        assert result["BULL_RISK_ON"]["n_signals"] == 2
-        assert result["BEAR_RISK_OFF"]["n_signals"] == 1
+        regimes = {r["regime"] for r in result}
+        assert "BULL_RISK_ON" in regimes
+        assert "BEAR_RISK_OFF" in regimes
+        bull = next(r for r in result if r["regime"] == "BULL_RISK_ON")
+        bear = next(r for r in result if r["regime"] == "BEAR_RISK_OFF")
+        assert bull["count"] == 2
+        assert bear["count"] == 1
 
     def test_by_regime_win_rate_correct(self):
         import pandas as pd
@@ -92,8 +95,9 @@ class TestByRegime:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_regime(df)
+        bull = next(r for r in result if r["regime"] == "BULL_RISK_ON")
         # 3 wins out of 4 = 75%
-        assert result["BULL_RISK_ON"]["win_rate_pct"] == 75.0
+        assert bull["win_rate_pct"] == 75.0
 
     def test_by_regime_excess_vs_qqq_computed(self):
         import pandas as pd
@@ -103,8 +107,9 @@ class TestByRegime:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_regime(df)
+        bull = next(r for r in result if r["regime"] == "BULL_RISK_ON")
         # excess_return_vs_qqq = 8 - 3 = 5
-        assert result["BULL_RISK_ON"]["avg_excess_vs_qqq_pct"] == pytest.approx(5.0, abs=0.1)
+        assert bull["avg_excess_qqq_pct"] == pytest.approx(5.0, abs=0.1)
 
     def test_by_regime_returns_empty_dict_when_no_regime_column(self):
         import pandas as pd
@@ -112,7 +117,7 @@ class TestByRegime:
         df = pd.DataFrame(signals)
         df = df.drop(columns=["market_regime"])
         result = _by_regime(df)
-        assert result == {}
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -130,10 +135,13 @@ class TestByArchetype:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_archetype(df)
-        assert "HYPER_GROWTH" in result
-        assert "MATURE_VALUE" in result
-        assert result["HYPER_GROWTH"]["n_signals"] == 2
-        assert result["MATURE_VALUE"]["n_signals"] == 1
+        archetypes = {r["archetype"] for r in result}
+        assert "HYPER_GROWTH" in archetypes
+        assert "MATURE_VALUE" in archetypes
+        hg = next(r for r in result if r["archetype"] == "HYPER_GROWTH")
+        mv = next(r for r in result if r["archetype"] == "MATURE_VALUE")
+        assert hg["count"] == 2
+        assert mv["count"] == 1
 
     def test_by_archetype_includes_best_decision(self):
         import pandas as pd
@@ -145,7 +153,8 @@ class TestByArchetype:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_archetype(df)
-        assert result["HYPER_GROWTH"]["best_decision"] == "BUY_NOW"
+        hg = next(r for r in result if r["archetype"] == "HYPER_GROWTH")
+        assert hg["best_decision"] == "BUY_NOW"
 
     def test_by_archetype_avg_score(self):
         import pandas as pd
@@ -156,7 +165,8 @@ class TestByArchetype:
         df = pd.DataFrame(signals)
         df = df[df["forward_return"].notna()].copy()
         result = _by_archetype(df)
-        assert result["DEFENSIVE"]["avg_score"] == pytest.approx(65.0, abs=0.1)
+        def_ = next(r for r in result if r["archetype"] == "DEFENSIVE")
+        assert def_["avg_score"] == pytest.approx(65.0, abs=0.1)
 
     def test_by_archetype_returns_empty_dict_when_no_archetype_column(self):
         import pandas as pd
@@ -164,7 +174,7 @@ class TestByArchetype:
         df = pd.DataFrame(signals)
         df = df.drop(columns=["archetype"])
         result = _by_archetype(df)
-        assert result == {}
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -190,18 +200,20 @@ class TestBuildMetricsIntegration:
     def test_by_regime_in_metrics_has_correct_structure(self):
         metrics = build_metrics(self._make_signals(), horizon="short_term")
         by_regime = metrics["by_regime"]
-        assert isinstance(by_regime, dict)
-        for regime_key, regime_data in by_regime.items():
-            assert "n_signals" in regime_data
+        assert isinstance(by_regime, list)
+        for regime_data in by_regime:
+            assert "regime" in regime_data
+            assert "count" in regime_data
             assert "win_rate_pct" in regime_data
             assert "avg_return_pct" in regime_data
 
     def test_by_archetype_in_metrics_has_correct_structure(self):
         metrics = build_metrics(self._make_signals(), horizon="short_term")
         by_archetype = metrics["by_archetype"]
-        assert isinstance(by_archetype, dict)
-        for arch_key, arch_data in by_archetype.items():
-            assert "n_signals" in arch_data
+        assert isinstance(by_archetype, list)
+        for arch_data in by_archetype:
+            assert "archetype" in arch_data
+            assert "count" in arch_data
             assert "win_rate_pct" in arch_data
             assert "avg_return_pct" in arch_data
             assert "best_decision" in arch_data

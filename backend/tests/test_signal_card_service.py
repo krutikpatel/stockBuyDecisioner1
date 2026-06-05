@@ -368,13 +368,15 @@ class TestScoreVolumeAccumulation:
 # ---------------------------------------------------------------------------
 
 class TestScoreVolatilityRisk:
-    def test_low_volatility_scores_well(self):
+    def test_low_volatility_scores_low(self):
+        # Card is inverted: low volatility/drawdown = fully valued = low dislocation score
         card = score_volatility_risk(_bullish_tech())
-        assert card.score >= 50
+        assert card.score < 50
 
-    def test_high_volatility_scores_poorly(self):
+    def test_high_volatility_scores_high(self):
+        # Card is inverted: high volatility/drawdown = panic selling = high dislocation score
         card = score_volatility_risk(_bearish_tech())
-        assert card.score < 60
+        assert card.score >= 60
 
     def test_returns_signal_card(self):
         card = score_volatility_risk(_bullish_tech())

@@ -110,7 +110,28 @@ def _fetch_quarterly_data(ticker: str) -> dict:
                 logger.warning("%s failed for %s: %s", attr, ticker, exc)
 
         try:
-            result["info_snapshot"] = t.info or {}
+            info = t.info or {}
+            result["info_snapshot"] = info
+            # Explicit static fields sourced from info (current-snapshot; not time-varying)
+            def _sf(val):
+                try:
+                    f = float(val)
+                    return f if f == f else None
+                except (TypeError, ValueError):
+                    return None
+            result["beta"]                     = _sf(info.get("beta"))
+            result["roa"]                      = _sf(info.get("returnOnAssets"))
+            result["quick_ratio"]              = _sf(info.get("quickRatio"))
+            result["long_term_debt_equity"]    = _sf(info.get("longTermDebtEquity"))
+            result["insider_ownership"]        = _sf(info.get("heldPercentInsiders"))
+            result["institutional_ownership"]  = _sf(info.get("heldPercentInstitutions"))
+            result["short_float"]              = _sf(info.get("shortPercentOfFloat"))
+            result["short_ratio"]              = _sf(info.get("shortRatio"))
+            result["analyst_recommendation"]   = _sf(info.get("recommendationMean"))
+            result["analyst_target_price"]     = _sf(info.get("targetMeanPrice"))
+            result["shares_float"]             = _sf(info.get("floatShares"))
+            result["dividend_yield"]           = _sf(info.get("dividendYield"))
+            result["eps_growth_next_year"]     = _sf(info.get("earningsGrowth"))
         except Exception as exc:
             logger.warning("ticker.info failed for %s: %s", ticker, exc)
 

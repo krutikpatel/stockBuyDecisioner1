@@ -3,6 +3,47 @@
     "method": "priority_first_match",
     "rules": [
       {
+        "id": "bull_narrow_leadership_suppress",
+        "priority": 200,
+        "description": "BULL_NARROW_LEADERSHIP regime — breadth deteriorating, late-cycle distribution, force WATCHLIST",
+        "logic": { "field": "market_regime", "operator": "==", "value": "BULL_NARROW_LEADERSHIP" },
+        "strategy": "watchlist_low_confidence"
+      },
+      {
+        "id": "rsi_capitulation_quality_recovery",
+        "priority": 150,
+        "description": "RSI < 35 in quality/growth archetype outside BULL_RISK_ON — capitulation buy, route to recovery engine regardless of setup",
+        "logic": {
+          "all": [
+            { "field": "rsi14", "operator": "<", "value": 35 },
+            { "field": "sales_growth_yoy", "operator": ">=", "value": 0.05 },
+            { "field": "market_regime", "operator": "!=", "value": "BULL_RISK_ON" }
+          ]
+        },
+        "strategy": "quality_broken_chart_recovery"
+      },
+      {
+        "id": "quality_broken_chart_recovery_setup",
+        "priority": 130,
+        "description": "Broken chart with RSI oversold recovery signal detected — quality fundamentals may rebound",
+        "logic": { "field": "selected_setup", "operator": "==", "value": "BROKEN_CHART_QUALITY_RECOVERY" },
+        "strategy": "quality_broken_chart_recovery"
+      },
+      {
+        "id": "quality_broken_chart_bear_regime",
+        "priority": 120,
+        "description": "Broken chart with quality fundamentals in bear/liquidity regime — contrarian capitulation recovery",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "TRUE_BROKEN_CHART_AVOID" },
+            { "field": "sales_growth_yoy", "operator": ">=", "value": 0.05 },
+            { "field": "operating_margin", "operator": ">=", "value": 0 },
+            { "field": "market_regime", "operator": "in", "value": ["BEAR_RISK_OFF", "LIQUIDITY_RALLY"] }
+          ]
+        },
+        "strategy": "quality_broken_chart_recovery"
+      },
+      {
         "id": "avoid_broken_chart_any_category",
         "priority": 100,
         "description": "Any broken chart always routes to avoid engine regardless of category",
@@ -340,6 +381,68 @@
       "risk_overrides": {
         "HIGH_ATR": { "starter_size_cap_pct": 25 },
         "EARNINGS_NEAR": { "starter_size_cap_pct": 25 }
+      }
+    },
+
+    "quality_broken_chart_recovery": {
+      "description": "Broken chart with quality fundamentals and oversold RSI turning up — contrarian recovery candidate",
+      "horizons": ["short_term", "medium_term", "long_term"],
+      "scoring_method": "sum_points",
+      "max_possible_score": 100,
+      "score_rules": [
+        {
+          "id": "rsi_oversold_turning",
+          "points": 30,
+          "logic": {
+            "all": [
+              { "field": "rsi14", "operator": ">=", "value": 25 },
+              { "field": "rsi14", "operator": "<=", "value": 42 },
+              { "field": "rsi_slope", "operator": ">", "value": 0 }
+            ]
+          },
+          "reason": "RSI in oversold zone and turning up — buyers stepping in"
+        },
+        {
+          "id": "quality_growth_intact",
+          "points": 25,
+          "logic": {
+            "all": [
+              { "field": "sales_growth_yoy", "operator": ">=", "value": 0.05 },
+              { "field": "operating_margin", "operator": ">=", "value": 0 }
+            ]
+          },
+          "reason": "Profitable revenue growth — business fundamentals intact despite chart breakdown"
+        },
+        {
+          "id": "volume_dry_up_on_pullback",
+          "points": 20,
+          "logic": { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+          "reason": "Volume drying up — sellers are exhausted, not pressing"
+        },
+        {
+          "id": "sma200_floor_intact",
+          "points": 15,
+          "logic": { "field": "sma200_slope", "operator": ">=", "value": -0.5 },
+          "reason": "200-day SMA not in steep decline — long-term structural support exists"
+        },
+        {
+          "id": "weekly_price_stabilizing",
+          "points": 10,
+          "logic": { "field": "perf_1w", "operator": ">=", "value": 0 },
+          "reason": "Positive price action this week — selling pressure easing"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "recommendation": "OVERSOLD_REBOUND_CANDIDATE",
+          "logic": { "field": "strategy_score", "operator": ">=", "value": 30 },
+          "summary_template": "Quality stock at capitulation low. Score {score}. Oversold rebound candidate — starter size only, tight stop."
+        }
+      ],
+      "fallback_recommendation": "WATCHLIST",
+      "risk_overrides": {
+        "HIGH_ATR": { "starter_size_cap_pct": 25 },
+        "EARNINGS_NEAR": { "starter_size_cap_pct": 0, "note": "Avoid entry before binary earnings event" }
       }
     },
 

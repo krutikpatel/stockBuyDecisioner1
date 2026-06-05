@@ -56,6 +56,25 @@ Each card scores 0–100 and carries a label (VERY_BEARISH → VERY_BULLISH):
 
 ---
 
+## Daily Usage Workflow
+
+Use this as a daily decision-support workflow, not as an automatic trading bot. The goal is to identify what kind of setup each stock is in today, whether that setup historically works in the current market regime, and what action, if any, is justified now.
+
+1. Run the scanner after market close or before market open for your watchlist or target universe.
+2. Review the short-term and medium-term outputs first if you are focused on near-term gains.
+3. Sort names by decision label, market regime, setup, score, and signal cards rather than score alone.
+4. Treat `BUY_STARTER_STRONG_BUT_EXTENDED` as a high-conviction leadership setup, but start with smaller size and add only on a constructive pullback.
+5. Treat `OVERSOLD_REBOUND_CANDIDATE` as a tactical quality-dislocation setup: use starter size, tighter stops, and clear profit targets.
+6. Treat `BUY_ON_PULLBACK` and `WAIT_FOR_PULLBACK` as entry-zone alerts, not automatic buys.
+7. Treat `WATCHLIST` as no action unless the setup improves, the stock reaches the planned entry zone, or a catalyst changes the risk/reward.
+8. Review `TRUE_DOWNTREND_AVOID` and `BROKEN_SUPPORT_AVOID` carefully before discarding them. Backtests can show that some quality broken-chart names rebound strongly in the right regime, so these labels may need interpretation until the strategy labels are refined.
+9. Check the generated entry plan, stop-loss, first target, max drawdown risk, and position sizing before placing any trade.
+10. Keep a trade log that records the model label, regime, setup, entry, exit, and whether the label was directionally useful.
+
+In practice, the tool should narrow your daily work from "what should I look at?" to a small set of actionable candidates: quality stocks at dislocation lows, growth leaders still working in supportive regimes, and watchlist names approaching better entry zones.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |

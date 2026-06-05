@@ -284,9 +284,11 @@ def _by_decision(df: pd.DataFrame) -> list[dict]:
 
 
 def _by_score_bucket(df: pd.DataFrame) -> list[dict]:
+    # Prefer signal_card_score (always the composite, even for new engine WATCHLIST signals)
+    score_col = "signal_card_score" if "signal_card_score" in df.columns else "score"
     rows = []
     for lo, hi, label in SCORE_BUCKETS:
-        sub = df[(df["score"] >= lo) & (df["score"] < hi)]
+        sub = df[(df[score_col] >= lo) & (df[score_col] < hi)]
         if sub.empty:
             continue
         row = _perf_row(sub)
@@ -312,6 +314,8 @@ def _by_ticker(df: pd.DataFrame) -> list[dict]:
 
 
 def _by_regime(df: pd.DataFrame) -> list[dict]:
+    if "market_regime" not in df.columns:
+        return []
     rows = []
     for regime, group in df.groupby("market_regime"):
         row = _perf_row(group)
@@ -348,6 +352,8 @@ def _by_regime_decision(df: pd.DataFrame) -> list[dict]:
 
 
 def _by_archetype(df: pd.DataFrame) -> list[dict]:
+    if "archetype" not in df.columns:
+        return []
     rows = []
     for archetype, group in df.groupby("archetype"):
         row = _perf_row(group)

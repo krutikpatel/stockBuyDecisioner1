@@ -63,6 +63,7 @@ def compute_scores_from_signal_cards(
     cards: SignalCards,
     regime_assessment: Optional[MarketRegimeAssessment] = None,
     algo_config: Optional[AlgoConfig] = None,
+    archetype: Optional[str] = None,
 ) -> dict[str, dict]:
     """Derive horizon composite scores from 11 signal cards.
 
@@ -79,9 +80,24 @@ def compute_scores_from_signal_cards(
     sc_long = s["signal_card_long_weights"]
     rs = cfg.regime_scoring
 
+    # Issue 6: HYPER_GROWTH stocks use a growth-focused weight profile
+    if archetype == "HYPER_GROWTH":
+        hg_weights = s.get("signal_card_hyper_growth_weights")
+        if hg_weights:
+            sc_short = hg_weights
+            sc_medium = hg_weights
+            sc_long = hg_weights
+
     short_composite = _signal_card_composite(cards, sc_short)
     medium_composite = _signal_card_composite(cards, sc_medium)
     long_composite = _signal_card_composite(cards, sc_long)
+
+    # Issue 6: Apply score floor for HYPER_GROWTH (prevent valuation drag killing the score)
+    if archetype == "HYPER_GROWTH":
+        score_floor = cfg.decision_logic.get("hyper_growth_score_floor", 40)
+        short_composite = max(short_composite, score_floor)
+        medium_composite = max(medium_composite, score_floor)
+        long_composite = max(long_composite, score_floor)
 
     # Apply regime adjustments to composites (simple multiplier on composite)
     if regime_assessment is not None:

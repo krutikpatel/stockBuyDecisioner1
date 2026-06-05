@@ -124,12 +124,12 @@ def test_all_cards_score_in_range():
 # Custom config changes momentum RSI scoring
 # ---------------------------------------------------------------------------
 
-def test_custom_rsi_sweet_spot_pts_change_momentum():
-    """Raising RSI sweet spot points increases momentum score when RSI is in sweet spot."""
-    ti = _ti(rsi_14=55.0)  # within default sweet spot [45, 65]
+def test_custom_rsi_neutral_pts_change_momentum():
+    """Raising RSI neutral pts increases momentum score when RSI is in neutral zone (50-65)."""
+    ti = _ti(rsi_14=55.0)  # neutral zone: 50 <= RSI <= 65
 
     data = _base_cfg()
-    data["signal_cards"]["momentum"]["rsi_sweet_spot_pts"] = 30  # was 15
+    data["signal_cards"]["momentum"]["rsi_neutral_pts"] = 20  # was 8
     cfg = AlgoConfig.from_dict(data)
 
     default_card = score_momentum(ti)
@@ -138,16 +138,16 @@ def test_custom_rsi_sweet_spot_pts_change_momentum():
     assert custom_card.score > default_card.score
 
 
-def test_custom_rsi_overbought_pts_changes_momentum():
-    """Reducing overbought pts lowers momentum score when RSI is overbought."""
-    ti = _ti(rsi_14=80.0)  # clearly above default overbought threshold of 75
+def test_custom_rsi_extended_pts_changes_momentum():
+    """Reducing extended pts lowers momentum score when RSI is in extended zone (65-80)."""
+    ti = _ti(rsi_14=75.0)  # extended zone: 65 < RSI <= 80
 
     data = _base_cfg()
-    data["signal_cards"]["momentum"]["rsi_overbought_pts"] = 0  # was 4 → less reward
+    data["signal_cards"]["momentum"]["rsi_extended_pts"] = 0  # was 4 → less reward
     cfg = AlgoConfig.from_dict(data)
 
-    default_card = score_momentum(ti)  # RSI 80 → overbought → 4 pts
-    custom_card = score_momentum(ti, algo_config=cfg)  # RSI 80 → overbought → 0 pts
+    default_card = score_momentum(ti)  # RSI 75 → extended → 4 pts
+    custom_card = score_momentum(ti, algo_config=cfg)  # RSI 75 → extended → 0 pts
 
     assert custom_card.score < default_card.score
 

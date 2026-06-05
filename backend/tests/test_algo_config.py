@@ -76,9 +76,9 @@ def test_default_extension_thresholds():
     assert ext["ext_rsi_overbought"] == 75.0
 
 
-def test_default_momentum_card_weight():
+def test_default_growth_card_short_weight():
     cfg = get_algo_config()
-    assert cfg.scoring["signal_card_short_weights"]["momentum"] == 25
+    assert cfg.scoring["signal_card_short_weights"]["growth"] == 30
 
 
 def test_default_data_completeness_deductions():

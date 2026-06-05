@@ -61,16 +61,16 @@ def _reset():
 # Module-level aliases match default config
 # ---------------------------------------------------------------------------
 
-def test_signal_card_short_momentum_default():
-    assert SIGNAL_CARD_SHORT_WEIGHTS["momentum"] == 25
+def test_signal_card_short_growth_default():
+    assert SIGNAL_CARD_SHORT_WEIGHTS["growth"] == 30
 
 
-def test_signal_card_medium_trend_default():
-    assert SIGNAL_CARD_MEDIUM_WEIGHTS["trend"] == 20
+def test_signal_card_medium_growth_default():
+    assert SIGNAL_CARD_MEDIUM_WEIGHTS["growth"] == 30
 
 
 def test_signal_card_long_quality_default():
-    assert SIGNAL_CARD_LONG_WEIGHTS["quality"] == 35
+    assert SIGNAL_CARD_LONG_WEIGHTS["quality"] == 30
 
 
 def test_legacy_short_technical_default():
@@ -110,11 +110,12 @@ def test_uniform_cards_produce_uniform_composite():
     assert result["long_term"]["composite"] == pytest.approx(60.0, abs=0.1)
 
 
-def test_bull_regime_boosts_short_composite():
-    """BULL_RISK_ON should increase short composite above base."""
+def test_bull_regime_boosts_medium_not_short_composite():
+    """BULL_RISK_ON boosts medium composite (coef>0) but not short (coef=0.0)."""
     base = compute_scores_from_signal_cards(_cards(60.0))
     boosted = compute_scores_from_signal_cards(_cards(60.0), regime_assessment=_bull_regime(80.0))
-    assert boosted["short_term"]["composite"] > base["short_term"]["composite"]
+    assert boosted["medium_term"]["composite"] > base["medium_term"]["composite"]
+    assert boosted["short_term"]["composite"] == pytest.approx(base["short_term"]["composite"])
 
 
 def test_bear_regime_reduces_short_composite():
@@ -129,20 +130,20 @@ def test_bear_regime_reduces_short_composite():
 # ---------------------------------------------------------------------------
 
 def test_custom_short_weights_change_composite():
-    """Change short weights: momentum=10, entry_timing=35 (still sums to 100)."""
+    """Reduce growth weight: lower short composite when growth card is high-scoring."""
     data = _base_cfg()
-    data["scoring"]["signal_card_short_weights"]["momentum"] = 10
-    data["scoring"]["signal_card_short_weights"]["entry_timing"] = 35
+    data["scoring"]["signal_card_short_weights"]["growth"] = 10
+    data["scoring"]["signal_card_short_weights"]["entry_timing"] = 30
     cfg = AlgoConfig.from_dict(data)
 
-    # With non-uniform cards: momentum=80, rest=50
+    # Non-uniform cards: growth=80, rest=50
     cards = _cards(50.0)
-    cards.momentum = _card(80.0)
+    cards.growth = _card(80.0)
 
     default_result = compute_scores_from_signal_cards(cards)
     custom_result = compute_scores_from_signal_cards(cards, algo_config=cfg)
 
-    # With less weight on momentum (10 vs 25), the custom composite should be lower
+    # With less weight on growth (10 vs 20), custom composite should be lower
     assert custom_result["short_term"]["composite"] < default_result["short_term"]["composite"]
 
 

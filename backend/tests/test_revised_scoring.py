@@ -172,13 +172,13 @@ class TestComputeScoresFromSignalCards:
             # Weights should sum to ~100
             assert abs(sum(weights.values()) - 100) < 1
 
-    def test_short_term_emphasizes_momentum_and_volume(self):
+    def test_short_term_emphasizes_growth_and_volume(self):
         result = compute_scores_from_signal_cards(_bullish_cards())
         weights = result["short_term"]["weights"]
-        # Momentum should be largest or near-largest weight for short-term
-        assert "momentum" in weights
+        # growth replaces momentum as the primary short-term signal (Issue 2 fix)
+        assert "growth" in weights
         assert "volume_accumulation" in weights
-        assert weights["momentum"] >= 15  # at least 15%
+        assert weights["growth"] >= 15  # at least 15%
 
     def test_long_term_emphasizes_growth_and_quality(self):
         result = compute_scores_from_signal_cards(_bullish_cards())
@@ -254,11 +254,12 @@ class TestBuildRecommendationsWithSignalCards:
         assert any(short.decision.startswith("BUY") for _ in [True]), \
             f"Expected BUY decision for bullish short-term, got: {short.decision}"
 
-    def test_bearish_cards_produce_avoid_short_term(self):
+    def test_bearish_cards_produce_avoid_or_watchlist_short_term(self):
         recs = self._build(_bearish_cards())
         short = next(r for r in recs if r.horizon == "short_term")
-        assert "AVOID" in short.decision or "WAIT" in short.decision, \
-            f"Expected AVOID/WAIT for bearish short-term, got: {short.decision}"
+        # Low-confidence bearish signals return WATCHLIST via the confidence gate (Issue 6 fix)
+        assert "AVOID" in short.decision or "WAIT" in short.decision or short.decision == "WATCHLIST", \
+            f"Expected AVOID/WAIT/WATCHLIST for bearish short-term, got: {short.decision}"
 
     def test_decision_is_valid_label(self):
         all_valid = SHORT_TERM_DECISIONS | MEDIUM_TERM_DECISIONS | LONG_TERM_DECISIONS | {

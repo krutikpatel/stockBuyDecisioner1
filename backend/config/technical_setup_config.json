@@ -73,9 +73,17 @@
   },
 
   "technical_setups": {
+    "BROKEN_CHART_QUALITY_RECOVERY": {
+      "priority": 0,
+      "description": "Broken chart but RSI turning up from oversold — quality recovery candidate",
+      "required_signals": ["TRUE_BROKEN_CHART", "OVERSOLD_REVERSAL"],
+      "optional_signals": ["VOLUME_DRY_UP"],
+      "blocking_signals": [],
+      "min_required_optional_signals": 0
+    },
     "TRUE_BROKEN_CHART_AVOID": {
       "priority": 1,
-      "description": "Always avoid — chart structure is broken",
+      "description": "Always avoid — chart structure is broken without recovery signals",
       "required_signals": ["TRUE_BROKEN_CHART"],
       "optional_signals": [],
       "blocking_signals": [],
@@ -102,7 +110,7 @@
       "description": "Oversold chart turning up — potential rebound but not confirmed uptrend",
       "required_signals": ["OVERSOLD_REVERSAL"],
       "optional_signals": ["VOLUME_DRY_UP"],
-      "blocking_signals": ["TRUE_BROKEN_CHART"],
+      "blocking_signals": [],
       "min_required_optional_signals": 0
     }
   }

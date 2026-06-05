@@ -161,6 +161,7 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             valuation=valuation,
             earnings=earnings,
             news=news_summary,
+            archetype=fundamentals.archetype,
         )
 
         # 8. Scores + recommendations (feature-flagged dispatch)
@@ -185,6 +186,7 @@ async def analyze_stock(request: StockAnalysisRequest) -> StockAnalysisResult:
             scores = compute_scores_from_signal_cards(
                 cards=signal_cards,
                 regime_assessment=regime_assessment,
+                archetype=str(fundamentals.archetype) if fundamentals.archetype else None,
             )
             recommendations = build_recommendations(
                 technicals=technicals,

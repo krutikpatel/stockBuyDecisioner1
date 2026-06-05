@@ -75,11 +75,12 @@ def test_rebound_fires_on_oversold_reversal(detector):
     assert result.selected_setup == "DOWNTREND_REBOUND_CANDIDATE"
 
 
-def test_rebound_blocked_by_broken_chart(detector):
+def test_rebound_with_broken_chart_routes_to_quality_recovery(detector):
     signals = {"OVERSOLD_REVERSAL", "TRUE_BROKEN_CHART"}
     result = detector.detect(signals)
-    # TRUE_BROKEN_CHART_AVOID should take priority
-    assert result.selected_setup == "TRUE_BROKEN_CHART_AVOID"
+    # BROKEN_CHART_QUALITY_RECOVERY (priority=0) requires both TRUE_BROKEN_CHART + OVERSOLD_REVERSAL
+    # and should take precedence over TRUE_BROKEN_CHART_AVOID (priority=1)
+    assert result.selected_setup == "BROKEN_CHART_QUALITY_RECOVERY"
 
 
 # ---------------------------------------------------------------------------

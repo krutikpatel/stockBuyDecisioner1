@@ -179,6 +179,28 @@ def build_historical_fundamentals(
     ed_raw   = quarterly_data.get("earnings_dates",   pd.DataFrame())
     info     = quarterly_data.get("info_snapshot",    {})
 
+    # Static info fields — explicit keys added by data_loader (new cache);
+    # fall back to info_snapshot for backward compatibility with old cache files.
+    def _qd(key, info_key=None):
+        v = quarterly_data.get(key)
+        if v is None and info_key:
+            v = _safe_float(info.get(info_key))
+        return v
+
+    static_beta                    = _qd("beta",                    "beta")
+    static_roa                     = _qd("roa",                     "returnOnAssets")
+    static_quick_ratio             = _qd("quick_ratio",             "quickRatio")
+    static_lt_debt_equity          = _qd("long_term_debt_equity",   "longTermDebtEquity")
+    static_insider_ownership       = _qd("insider_ownership",       "heldPercentInsiders")
+    static_institutional_ownership = _qd("institutional_ownership", "heldPercentInstitutions")
+    static_short_float             = _qd("short_float",             "shortPercentOfFloat")
+    static_short_ratio             = _qd("short_ratio",             "shortRatio")
+    static_analyst_rec             = _qd("analyst_recommendation",  "recommendationMean")
+    static_analyst_target          = _qd("analyst_target_price",    "targetMeanPrice")
+    static_shares_float            = _qd("shares_float",            "floatShares")
+    static_dividend_yield          = _qd("dividend_yield",          "dividendYield")
+    static_eps_growth_next_year    = _qd("eps_growth_next_year",    "earningsGrowth")
+
     # ── Income statement ───────────────────────────────────────────────────
     rev_row = _stmt_row(income, "Total Revenue", "Revenue")
     gp_row  = _stmt_row(income, "Gross Profit")
@@ -215,6 +237,39 @@ def build_historical_fundamentals(
             pass
     if revenue_growth_yoy is None:
         revenue_growth_yoy = _safe_float(info.get("revenueGrowth"))
+
+    # QoQ revenue growth (most recent quarter vs prior quarter)
+    revenue_growth_qoq: Optional[float] = None
+    if rev_row is not None and len(rev_row) >= 2:
+        try:
+            q0 = _safe_float(rev_row.iloc[0])
+            q1 = _safe_float(rev_row.iloc[1])
+            if q0 is not None and q1 and q1 != 0:
+                revenue_growth_qoq = round((q0 - q1) / abs(q1), 4)
+        except Exception:
+            pass
+
+    # 3-year sales CAGR (TTM vs TTM 3 years ago, i.e. 12 quarters back)
+    sales_growth_3y: Optional[float] = None
+    if rev_row is not None and len(rev_row) >= 16:
+        try:
+            r_now  = _ttm(rev_row, 4)
+            r_3yago = _ttm(rev_row.iloc[12:16], 4)
+            if r_now and r_3yago and r_3yago != 0:
+                sales_growth_3y = round((r_now / r_3yago) ** (1 / 3) - 1, 4)
+        except Exception:
+            pass
+
+    # 3-year EPS CAGR
+    eps_growth_3y: Optional[float] = None
+    if eps_row is not None and len(eps_row) >= 16:
+        try:
+            e_now   = _ttm(eps_row, 4)
+            e_3yago = _ttm(eps_row.iloc[12:16], 4)
+            if e_now and e_3yago and e_3yago > 0 and e_now > 0:
+                eps_growth_3y = round((e_now / e_3yago) ** (1 / 3) - 1, 4)
+        except Exception:
+            pass
 
     # ── Cash flow ──────────────────────────────────────────────────────────
     fcf_row   = _stmt_row(cashflow, "Free Cash Flow")
@@ -267,12 +322,42 @@ def build_historical_fundamentals(
     if net_income_ttm is not None and equity and equity != 0:
         roe = round(net_income_ttm / equity, 4)
 
+    # ROA: net income / total assets
+    total_assets_row = _stmt_row(balance, "Total Assets")
+    total_assets = _latest(total_assets_row)
+    roa: Optional[float] = None
+    if net_income_ttm is not None and total_assets and total_assets != 0:
+        roa = round(net_income_ttm / total_assets, 4)
+    if roa is None:
+        roa = static_roa
+
+    # ROIC: NOPAT / invested capital  (NOPAT ≈ operating_income_ttm × (1 − implied tax rate))
+    roic: Optional[float] = None
+    if operating_income_ttm is not None and equity and total_debt is not None:
+        invested_capital = equity + total_debt - (cash or 0)
+        if invested_capital and invested_capital != 0:
+            # Approximate tax rate from income statement if available
+            tax_row = _stmt_row(income, "Tax Provision", "Income Tax Expense")
+            pretax_row = _stmt_row(income, "Pretax Income", "Earnings Before Tax")
+            tax_ttm    = _ttm(tax_row)
+            pretax_ttm = _ttm(pretax_row)
+            tax_rate = 0.21  # US statutory rate as fallback
+            if pretax_ttm and pretax_ttm != 0 and tax_ttm is not None:
+                implied = tax_ttm / pretax_ttm
+                if 0.0 <= implied <= 0.5:
+                    tax_rate = implied
+            nopat = operating_income_ttm * (1 - tax_rate)
+            roic = round(nopat / invested_capital, 4)
+
     fundamentals = FundamentalData(
         revenue_ttm=revenue_ttm,
         revenue_growth_yoy=revenue_growth_yoy,
-        revenue_growth_qoq=None,
+        revenue_growth_qoq=revenue_growth_qoq,
         eps_ttm=eps_ttm,
         eps_growth_yoy=_safe_float(info.get("earningsGrowth")),
+        eps_growth_3y=eps_growth_3y,
+        eps_growth_next_year=static_eps_growth_next_year,
+        sales_growth_3y=sales_growth_3y,
         gross_margin=gross_margin,
         operating_margin=operating_margin,
         net_margin=net_margin,
@@ -285,7 +370,19 @@ def build_historical_fundamentals(
         debt_to_equity=debt_to_equity,
         shares_outstanding=shares,
         roe=roe,
-        roic=None,
+        roa=roa,
+        roic=roic,
+        quick_ratio=static_quick_ratio,
+        long_term_debt_equity=static_lt_debt_equity,
+        beta=static_beta,
+        insider_ownership=static_insider_ownership,
+        institutional_ownership=static_institutional_ownership,
+        short_float=static_short_float,
+        short_ratio=static_short_ratio,
+        analyst_recommendation=static_analyst_rec,
+        analyst_target_price=static_analyst_target,
+        shares_float=static_shares_float,
+        dividend_yield=static_dividend_yield,
     )
 
     # ── Valuation ──────────────────────────────────────────────────────────

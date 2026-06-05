@@ -181,11 +181,16 @@ def _classify_52w_position(technicals: TechnicalIndicators, algo_config: Optiona
     return "avoid_zone"
 
 
-def _classify_bad_chart(technicals: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> str:
+def _classify_bad_chart(
+    technicals: TechnicalIndicators,
+    regime: Optional[MarketRegimeAssessment] = None,
+    algo_config: Optional[AlgoConfig] = None,
+) -> str:
     """Split old AVOID_BAD_CHART into three precise sub-labels.
 
     Priority order:
     1. OVERSOLD_REBOUND_CANDIDATE — RSI turning up with improving price action
+                                    OR bear-regime capitulation (deeply oversold, damage already done)
     2. BROKEN_SUPPORT_AVOID      — heavy-volume break of support with weak close
     3. TRUE_DOWNTREND_AVOID      — full confirmed downtrend (default)
     """
@@ -194,6 +199,20 @@ def _classify_bad_chart(technicals: TechnicalIndicators, algo_config: Optional[A
     t = technicals
     rsi = t.rsi_14
     rsi_slope = t.rsi_slope
+
+    # --- Bear-regime capitulation gate ---
+    # In BEAR_RISK_OFF, stocks that have already broken support and are deeply oversold
+    # are at capitulation bottoms. Classify as rebound candidate rather than "avoid".
+    if regime is not None and str(regime.regime) == str(MarketRegime.BEAR_RISK_OFF):
+        bear_rsi_max = bg.get("bear_regime_oversold_rsi_max", 38)
+        bear_drawdown_min = bg.get("bear_regime_drawdown_min_pct", -20.0)  # already negative
+        bear_sma200_slope = bg.get("bear_regime_sma200_slope_min", -0.003)
+        rsi_deeply_oversold = rsi is not None and rsi < bear_rsi_max
+        dist_52w = getattr(t, "dist_from_52w_high", None)
+        deep_damage = dist_52w is None or dist_52w < bear_drawdown_min
+        sma200_not_crashing = t.sma200_slope is None or t.sma200_slope >= bear_sma200_slope
+        if rsi_deeply_oversold and deep_damage and sma200_not_crashing:
+            return "OVERSOLD_REBOUND_CANDIDATE"
 
     # --- Check OVERSOLD_REBOUND_CANDIDATE first (most actionable) ---
     rsi_in_rebound_range = rsi is not None and bg["oversold_rsi_min"] <= rsi <= bg["oversold_rsi_max"]
@@ -583,23 +602,32 @@ def _decide_long_term(
     return "AVOID"
 
 
+def _quality_recovery_override(signal_cards: Optional[SignalCards]) -> bool:
+    """True when signal cards indicate quality fundamentals that warrant recovery label instead of AVOID."""
+    if signal_cards is None:
+        return False
+    return signal_cards.growth.score >= 50 and signal_cards.quality.score >= 40
+
+
 def _decide_short_term_v2(
     score: float,
     technicals: TechnicalIndicators,
     regime: Optional[MarketRegimeAssessment] = None,
     archetype: Optional[str] = None,
+    signal_cards: Optional[SignalCards] = None,
     algo_config: Optional[AlgoConfig] = None,
 ) -> str:
     """Short-term decision labels with strict Improvements-3 criteria.
 
     Priority order:
-    1. Avoid / confidence overrides
-    2. Oversold rebound candidate
-    3. BUY_NOW_CONTINUATION (all strict gates must pass)
-    4. BUY_STARTER_STRONG_BUT_EXTENDED (extended but buyable)
-    5. WAIT_FOR_PULLBACK (chasing / overextended)
-    6. BUY_ON_PULLBACK (precise SMA50 pullback criteria)
-    7. WATCHLIST / fallback avoids
+    1. RSI capitulation hard override (Issue 4)
+    2. Avoid / confidence overrides
+    3. Oversold rebound candidate
+    4. BUY_NOW_CONTINUATION (all strict gates must pass)
+    5. BUY_STARTER_STRONG_BUT_EXTENDED (extended but buyable)
+    6. WAIT_FOR_PULLBACK (chasing / overextended)
+    7. BUY_ON_PULLBACK (precise SMA50 pullback criteria + tightened gates, Issue 7)
+    8. WATCHLIST / fallback avoids
     """
     t = technicals
     regime_str = regime.regime if regime is not None else MarketRegime.BULL_RISK_ON
@@ -611,11 +639,25 @@ def _decide_short_term_v2(
     wait = dl["wait_for_pullback_gates"]
     cont = dl["buy_now_continuation_gates"]
 
+    # --- Issue 4: RSI capitulation hard override ---
+    if _rsi_capitulation_override(t, signal_cards, archetype, regime, algo_config):
+        return "OVERSOLD_REBOUND_CANDIDATE"
+
+    # --- Minimum confidence gate for short-term ---
+    min_confidence = dl.get("short_term_min_confidence", 60)
+    is_bear = regime is not None and str(regime.regime) == str(MarketRegime.BEAR_RISK_OFF)
+    if score < min_confidence and not is_bear:
+        return "WATCHLIST"
+
     # --- 1. Bad chart / avoid overrides ---
     if _chart_is_weak(t, algo_config=algo_config) and score < 50:
-        return _classify_bad_chart(t, algo_config=algo_config)
+        if _quality_recovery_override(signal_cards):
+            return "OVERSOLD_REBOUND_CANDIDATE"
+        return _classify_bad_chart(t, regime=regime, algo_config=algo_config)
     if score < 40:
-        return _classify_bad_chart(t, algo_config=algo_config)
+        if _quality_recovery_override(signal_cards):
+            return "OVERSOLD_REBOUND_CANDIDATE"
+        return _classify_bad_chart(t, regime=regime, algo_config=algo_config)
 
     # --- 2. Oversold rebound candidate (even for low scores) ---
     bg = dl["bad_chart_gates"]
@@ -688,8 +730,15 @@ def _decide_short_term_v2(
     if score >= 55 and rsi_too_hot:
         return "WAIT_FOR_PULLBACK"
 
-    # --- 6. BUY_ON_PULLBACK (score 55+ with precise pullback criteria) ---
-    if score >= 55 and _is_pullback_to_sma50(t, archetype=archetype, algo_config=algo_config):
+    # --- 6. BUY_ON_PULLBACK (score 55+ with tightened gate, Issue 7) ---
+    # Require actual pullback: RSI ≤ bop_rsi_max AND price ≥ bop_price_below_high_min_pct% below 20d high
+    bop_rsi_max = dl.get("bop_rsi_max", 52)
+    bop_below_pct = dl.get("bop_price_below_high_min_pct", 5.0)
+    rsi_val = t.rsi_14
+    d20h = t.dist_from_20d_high  # negative value: -8 means 8% below 20d high
+    rsi_in_pullback = rsi_val is None or rsi_val <= bop_rsi_max
+    price_pulled_back = d20h is None or d20h <= -bop_below_pct
+    if score >= 55 and rsi_in_pullback and price_pulled_back and _is_pullback_to_sma50(t, archetype=archetype, algo_config=algo_config):
         return "BUY_ON_PULLBACK"
 
     # --- 7. Fallback ---
@@ -703,9 +752,16 @@ def _decide_medium_term_v2(
     technicals: TechnicalIndicators,
     fundamentals: Optional[FundamentalData],
     earnings: EarningsData,
+    signal_cards: Optional[SignalCards] = None,
     algo_config: Optional[AlgoConfig] = None,
+    archetype: Optional[str] = None,
+    regime: Optional[MarketRegimeAssessment] = None,
 ) -> str:
     """New medium-term decision labels (Story 7)."""
+    # Issue 4: RSI capitulation — quality dislocation → starter buy for MT
+    if _rsi_capitulation_override(technicals, signal_cards, archetype, regime, algo_config):
+        return "BUY_STARTER"
+
     cfg = algo_config or get_algo_config()
     dl = cfg.decision_logic
     buy_now_min = dl["medium_term_buy_now_min"]
@@ -713,6 +769,8 @@ def _decide_medium_term_v2(
     watchlist_min = dl["medium_term_watchlist_min"]
 
     if fundamentals is not None and _business_deteriorating(fundamentals, earnings) and score < buy_starter_min:
+        if _quality_recovery_override(signal_cards):
+            return "WATCHLIST_NEEDS_CONFIRMATION"
         return "AVOID_BAD_BUSINESS"
     if score >= buy_now_min:
         if not technicals.is_extended:
@@ -732,9 +790,17 @@ def _decide_long_term_v2(
     fundamentals: Optional[FundamentalData],
     earnings: Optional[EarningsData],
     valuation_score: Optional[float],
+    regime: Optional[MarketRegimeAssessment] = None,
+    signal_cards: Optional[SignalCards] = None,
     algo_config: Optional[AlgoConfig] = None,
+    technicals: Optional[TechnicalIndicators] = None,
+    archetype: Optional[str] = None,
 ) -> str:
     """New long-term decision labels (Story 7)."""
+    # Issue 4: RSI capitulation — quality dislocation → accumulate for LT
+    if technicals is not None and _rsi_capitulation_override(technicals, signal_cards, archetype, regime, algo_config):
+        return "ACCUMULATE_ON_WEAKNESS"
+
     cfg = algo_config or get_algo_config()
     dl = cfg.decision_logic
     buy_now_min = dl["long_term_buy_now_min"]
@@ -745,6 +811,14 @@ def _decide_long_term_v2(
 
     if fundamentals is not None and earnings is not None:
         if _business_deteriorating(fundamentals, earnings) and score < accumulate_min:
+            if _quality_recovery_override(signal_cards):
+                return "WATCHLIST"
+            # In BEAR_RISK_OFF, relax AVOID to WATCHLIST when score is above a floor
+            # Beaten-down stocks in bear markets often recover — don't hard-avoid them
+            is_bear = regime is not None and str(regime.regime) == str(MarketRegime.BEAR_RISK_OFF)
+            bear_floor = dl.get("bear_regime_avoid_score_floor", 42)
+            if is_bear and score >= bear_floor:
+                return "WATCHLIST"
             return "AVOID_LONG_TERM"
     # Expensive valuation relative to score
     if valuation_score is not None and valuation_score < val_gate and score < val_score_gate:
@@ -756,6 +830,50 @@ def _decide_long_term_v2(
     if score >= watchlist_min:
         return "WATCHLIST_VALUATION_TOO_RICH"
     return "AVOID_LONG_TERM"
+
+
+def _rsi_capitulation_override(
+    technicals: TechnicalIndicators,
+    signal_cards: Optional[SignalCards],
+    archetype: Optional[str],
+    regime: Optional[MarketRegimeAssessment],
+    algo_config: Optional[AlgoConfig] = None,
+) -> bool:
+    """Return True when RSI capitulation conditions warrant forcing OVERSOLD_REBOUND_CANDIDATE.
+
+    Gates: RSI < rsi_capitulation_threshold AND sc_growth >= min AND regime != BULL_RISK_ON.
+    """
+    cfg = algo_config or get_algo_config()
+    dl = cfg.decision_logic
+    rsi_thresh = dl.get("rsi_capitulation_threshold", 35)
+    growth_min = dl.get("rsi_capitulation_growth_min", 45)
+    rsi = technicals.rsi_14
+    if rsi is None or rsi >= rsi_thresh:
+        return False
+    if regime is not None and str(regime.regime) == str(MarketRegime.BULL_RISK_ON):
+        return False
+    if signal_cards is not None and signal_cards.growth.score < growth_min:
+        return False
+    return True
+
+
+def _apply_regime_label_modifier(
+    decision: str,
+    regime: Optional[MarketRegimeAssessment],
+    algo_config: Optional[AlgoConfig] = None,
+) -> str:
+    """Downgrade labels that have no edge in a given regime.
+
+    In BULL_RISK_ON, mean-reversion plays (ORC, BSA) underperform WATCHLIST.
+    In SIDEWAYS_CHOPPY, BSE underperforms WATCHLIST.
+    """
+    if regime is None:
+        return decision
+    cfg = algo_config or get_algo_config()
+    suppression: dict = cfg.decision_logic.get("regime_label_suppression", {})
+    regime_str = str(regime.regime)
+    regime_rules: dict = suppression.get(regime_str, {})
+    return regime_rules.get(decision, decision)
 
 
 def _summary(decision: str, score: float, horizon: str, technicals: TechnicalIndicators) -> str:
@@ -835,16 +953,37 @@ def build_recommendations(
         if signal_cards is not None:
             val_score = signal_cards.valuation.score
 
+        arch = fundamentals.archetype if fundamentals else None
+
         if completeness < AVOID_LOW_CONFIDENCE_THRESHOLD:
             decision = "AVOID_LOW_CONFIDENCE"
         elif signal_cards is not None:
             # New signal-card-based decision logic (Story 7)
             if horizon == "short_term":
-                decision = _decide_short_term_v2(composite, technicals, algo_config=algo_config)
+                decision = _decide_short_term_v2(
+                    composite, technicals,
+                    regime=regime_assessment,
+                    archetype=str(arch) if arch else None,
+                    signal_cards=signal_cards,
+                    algo_config=algo_config,
+                )
             elif horizon == "medium_term":
-                decision = _decide_medium_term_v2(composite, technicals, fundamentals, earnings, algo_config=algo_config)
+                decision = _decide_medium_term_v2(
+                    composite, technicals, fundamentals, earnings,
+                    signal_cards=signal_cards,
+                    algo_config=algo_config,
+                    archetype=str(arch) if arch else None,
+                    regime=regime_assessment,
+                )
             else:
-                decision = _decide_long_term_v2(composite, fundamentals, earnings, val_score, algo_config=algo_config)
+                decision = _decide_long_term_v2(
+                    composite, fundamentals, earnings, val_score,
+                    regime=regime_assessment,
+                    signal_cards=signal_cards,
+                    algo_config=algo_config,
+                    technicals=technicals,
+                    archetype=str(arch) if arch else None,
+                )
         elif horizon == "short_term":
             decision = _decide_short_term(composite, technicals, fundamentals, earnings, regime_assessment)
         elif horizon == "medium_term":
@@ -852,9 +991,36 @@ def build_recommendations(
         else:
             decision = _decide_long_term(composite, technicals, fundamentals, earnings, regime_assessment)
 
+        # Issue 5: downgrade labels that have no edge in the current regime
+        decision = _apply_regime_label_modifier(decision, regime_assessment, algo_config)
+
+        # Issue 6: HYPER_GROWTH upgrade — prevent quality-growth stocks from getting hard avoids
+        if arch is not None and str(arch) == "HYPER_GROWTH" and signal_cards is not None:
+            _cfg = algo_config or get_algo_config()
+            _dl = _cfg.decision_logic
+            _hg_rsi_max = _dl.get("hyper_growth_watchlist_upgrade_rsi_max", 55)
+            _hg_growth_min = _dl.get("hyper_growth_watchlist_upgrade_growth_min", 45)
+            _hg_score_floor = _dl.get("hyper_growth_score_floor", 40)
+            _avoids = {"AVOID_LONG_TERM", "AVOID_BAD_BUSINESS", "TRUE_DOWNTREND_AVOID",
+                       "BROKEN_SUPPORT_AVOID", "WATCHLIST_NEEDS_CONFIRMATION"}
+            _rsi_ok = technicals.rsi_14 is None or technicals.rsi_14 <= _hg_rsi_max
+            _growth_ok = signal_cards.growth.score >= _hg_growth_min
+            _score_ok = composite >= _hg_score_floor
+            if decision in _avoids and _rsi_ok and _growth_ok and _score_ok:
+                decision = "WATCHLIST"
+
         bullish, bearish = _build_factors(technicals, fundamentals, valuation, earnings, news, horizon, regime_assessment)
         summary = _summary(decision, composite, horizon, technicals)
         confidence = _confidence(composite, algo_config=algo_config)
+
+        # Confidence level tier for consumers to use as a display signal
+        cfg_dl = (algo_config or get_algo_config()).decision_logic
+        if composite >= cfg_dl.get("confidence_high_threshold", 80):
+            confidence_level = "high"
+        elif composite >= cfg_dl.get("short_term_min_confidence", 60):
+            confidence_level = "medium"
+        else:
+            confidence_level = "low"
 
         entry, exit_, rr, sizing = compute_risk_management(
             price=current_price,
@@ -874,6 +1040,7 @@ def build_recommendations(
                 decision=decision,
                 score=composite,
                 confidence=confidence,
+                confidence_level=confidence_level,
                 confidence_score=confidence_score,
                 data_completeness_score=completeness,
                 summary=summary,

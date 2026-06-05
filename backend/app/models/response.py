@@ -87,6 +87,7 @@ class HorizonRecommendation(BaseModel):
     decision: str
     score: float
     confidence: str
+    confidence_level: Optional[str] = None   # "high" | "medium" | "low" — signal quality tier
     confidence_score: float = 100.0     # 0–100; reduced when data is missing
     data_completeness_score: float = 100.0  # 0–100; tracks how much data was available
     summary: str

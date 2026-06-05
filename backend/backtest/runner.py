@@ -266,6 +266,7 @@ def _ticker_worker(work: dict) -> list[dict]:
                     sector_macro_score = 65.0 if rs > 1.05 else (35.0 if rs < 0.95 else 50.0)
 
             # ── Signal cards ───────────────────────────────────────────────
+            archetype_str_for_cards = str(fundamentals.archetype) if fundamentals.archetype else None
             signal_cards = score_all_cards(
                 technicals=technicals,
                 fundamentals=fundamentals,
@@ -273,6 +274,12 @@ def _ticker_worker(work: dict) -> list[dict]:
                 earnings=earnings,
                 news=news,
                 algo_config=_cfg,
+                archetype=archetype_str_for_cards,
+            )
+
+            # Always compute signal card composites (used for score bucketing regardless of engine)
+            sc_composites = compute_scores_from_signal_cards(
+                signal_cards, regime_assessment, algo_config=_cfg
             )
 
             # ── Scores + recommendations (engine-flagged dispatch) ─────────
@@ -293,9 +300,7 @@ def _ticker_worker(work: dict) -> list[dict]:
                     signal_cards=signal_cards,
                 )
             else:
-                scores = compute_scores_from_signal_cards(
-                    signal_cards, regime_assessment, algo_config=_cfg
-                )
+                scores = sc_composites
                 recommendations = build_recommendations(
                     technicals=technicals,
                     fundamentals=fundamentals,
@@ -321,15 +326,17 @@ def _ticker_worker(work: dict) -> list[dict]:
             archetype_str = str(fundamentals.archetype)   if fundamentals.archetype else "UNKNOWN"
 
             for rec in recommendations:
+                sc_composite = sc_composites.get(rec.horizon, {}).get("composite", rec.score)
                 signals.append({
                     # Identity
                     "ticker":   ticker,
                     "date":     test_date.date().isoformat(),
                     "horizon":  rec.horizon,
                     # Decision
-                    "decision":   rec.decision,
-                    "score":      rec.score,
-                    "confidence": rec.confidence,
+                    "decision":          rec.decision,
+                    "score":             rec.score,
+                    "signal_card_score": sc_composite,
+                    "confidence":        rec.confidence,
                     # Context
                     "market_regime": regime_str,
                     "archetype":     archetype_str,

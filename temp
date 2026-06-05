@@ -12,3 +12,8 @@ And following is status from last session progress:
   - Phase 5: listed as after Phase 4 with its file table
   - Key design decisions: 8 permanent notes including the config package shadowing fix, the feature flag caveat, the "same label for all horizons" simplification, and the legacy gap fix — so the next session understands the non-obvious choices without re-deriving them
 
+
+
+i re-ran backtest after  changes as per Issues a to f mentioned in changelog/2_signal_improvement_plan.md, but i dont see much improvements. check the backtest report at backend/backtest/results/report.html and suggest imptovements. use relevant multi-perona subject
+  matter experts in this area to comeup with solution. do not make
+    any code changes yet

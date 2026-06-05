@@ -97,28 +97,45 @@ def score_momentum(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = 
     else:
         warn.append("MACD unavailable")
 
-    # RSI 14
+    # RSI 14 — inverted: oversold-recovery is the top tier (mean-reversion alpha)
     rsi = ti.rsi_14
+    rsi_slope = ti.rsi_slope  # read slope here for combined RSI+slope tier logic
     if rsi is not None:
         total += mc["rsi_weight"]
-        if mc["rsi_sweet_spot_min"] <= rsi <= mc["rsi_sweet_spot_max"]:
-            raw += mc["rsi_sweet_spot_pts"]
-            pos.append(f"RSI {rsi:.0f} — momentum sweet spot")
-        elif mc["rsi_high_min"] < rsi <= mc["rsi_high_max"]:
-            raw += mc["rsi_high_pts"]
-        elif rsi > mc["rsi_overbought_threshold"]:
-            raw += mc["rsi_overbought_pts"]
-            neg.append(f"RSI {rsi:.0f} — overbought")
-        elif mc["rsi_low_min"] <= rsi < mc["rsi_low_max"]:
-            raw += mc["rsi_low_pts"]
+        oversold_max = mc.get("rsi_oversold_max", 35)
+        early_min = mc.get("rsi_early_recovery_min", 35)
+        early_max = mc.get("rsi_early_recovery_max", 50)
+        neutral_min = mc.get("rsi_neutral_min", 50)
+        neutral_max = mc.get("rsi_neutral_max", 65)
+        ext_min = mc.get("rsi_extended_min", 65)
+        ext_max = mc.get("rsi_extended_max", 80)
+        slope_rising = rsi_slope is not None and rsi_slope > 0
+        if rsi < oversold_max:
+            if slope_rising:
+                raw += mc.get("rsi_oversold_rising_pts", 15)
+                pos.append(f"RSI {rsi:.0f} turning up from oversold — strong recovery signal")
+            else:
+                raw += mc.get("rsi_oversold_falling_pts", 5)
+                neg.append(f"RSI {rsi:.0f} — oversold but still falling, wait for turn")
+        elif rsi < early_max:
+            if slope_rising:
+                raw += mc.get("rsi_early_recovery_rising_pts", 10)
+                pos.append(f"RSI {rsi:.0f} rising — early recovery momentum")
+            else:
+                raw += mc.get("rsi_early_recovery_falling_pts", 4)
+                neg.append(f"RSI {rsi:.0f} — pullback not yet stabilised")
+        elif rsi <= neutral_max:
+            raw += mc.get("rsi_neutral_pts", 8)
+        elif rsi <= ext_max:
+            raw += mc.get("rsi_extended_pts", 4)
+            neg.append(f"RSI {rsi:.0f} — extended, limited near-term upside")
         else:
-            raw += mc["rsi_oversold_pts"]
-            neg.append(f"RSI {rsi:.0f} — weak / oversold")
+            raw += mc.get("rsi_overbought_pts", 0)
+            neg.append(f"RSI {rsi:.0f} — overbought, avoid new entries")
     else:
         warn.append("RSI unavailable")
 
-    # RSI slope (improving vs deteriorating momentum)
-    rsi_slope = ti.rsi_slope
+    # RSI slope (already read above; scored separately for weight contribution)
     slope_pts = mc["rsi_slope_pts"]  # [strong_up, mild_up, flat, mild_down, strong_down]
     if rsi_slope is not None:
         total += mc["rsi_slope_weight"]
@@ -155,7 +172,16 @@ def score_momentum(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = 
         else:
             warn.append(f"{label} relative unavailable")
 
-    parts = [f"Momentum score driven by short- to medium-term price performance and MACD."]
+    # Late-phase momentum penalty — stocks that ran >20% in 3M AND are overbought (RSI>70)
+    # have poor forward returns (parabolic moves tend to mean-revert)
+    perf_3m_val = getattr(ti, "perf_3m", None) or 0.0
+    rsi_val = getattr(ti, "rsi_14", None) or 50.0
+    if (perf_3m_val > mc.get("late_phase_perf3m_threshold", 20.0)
+            and rsi_val > mc.get("late_phase_rsi_threshold", 70.0)):
+        raw = max(0.0, raw - mc.get("late_phase_penalty_pts", 12))
+        neg.append(f"Late-phase signal: +{perf_3m_val:.1f}% 3M run with RSI {rsi_val:.0f} — mean-reversion risk")
+
+    parts = ["Momentum score driven by short- to medium-term price performance and MACD."]
     return _score_to_card("momentum", raw, total, pos, neg, warn, parts)
 
 
@@ -236,7 +262,36 @@ def score_trend(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = Non
         else:
             warn.append(f"{label} performance unavailable")
 
-    parts = ["Trend score reflects SMA stack alignment, slope direction, and ADX trend strength."]
+    # Extension penalty — overextended uptrends have poor forward returns (doubled)
+    sma50_rel = getattr(ti, "sma50_relative", None)
+    sma20_rel = getattr(ti, "sma200_relative", None)
+    sma50_sl = getattr(ti, "sma50_slope", None)
+    sma200_sl = getattr(ti, "sma200_slope", None)
+    sma50_rel_val = getattr(ti, "sma50_relative", None)
+    sma20_rel_val = getattr(ti, "sma20_relative", None)
+    if sma50_rel_val is not None and sma50_rel_val > tc.get("extension_penalty_sma50_threshold", 15.0):
+        raw = max(0.0, raw + tc.get("extension_penalty_sma50_pts", -25))
+        neg.append(f"SMA50 extension +{sma50_rel_val:.1f}% — severely overextended, mean-reversion risk")
+    if sma20_rel_val is not None and sma20_rel_val > tc.get("extension_penalty_sma20_threshold", 8.0):
+        raw = max(0.0, raw + tc.get("extension_penalty_sma20_pts", -12))
+        neg.append(f"SMA20 extension +{sma20_rel_val:.1f}% — stretched above near-term mean")
+
+    # Recovery bonus — early-stage recovery from downtrend has high forward alpha
+    sma200_rel = getattr(ti, "sma200_relative", None)
+    reclaim_zone = tc.get("sma200_reclaim_zone_pct", 5.0) / 100.0
+    recovery_slope_min = tc.get("sma200_recovery_slope_min", 0.0)
+    if (sma200_rel is not None and sma200_sl is not None
+            and -reclaim_zone <= sma200_rel <= reclaim_zone
+            and sma200_sl >= recovery_slope_min):
+        raw = min(total, raw + tc.get("sma200_reclaim_pts", 20))
+        pos.append(f"Price reclaiming SMA200 with rising slope — early recovery signal")
+    elif (sma200_rel is not None and sma200_rel < 0
+          and sma50_sl is not None and sma50_sl > 0
+          and sma200_sl is not None and sma200_sl >= recovery_slope_min):
+        raw = min(total, raw + tc.get("sma50_recovery_pts", 15))
+        pos.append("SMA50 recovering while below SMA200 — bottoming pattern forming")
+
+    parts = ["Trend score rewards early-stage recovery signals and penalises overextended uptrends."]
     return _score_to_card("trend", raw, total, pos, neg, warn, parts)
 
 
@@ -255,24 +310,32 @@ def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig
     rsi = ti.rsi_14
     if rsi is not None:
         total += ec["rsi_weight"]
-        if ec["rsi_ideal_min"] <= rsi <= ec["rsi_ideal_max"]:
+        deep_os_max = ec.get("rsi_deep_oversold_max", 20.0)
+        if rsi < deep_os_max:
+            # extreme oversold — capitulation, high recovery probability
+            raw += ec.get("rsi_deep_oversold_pts", 20)
+            pos.append(f"RSI {rsi:.0f} — extreme capitulation, strong mean-reversion entry")
+        elif ec["rsi_ideal_min"] <= rsi <= ec["rsi_ideal_max"]:
+            # primary buy zone: 20-40 (deeply oversold recovery)
             raw += ec["rsi_ideal_pts"]
-            pos.append(f"RSI {rsi:.0f} — continuation entry zone ({ec['rsi_ideal_min']:.0f}–{ec['rsi_ideal_max']:.0f})")
-        elif ec["rsi_pullback_min"] <= rsi < ec["rsi_ideal_min"]:
+            pos.append(f"RSI {rsi:.0f} — ideal oversold entry zone ({ec['rsi_ideal_min']:.0f}–{ec['rsi_ideal_max']:.0f})")
+        elif ec["rsi_pullback_min"] <= rsi < ec["rsi_pullback_max"]:
+            # good pullback zone: 40-50
             raw += ec["rsi_pullback_pts"]
-            pos.append(f"RSI {rsi:.0f} — pullback sweet spot ({ec['rsi_pullback_min']:.0f}–{ec['rsi_ideal_min']:.0f})")
-        elif ec["rsi_oversold_min"] <= rsi < ec["rsi_oversold_max"]:
-            raw += ec["rsi_oversold_pts"]
-            pos.append(f"RSI {rsi:.0f} — rebound candidate zone ({ec['rsi_oversold_min']:.0f}–{ec['rsi_oversold_max']:.0f})")
+            pos.append(f"RSI {rsi:.0f} — pullback sweet spot ({ec['rsi_pullback_min']:.0f}–{ec['rsi_pullback_max']:.0f})")
+        elif ec.get("rsi_neutral_min", 50.0) <= rsi <= ec.get("rsi_neutral_max", 60.0):
+            # neutral zone: 50-60
+            raw += ec.get("rsi_neutral_pts", 15)
         elif ec["rsi_extended_min"] < rsi <= ec["rsi_extended_max"]:
+            # extended zone: 60-72 — some pts but poor entry
             raw += ec["rsi_extended_pts"]
-            pos.append(f"RSI {rsi:.0f} — extended but buyable ({ec['rsi_extended_min']:.0f}–{ec['rsi_extended_max']:.0f})")
+            neg.append(f"RSI {rsi:.0f} — extended, poor entry risk/reward")
         elif rsi > ec["rsi_overbought_threshold"]:
             raw += ec["rsi_overbought_pts"]
             neg.append(f"RSI {rsi:.0f} — overbought, avoid new entries")
         else:
-            raw += ec["rsi_deep_oversold_pts"]
-            neg.append(f"RSI {rsi:.0f} — extreme oversold, high risk")
+            # 40-50 fallback (shouldn't normally reach here)
+            raw += ec["rsi_pullback_pts"]
     else:
         warn.append("RSI unavailable")
 
@@ -294,38 +357,48 @@ def score_entry_timing(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig
     else:
         warn.append("StochRSI unavailable")
 
-    # VWAP position
+    # VWAP position — inverted: below VWAP = buying at discount = best entry
     vwap_dev = ti.vwap_deviation
     if vwap_dev is not None:
         w = ec["vwap_weight"]
         total += w
-        if 0 <= vwap_dev <= ec["vwap_dev_good_max"]:
+        discount_min = ec.get("vwap_dev_discount_min", -8.0)
+        discount_max = ec.get("vwap_dev_discount_max", 0.0)
+        if discount_min <= vwap_dev <= discount_max:
             raw += w
-            pos.append("Price near/above VWAP — institutional support")
-        elif vwap_dev > ec["vwap_dev_good_max"]:
-            raw += round(w * 8 / 15)
-            neg.append("Price extended above VWAP")
+            pos.append(f"Price {abs(vwap_dev):.1f}% below VWAP — buying at institutional discount")
+        elif vwap_dev < discount_min:
+            raw += round(w * 0.6)
+            pos.append("Price deeply below VWAP — extreme discount, possible support")
+        elif vwap_dev <= ec["vwap_dev_good_max"]:
+            raw += round(w * 0.5)
         else:
-            raw += round(w / 3)
-            neg.append("Price below VWAP")
+            raw += round(w * 0.2)
+            neg.append(f"Price {vwap_dev:.1f}% above VWAP — extended, chasing entry")
     else:
         warn.append("VWAP deviation unavailable")
 
     # Bollinger Band position (0 = lower band, 1 = upper band)
+    # Inverted: lower band = oversold = best entry zone
     bb_pos = ti.bollinger_band_position
     if bb_pos is not None:
         w = ec["bb_weight"]
         total += w
         if ec["bb_ideal_min"] <= bb_pos <= ec["bb_ideal_max"]:
+            # lower third (0.0–0.3): near lower band = best entry
             raw += w
-            pos.append("Price within Bollinger Band midrange")
-        elif bb_pos > ec["bb_extended_threshold"]:
-            raw += round(w * 0.3)
-            neg.append("Price at upper Bollinger Band — extended")
+            pos.append("Price near lower Bollinger Band — oversold entry zone")
         elif bb_pos < ec["bb_oversold_threshold"]:
+            # below lower band: extreme oversold
+            raw += round(w * 0.8)
+            pos.append("Price below lower Bollinger Band — capitulation entry")
+        elif bb_pos <= ec["bb_extended_threshold"]:
+            # middle range (0.3–0.6): neutral
             raw += round(w * 0.5)
         else:
-            raw += round(w * 0.7)
+            # upper range / overbought: poor entry
+            raw += round(w * 0.2)
+            neg.append("Price at upper Bollinger Band — extended, poor entry")
     else:
         warn.append("Bollinger Band position unavailable")
 
@@ -494,127 +567,141 @@ def score_volume_accumulation(ti: TechnicalIndicators, algo_config: Optional[Alg
 # 5. Volatility / Risk
 # ---------------------------------------------------------------------------
 
-def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None) -> SignalCard:
-    """Score based on drawdown, ATR%, weekly vol, beta, distance from highs."""
+def score_volatility_risk(ti: TechnicalIndicators, algo_config: Optional[AlgoConfig] = None, beta: Optional[float] = None) -> SignalCard:
+    """Score based on dislocation opportunity: severe drawdown, high ATR spike, and distance from highs.
+
+    Inverted from the old 'reward low risk' logic. In a quality-stock universe, high current
+    volatility and deep drawdowns signal panic selling — exactly the buying opportunity.
+    """
     cfg = algo_config or get_algo_config()
     vrc = cfg.signal_cards["volatility_risk"]
     raw = 0.0
     total = 0.0
     pos, neg, warn = [], [], []
 
-    # Max drawdown 3M (less negative = better; tiers are descending negative values)
+    # 3M drawdown — more severe = more opportunity (capitulation buy in quality stock)
     dd3m = ti.max_drawdown_3m
     if dd3m is not None:
         w = vrc["dd3m_weight"]
-        tiers = vrc["dd3m_tiers"]   # e.g. [-5, -10, -20]
-        pts = vrc["dd3m_pts"]       # e.g. [25, 18, 10, 3]
+        tiers = vrc["dd3m_tiers"]   # [-5, -10, -20]
+        pts = vrc["dd3m_pts"]       # [3, 10, 18, 25] — inverted: severe = high pts
         total += w
-        if dd3m >= tiers[0]:
+        if dd3m >= tiers[0]:        # >= -5%: tiny drawdown = priced to perfection
             raw += pts[0]
-            pos.append(f"3M max drawdown {dd3m:.1f}% — contained")
-        elif dd3m >= tiers[1]:
+            neg.append(f"3M drawdown only {dd3m:.1f}% — limited mean-reversion upside")
+        elif dd3m >= tiers[1]:      # >= -10%
             raw += pts[1]
-        elif dd3m >= tiers[2]:
+        elif dd3m >= tiers[2]:      # >= -20%
             raw += pts[2]
-            neg.append(f"3M drawdown {dd3m:.1f}% — notable")
-        else:
+            pos.append(f"3M drawdown {dd3m:.1f}% — meaningful dislocation opportunity")
+        else:                        # < -20%: severe capitulation
             raw += pts[3]
-            neg.append(f"3M drawdown {dd3m:.1f}% — severe")
+            pos.append(f"3M drawdown {dd3m:.1f}% — deep capitulation, high recovery potential")
     else:
         warn.append("3M drawdown unavailable")
 
-    # Max drawdown 1Y
+    # 1Y drawdown — more severe = more opportunity
     dd1y = ti.max_drawdown_1y
     if dd1y is not None:
         w = vrc["dd1y_weight"]
-        tiers = vrc["dd1y_tiers"]   # e.g. [-10, -25]
-        pts = vrc["dd1y_pts"]       # e.g. [15, 8, 2]
+        tiers = vrc["dd1y_tiers"]   # [-10, -25]
+        pts = vrc["dd1y_pts"]       # [2, 8, 15] — inverted
         total += w
-        if dd1y >= tiers[0]:
+        if dd1y >= tiers[0]:        # >= -10%: minimal 1Y drawdown
             raw += pts[0]
-        elif dd1y >= tiers[1]:
+        elif dd1y >= tiers[1]:      # >= -25%
             raw += pts[1]
-        else:
+            pos.append(f"1Y drawdown {dd1y:.1f}% — significant reset from peak")
+        else:                        # < -25%: deep annual drawdown
             raw += pts[2]
-            neg.append(f"1Y drawdown {dd1y:.1f}% — high risk")
+            pos.append(f"1Y drawdown {dd1y:.1f}% — major dislocation from year high")
     else:
         warn.append("1Y drawdown unavailable")
 
-    # ATR% (lower is better)
+    # ATR% — higher = more fear = more opportunity (inverted)
     atr_pct = ti.atr_percent
     if atr_pct is not None:
         w = vrc["atr_weight"]
-        tiers = vrc["atr_tiers"]    # e.g. [1.5, 3.0, 5.0]
-        pts = vrc["atr_pts"]        # e.g. [20, 13, 7, 2]
+        tiers = vrc["atr_tiers"]    # [1.5, 3.0, 5.0]
+        pts = vrc["atr_pts"]        # [2, 7, 13, 20] — inverted: high ATR = high pts
         total += w
-        if atr_pct <= tiers[0]:
+        if atr_pct <= tiers[0]:     # <= 1.5%: dead calm = fully priced
             raw += pts[0]
-            pos.append(f"ATR {atr_pct:.1f}% — low intraday risk")
-        elif atr_pct <= tiers[1]:
+            neg.append(f"ATR {atr_pct:.1f}% — very low, stock priced to perfection")
+        elif atr_pct <= tiers[1]:   # <= 3.0%: normal vol
             raw += pts[1]
-        elif atr_pct <= tiers[2]:
+        elif atr_pct <= tiers[2]:   # <= 5.0%: elevated fear
             raw += pts[2]
-            neg.append(f"ATR {atr_pct:.1f}% — elevated volatility")
-        else:
+            pos.append(f"ATR {atr_pct:.1f}% — elevated fear, potential opportunity")
+        else:                        # > 5.0%: high fear spike
             raw += pts[3]
-            neg.append(f"ATR {atr_pct:.1f}% — very high volatility")
+            pos.append(f"ATR {atr_pct:.1f}% — fear spike, strong mean-reversion candidate")
     else:
         warn.append("ATR% unavailable")
 
-    # Weekly volatility (annualised %; lower is better)
+    # Weekly volatility (annualised %) — higher = more fear = more opportunity (inverted)
     wvol = ti.volatility_weekly
     if wvol is not None:
         w = vrc["vol_weekly_weight"]
-        tiers = vrc["vol_weekly_tiers"]  # e.g. [20, 40] (as whole-number %)
-        pts = vrc["vol_weekly_pts"]      # e.g. [15, 8, 2]
+        tiers = vrc["vol_weekly_tiers"]  # [20, 40]
+        pts = vrc["vol_weekly_pts"]      # [2, 8, 15] — inverted
         total += w
-        wvol_pct = wvol * 100 if wvol < 5 else wvol  # normalise if stored as fraction
-        if wvol_pct <= tiers[0]:
+        wvol_pct = wvol * 100 if wvol < 5 else wvol
+        if wvol_pct <= tiers[0]:    # <= 20%: very stable = no dislocation
             raw += pts[0]
-            pos.append(f"Weekly vol {wvol_pct:.0f}% ann — moderate")
-        elif wvol_pct <= tiers[1]:
+            neg.append(f"Weekly vol {wvol_pct:.0f}% ann — low, likely fully valued")
+        elif wvol_pct <= tiers[1]:  # <= 40%: moderate vol
             raw += pts[1]
-        else:
+        else:                        # > 40%: high vol = panic selling
             raw += pts[2]
-            neg.append(f"Weekly vol {wvol_pct:.0f}% ann — high")
+            pos.append(f"Weekly vol {wvol_pct:.0f}% ann — elevated, mean-reversion opportunity")
     else:
         warn.append("Weekly volatility unavailable")
 
-    # Beta
-    beta = getattr(ti, "beta", None)
+    # Beta — higher beta = amplified recovery in quality stock (inverted).
+    # Passed in from FundamentalData.beta (yfinance info); None in backtest (not time-varying there).
+    beta = beta
     if beta is not None:
         w = vrc["beta_weight"]
-        pts = vrc["beta_pts"]  # e.g. [15, 8, 3]
+        pts = vrc["beta_pts"]       # [15, 10, 5, 3]
         total += w
-        if vrc["beta_ideal_min"] <= beta <= vrc["beta_ideal_max"]:
+        high_t = vrc.get("beta_high_threshold", 1.5)
+        mid_t = vrc.get("beta_mid_threshold", 1.0)
+        low_t = vrc.get("beta_low_threshold", 0.5)
+        if beta >= high_t:          # >= 1.5: high beta = amplified recovery
             raw += pts[0]
-            pos.append(f"Beta {beta:.1f} — market-aligned risk")
-        elif beta <= vrc["beta_extended_max"]:
+            pos.append(f"Beta {beta:.1f} — high-beta recovery candidate")
+        elif beta >= mid_t:         # >= 1.0: market-plus beta
             raw += pts[1]
-        else:
+        elif beta >= low_t:         # >= 0.5: moderate
             raw += pts[2]
-            neg.append(f"Beta {beta:.1f} — high market sensitivity")
+        else:                        # < 0.5: defensive, limited upside in recovery
+            raw += pts[3]
+            neg.append(f"Beta {beta:.1f} — very defensive, limited recovery leverage")
     else:
         warn.append("Beta unavailable")
 
-    # Distance from 52W high
+    # Distance from 52W high — farther = more dislocation = more opportunity (inverted)
     d52h = ti.dist_from_52w_high
     if d52h is not None:
         w = vrc["dist_52w_weight"]
-        pts = vrc["dist52_pts"]  # e.g. [10, 6, 2]
+        pts = vrc["dist52_pts"]     # [10, 6, 2]
         total += w
-        if d52h >= vrc["dist52_good"]:
+        deep_t = vrc.get("dist52_deep", -30.0)   # very far from high
+        mid_t = vrc.get("dist52_mid", -15.0)     # moderate correction
+        if d52h <= deep_t:          # <= -30%: deep dislocation
             raw += pts[0]
-            pos.append("Near 52-week high — relative strength")
-        elif d52h >= vrc["dist52_ok"]:
+            pos.append(f"{abs(d52h):.0f}% below 52W high — deep dislocation, high recovery potential")
+        elif d52h <= mid_t:         # <= -15%: meaningful correction
             raw += pts[1]
-        else:
+            pos.append(f"{abs(d52h):.0f}% below 52W high — meaningful pullback from peak")
+        else:                        # > -15%: near high = already recovered / priced in
             raw += pts[2]
-            neg.append(f"{abs(d52h):.0f}% below 52W high")
+            neg.append(f"Only {abs(d52h):.0f}% below 52W high — limited mean-reversion upside")
     else:
         warn.append("52W high distance unavailable")
 
-    parts = ["Volatility/risk score rewards low drawdown, contained ATR, and moderate beta."]
+    parts = ["Dislocation score: high ATR, deep drawdown, and distance from highs signal panic selling in quality stocks — the primary alpha source."]
     return _score_to_card("volatility_risk", raw, total, pos, neg, warn, parts)
 
 
@@ -1421,17 +1508,41 @@ def score_all_cards(
     earnings: EarningsData,
     news: NewsSummary,
     algo_config: Optional[AlgoConfig] = None,
+    archetype: Optional[str] = None,
 ) -> SignalCards:
-    """Compute all 11 signal cards and return a SignalCards container."""
+    """Compute all 11 signal cards and return a SignalCards container.
+
+    Pass ``archetype`` (e.g. "HYPER_GROWTH") to enable archetype-aware valuation
+    scoring instead of the absolute-multiple default.
+    """
+    # Valuation card: use archetype-aware scoring when archetype is known
+    if archetype:
+        from app.services.valuation_analysis_service import score_valuation_with_archetype as _arch_val
+        arch_score = _arch_val(
+            valuation,
+            archetype,
+            revenue_growth_yoy=fundamentals.revenue_growth_yoy,
+            operating_margin=fundamentals.operating_margin,
+            gross_margin=fundamentals.gross_margin,
+            algo_config=algo_config,
+        )
+        base_val_card = score_valuation(valuation, algo_config=algo_config)
+        val_card = base_val_card.model_copy(update={
+            "score": round(float(arch_score), 1),
+            "label": SignalCardLabel.from_score(float(arch_score)),
+        })
+    else:
+        val_card = score_valuation(valuation, algo_config=algo_config)
+
     return SignalCards(
         momentum=score_momentum(technicals, algo_config=algo_config),
         trend=score_trend(technicals, algo_config=algo_config),
         entry_timing=score_entry_timing(technicals, algo_config=algo_config),
         volume_accumulation=score_volume_accumulation(technicals, algo_config=algo_config),
-        volatility_risk=score_volatility_risk(technicals, algo_config=algo_config),
+        volatility_risk=score_volatility_risk(technicals, algo_config=algo_config, beta=fundamentals.beta),
         relative_strength=score_relative_strength(technicals, algo_config=algo_config),
         growth=score_growth(fundamentals, earnings, algo_config=algo_config),
-        valuation=score_valuation(valuation, algo_config=algo_config),
+        valuation=val_card,
         quality=score_quality(fundamentals, algo_config=algo_config),
         ownership=score_ownership(fundamentals, algo_config=algo_config),
         catalyst=score_catalyst(fundamentals, earnings, news, algo_config=algo_config),

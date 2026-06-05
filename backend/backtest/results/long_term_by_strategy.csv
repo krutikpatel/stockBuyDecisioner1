@@ -1,5 +1,6 @@
 count,resolved,avg_return_pct,median_return_pct,win_rate_pct,benchmark_win_rate_pct,avg_excess_spy_pct,avg_excess_qqq_pct,avg_max_drawdown_pct,avg_mfe_pct,profit_factor,best_return_pct,worst_return_pct,strategy_name,avg_score,best_decision
-9588,9588,24.8,17.53,70.5,50.0,5.44,-2.15,-19.79,45.45,5.08,841.09,-83.82,true_broken_chart_avoid,25.6,TRUE_DOWNTREND_AVOID
-51286,51286,17.01,12.35,67.9,46.8,2.01,-3.8,-18.0,34.92,4.08,1004.38,-87.38,watchlist_low_confidence,0.0,WATCHLIST
-9006,9006,14.17,11.54,66.9,47.1,1.1,-4.39,-18.07,30.88,3.75,729.95,-86.02,growth_leader_pullback,59.3,WAIT_FOR_PULLBACK
-1199,1199,13.59,10.07,66.5,49.0,1.97,-2.63,-17.89,31.54,3.37,662.35,-70.56,downtrend_rebound,71.5,OVERSOLD_REBOUND_CANDIDATE
+4760,4760,26.91,18.34,72.8,52.1,7.61,-0.3,-18.88,46.69,6.03,662.35,-81.67,quality_broken_chart_recovery,34.2,OVERSOLD_REBOUND_CANDIDATE
+5227,5227,22.65,16.27,68.6,48.3,3.59,-3.61,-20.37,43.97,4.43,841.09,-83.82,true_broken_chart_avoid,20.0,TRUE_DOWNTREND_AVOID
+51053,51053,16.97,12.32,67.8,46.7,1.97,-3.88,-18.01,34.86,4.07,1004.38,-87.38,watchlist_low_confidence,0.0,WATCHLIST
+8898,8898,14.2,11.6,67.0,47.3,1.21,-4.09,-18.11,31.0,3.75,729.95,-86.02,growth_leader_pullback,59.4,WAIT_FOR_PULLBACK
+1141,1141,12.97,10.05,66.3,49.0,1.33,-3.17,-17.95,30.55,3.28,480.51,-70.56,downtrend_rebound,71.8,OVERSOLD_REBOUND_CANDIDATE
