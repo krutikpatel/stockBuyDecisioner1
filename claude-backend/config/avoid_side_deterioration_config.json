@@ -1,0 +1,104 @@
+{
+  "_comment": "Avoid-side deterioration config for stocks that failed the quality gate.",
+  "decision_thresholds": {
+    "avoid_min_score": 45
+  },
+  "rules": [
+    {
+      "id": "revenue_declining_yoy",
+      "logic": {"field": "sales_growth_yoy", "operator": "<=", "value": 0.0},
+      "points": 20,
+      "reason": "Revenue YoY ≤ 0%: top-line contraction confirmed"
+    },
+    {
+      "id": "revenue_declining_qoq",
+      "logic": {"field": "sales_growth_qoq", "operator": "<", "value": 0.0},
+      "points": 10,
+      "reason": "Revenue QoQ negative: sequential deceleration"
+    },
+    {
+      "id": "op_margin_negative",
+      "logic": {"field": "operating_margin", "operator": "<", "value": -0.05},
+      "points": 20,
+      "reason": "Operating margin < -5%: business burning cash operationally"
+    },
+    {
+      "id": "op_margin_negative_mild",
+      "logic": {"field": "operating_margin", "operator": "between", "value": [-0.05, 0.0]},
+      "points": 10,
+      "reason": "Operating margin -5% to 0%: margins deteriorating"
+    },
+    {
+      "id": "eps_beat_rate_low",
+      "logic": {"field": "beat_rate", "operator": "<", "value": 0.40},
+      "points": 15,
+      "reason": "EPS beat rate < 40%: management consistently missing estimates"
+    },
+    {
+      "id": "debt_equity_high",
+      "logic": {"field": "debt_to_equity", "operator": ">", "value": 150},
+      "points": 15,
+      "reason": "Debt/equity > 150%: elevated leverage risk"
+    },
+    {
+      "id": "fcf_negative",
+      "logic": {"field": "free_cash_flow", "operator": "<", "value": 0},
+      "points": 10,
+      "reason": "FCF negative: cash burn without fundamental support"
+    },
+    {
+      "id": "price_far_below_sma200",
+      "logic": {"field": "sma200_relative", "operator": "<", "value": -15.0},
+      "points": 8,
+      "reason": "Price > 15% below SMA200: structural breakdown"
+    },
+    {
+      "id": "eps_growth_negative",
+      "logic": {"field": "eps_growth_yoy", "operator": "<", "value": 0.0},
+      "points": 10,
+      "reason": "EPS growth YoY negative: earnings deterioration"
+    },
+    {
+      "id": "gross_margin_compressed",
+      "logic": {"field": "gross_margin", "operator": "<", "value": 0.20},
+      "points": 12,
+      "reason": "Gross margin < 20%: severe margin compression"
+    },
+    {
+      "id": "current_ratio_low",
+      "logic": {"field": "current_ratio", "operator": "<", "value": 0.8},
+      "points": 8,
+      "reason": "Current ratio < 0.8: near-term liquidity stress"
+    },
+    {
+      "id": "roe_negative",
+      "logic": {"field": "roe", "operator": "<", "value": 0.0},
+      "points": 7,
+      "reason": "ROE negative: destroying shareholder value"
+    },
+    {
+      "id": "perf_6m_deeply_negative",
+      "logic": {"field": "perf_6m", "operator": "<", "value": -0.20},
+      "points": 12,
+      "reason": "6-month return < -20%: prolonged price deterioration"
+    },
+    {
+      "id": "rsi_trending_down",
+      "logic": {"field": "rsi_slope", "operator": "<", "value": 0},
+      "points": 8,
+      "reason": "RSI slope negative: momentum continuing lower"
+    },
+    {
+      "id": "obv_declining",
+      "logic": {"field": "obv_trend", "operator": "<", "value": 0},
+      "points": 10,
+      "reason": "OBV trend negative: institutional distribution detected"
+    },
+    {
+      "id": "bear_market_boost",
+      "logic": {"field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF"},
+      "points": 10,
+      "reason": "Bear market regime: macro environment amplifies deterioration risk"
+    }
+  ]
+}

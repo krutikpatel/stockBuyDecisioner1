@@ -1,0 +1,97 @@
+{
+  "universe_filters": {
+    "min_price": 5.0,
+    "min_market_cap": 1000000000,
+    "min_avg_volume": 500000,
+    "min_dollar_volume": 25000000,
+    "avoid_earnings_within_days": 3
+  },
+
+  "sector_benchmarks": {
+    "Technology": "XLK",
+    "Healthcare": "XLV",
+    "Financial Services": "XLF",
+    "Consumer Cyclical": "XLY",
+    "Consumer Defensive": "XLP",
+    "Energy": "XLE",
+    "Industrials": "XLI",
+    "Basic Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+    "Utilities": "XLU"
+  },
+
+  "market_regime_rules": {
+    "vix_bear_high_threshold": 25.0,
+    "vix_moderate_threshold": 20.0,
+    "vix_elevated_max": 30.0,
+    "spy_min_bars": 50,
+    "insufficient_data_confidence": 20.0,
+    "regime_confidences": {
+      "bear_high_vix": 82.0,
+      "bear_double_below": 70.0,
+      "sideways_divergence": 55.0,
+      "bull_full": 85.0,
+      "bull_narrow": 68.0,
+      "liquidity_vix_recovering": 62.0,
+      "bull_no_vix": 70.0,
+      "bull_narrow_no_vix": 58.0,
+      "sideways_above200_below50": 60.0,
+      "sideways_no_200dma": 40.0,
+      "liquidity_vix_elevated": 55.0,
+      "sideways_fallback": 45.0
+    },
+    "regime_weight_adjustments": {
+      "BULL_RISK_ON": {
+        "technical_momentum": 1.20,
+        "relative_strength": 1.15,
+        "growth_acceleration": 1.15,
+        "valuation_relative_growth": 0.70,
+        "fcf_quality": 0.90
+      },
+      "BEAR_RISK_OFF": {
+        "valuation_relative_growth": 1.30,
+        "balance_sheet_strength": 1.25,
+        "fcf_quality": 1.20,
+        "technical_momentum": 0.90,
+        "catalyst_news": 0.90
+      },
+      "SIDEWAYS_CHOPPY": {
+        "risk_reward": 1.25,
+        "relative_strength": 1.10,
+        "technical_momentum": 0.85
+      },
+      "BULL_NARROW_LEADERSHIP": {
+        "technical_momentum": 1.15,
+        "relative_strength": 1.20,
+        "sector_strength": 1.15
+      },
+      "LIQUIDITY_RALLY": {
+        "technical_momentum": 1.10,
+        "catalyst_news": 1.10,
+        "valuation_relative_growth": 0.80
+      },
+      "SECTOR_ROTATION": {
+        "sector_strength": 1.30,
+        "relative_strength": 1.15
+      }
+    }
+  },
+
+  "data_sources": {
+    "active_provider": "yfinance",
+    "providers": {
+      "yfinance": {
+        "class": "YFinanceProvider",
+        "enabled": true,
+        "supports_point_in_time_fundamentals": false,
+        "supports_news": true
+      },
+      "csv": {
+        "class": "CsvProvider",
+        "enabled": false,
+        "base_path": "data/external/csv"
+      }
+    }
+  }
+}

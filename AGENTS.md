@@ -1,6 +1,7 @@
 # AGENTS.md
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Our base working directory is: "codex_backed" all changes shall remain inside this directory
 
 ## Commands
 
@@ -44,6 +45,32 @@ npm test           # run Vitest tests (36 tests)
 npm run build      # TypeScript check + Vite build
 npm run lint       # ESLint
 ```
+
+### Codex-Backed CLI
+
+`codex-backed/` is a separate CLI-only strategy/backtest engine. It is intentionally independent from the frontend and from the production `backend/app` request path.
+
+```bash
+# Validate codex-backed JSON configs
+PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli validate-config --config-dir codex-backed/configs
+
+# Run codex-backed tests
+backend/.venv/bin/python -m pytest codex-backed/tests -q
+
+# Run a full native-feature backtest
+PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id my_run_id \
+  --rebuild-feature-cache \
+  --workers 1
+
+# Short smoke-style run examples are documented in codex-backed/BACKTEST_README.md
+```
+
+Use `--workers 1` by default in Codex sessions. Prior multiprocessing runs had sandbox/process-management friction, and the single-worker path is the known reliable path.
+
+If `--tickers` is omitted, codex-backed backtests use `codex-backed/configs/backtest_ticker_universe_config.json`. Use `--tickers` only for temporary overrides or smoke tests.
 
 ## Architecture
 
@@ -163,6 +190,63 @@ df = p.get_price_history("AAPL", "2023-01-01", "2023-06-01")
 
 Results land in `backend/backtest/results/` as CSVs + HTML.
 
+### Codex-Backed Strategy Engine
+
+`codex-backed/` is the newer buy/sell-separated engine built during this project. It uses native historical OHLCV feature generation and a JSON-only configuration model.
+
+Important files:
+- `codex-backed/src/codex_backed/` — CLI, feature builder, entry engine, trade simulator, risk, metrics, writers
+- `codex-backed/configs/` — all strategy/backtest/risk/exit JSON configs
+- `codex-backed/configs/backtest_ticker_universe_config.json` — default broad ticker universe for backtests
+- `codex-backed/results/` — backtest run artifacts
+- `codex-backed/cache/features.pkl` — native feature cache
+- `codex-backed/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` — audit trail for the 50-run optimization loop
+- `codex-backed/HLD.md`, `codex-backed/LLD.md`, `codex-backed/README.md`, `codex-backed/BACKTEST_README.md` — design and usage docs
+
+Backtest data flow:
+
+```
+cached OHLCV bars
+  -> native historical feature builder
+  -> setup detection from technical_setup_config.json
+  -> entry routing from entry_signal_config.json
+  -> risk sizing from risk_config.json
+  -> bar-by-bar exit simulation from exit_policy_config.json
+  -> metrics/report CSV/HTML outputs
+```
+
+The default feature source should remain `native`. `parent_csv` exists only as a debug/compatibility fallback and must not be used for real optimization because old parent signal CSV fields can hide missing historical setup data.
+
+#### Current Codex-Backed Baseline
+
+The completed 50-iteration optimization loop selected `loop50_49` as the best average-return run.
+
+Best tested short-term exit config:
+- target 1 / breakeven trigger: `2.375R`
+- partial sell at target 1: `0%`
+- move stop to breakeven after target: `true`
+- trailing stop: `2.5 ATR`
+- max simulation days: `60`
+
+Medium-term exit config remains:
+- target 1: `2.0R`
+- partial sell: `40%`
+- breakeven trigger: `1.25R`
+- trailing stop: `3.0 ATR`
+- max simulation days: `90`
+
+Best run metrics from `codex-backed/results/loop50_49`:
+- decisions: `161,842`
+- trades: `1,082`
+- avg return: `9.1276%`
+- median return: `7.6729%`
+- win rate: `58.3179%`
+- profit factor: `5.0810`
+
+Main tradeoff: this final config optimized absolute return, not smoothness. Compared with the smoother `loop50_38` baseline, avg return improved from `9.0335%` to `9.1276%`, but median return fell from `8.8654%` to `7.6729%` and win rate fell from `58.5952%` to `58.3179%`.
+
+Do not restart the 50-loop automation; it was completed and the heartbeat automation was deleted. If more tuning is requested, start a new named run series and append a new audit log instead of overwriting `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`.
+
 ### Frontend
 
 React 18 + TypeScript + Vite + Tailwind CSS v4. The Vite dev server proxies `/api` to `http://localhost:8000`. Main entry point is `src/pages/Dashboard.tsx`. Types are defined in `src/types/stock.ts`; API calls in `src/api/stockApi.ts`.
@@ -181,3 +265,5 @@ TTLCache (cachetools) inside `app/cache/`: 15-minute TTL for price data, 24-hour
 - `signal_cards` are always computed in `routers/stock.py` regardless of which engine is active — this fixed a pre-existing gap where the legacy path never populated them.
 - Tests that use `MultiSourceConfig` must call `reset_multi_config()` in teardown, same as `reset_algo_config()`.
 - When adding a new `MarketDataProvider` implementation, register it in `provider_factory.py`'s `_load_registry()`. The factory reads `active_provider` from `market_and_universe_config.json` at runtime.
+- Keep `codex-backed` configs pure JSON. Avoid YAML/TOML unless the user explicitly changes that constraint.
+- For codex-backed optimization, change config first, run a named backtest, inspect metrics, then log the decision. Do not tune from stale or parent CSV-derived features.

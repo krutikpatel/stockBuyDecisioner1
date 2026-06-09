@@ -1,0 +1,37 @@
+{
+  "date_range": {
+    "start": "2018-01-01",
+    "end": "2025-12-31"
+  },
+  "ticker_universe": {
+    "default_config": "backtest_ticker_universe_config.json",
+    "cli_override": "--tickers"
+  },
+  "horizons": {
+    "short_term": {
+      "enabled": true,
+      "max_simulation_days": 30
+    },
+    "medium_term": {
+      "enabled": true,
+      "max_simulation_days": 90
+    }
+  },
+  "entry_execution": {
+    "default_method": "NEXT_OPEN",
+    "max_wait_days": 10
+  },
+  "data_sources": {
+    "feature_source": "native",
+    "prices_cache_path": "codex-backed/cache/prices.pkl",
+    "feature_csv_path": "backend/backtest/results/signals_with_outcomes.csv"
+  },
+  "feature_generation": {
+    "source": "native",
+    "cache_path": "codex-backed/cache/features.pkl",
+    "signal_frequency": "weekly"
+  },
+  "outputs": {
+    "directory": "codex-backed/results"
+  }
+}

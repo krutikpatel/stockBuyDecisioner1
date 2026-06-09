@@ -1,0 +1,66 @@
+{
+  "exit_reasons": [
+    "PARTIAL_PROFIT_TAKEN",
+    "STOP_MOVED_TO_BREAKEVEN",
+    "TRAILING_STOP_RAISED",
+    "TRAILING_STOP_EXIT",
+    "STOP_LOSS_EXIT",
+    "TIME_STOP_EXIT",
+    "FAILED_SETUP_EXIT",
+    "MAX_SIM_WINDOW_EXIT"
+  ],
+  "default_exit_policy": {
+    "short_term": {
+      "max_simulation_days": 60,
+      "initial_stop": {
+        "method": "atr_or_support",
+        "atr_multiplier": 2.25,
+        "support_buffer_pct": 1.0
+      },
+      "partial_profit": {
+        "enabled": true,
+        "target_r_multiple": 2.25,
+        "sell_pct": 0,
+        "move_stop_to_breakeven": true,
+        "breakeven_after_r_multiple": 2.25
+      },
+      "trailing_stop": {
+        "enabled": true,
+        "method": "atr",
+        "atr_multiplier": 2.46875,
+        "activate_after_target_1": true
+      },
+      "time_stop": {
+        "enabled": false,
+        "days_without_progress": 10,
+        "min_open_return_pct": 1.0
+      }
+    },
+    "medium_term": {
+      "max_simulation_days": 141,
+      "initial_stop": {
+        "method": "atr_or_support",
+        "atr_multiplier": 2.25,
+        "support_buffer_pct": 1.5
+      },
+      "partial_profit": {
+        "enabled": false,
+        "target_r_multiple": 99.0,
+        "sell_pct": 40,
+        "move_stop_to_breakeven": true,
+        "breakeven_after_r_multiple": 1.75
+      },
+      "trailing_stop": {
+        "enabled": false,
+        "method": "atr",
+        "atr_multiplier": 3.0,
+        "activate_after_target_1": true
+      },
+      "time_stop": {
+        "enabled": false,
+        "days_without_progress": 20,
+        "min_open_return_pct": 2.0
+      }
+    }
+  }
+}

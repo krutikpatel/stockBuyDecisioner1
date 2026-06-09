@@ -1,0 +1,109 @@
+{
+  "primary_categories": [
+    "HYPER_GROWTH_STORY",
+    "PROFITABLE_GROWTH_LEADER",
+    "QUALITY_COMPOUNDER",
+    "CYCLICAL_RECOVERY",
+    "MATURE_VALUE",
+    "DEFENSIVE_DIVIDEND",
+    "TURNAROUND_RESTRUCTURING",
+    "SPECULATIVE_CATALYST"
+  ],
+
+  "archetype_rules": {
+    "speculative_ps_high_growth_min": 20.0,
+    "speculative_high_growth_rev_min": 0.20,
+    "speculative_ps_hard_min": 40.0,
+    "speculative_ps_high_growth_confidence": 80.0,
+    "speculative_ps_hard_confidence": 70.0,
+    "hyper_growth_rev_yoy_min": 0.30,
+    "hyper_growth_rev_alt_min": 0.20,
+    "hyper_growth_fpe_min": 40.0,
+    "hyper_growth_alt_confidence": 72.0,
+    "defensive_beta_max": 0.8,
+    "defensive_high_confidence": 80.0,
+    "defensive_low_confidence": 65.0,
+    "commodity_cyclical_confidence": 78.0,
+    "cyclical_beta_min": 1.3,
+    "cyclical_growth_confidence": 72.0,
+    "profitable_growth_rev_min": 0.15,
+    "turnaround_eps_growth_min": 0.10,
+    "turnaround_rev_qoq_min": 0.05,
+    "turnaround_slow_growth_max": 0.10,
+    "turnaround_confidence": 60.0,
+    "mature_value_rev_max": 0.10,
+    "mature_value_confidence": 68.0,
+    "default_confidence": 40.0,
+    "defensive_sectors": ["Healthcare", "Consumer Defensive", "Utilities"],
+    "commodity_sectors": ["Energy", "Basic Materials"],
+    "cyclical_sectors": ["Energy", "Basic Materials", "Industrials", "Consumer Cyclical"]
+  },
+
+  "secondary_tag_rules": {
+    "HIGH_MOMENTUM": {
+      "description": "Strong momentum: overbought RSI + strong recent returns",
+      "all": [
+        { "field": "rsi14", "operator": ">=", "value": 60 },
+        { "field": "perf_1m", "operator": ">=", "value": 5.0 }
+      ]
+    },
+    "LOW_MOMENTUM": {
+      "description": "Weak momentum: weak RSI and poor recent returns",
+      "all": [
+        { "field": "rsi14", "operator": "<", "value": 40 },
+        { "field": "perf_1m", "operator": "<", "value": -5.0 }
+      ]
+    },
+    "EXPENSIVE_VALUATION": {
+      "description": "Elevated valuation: high forward P/E or P/S",
+      "any": [
+        { "field": "forward_pe", "operator": ">", "value": 40.0 },
+        { "field": "price_to_sales", "operator": ">", "value": 10.0 }
+      ]
+    },
+    "CHEAP_VALUATION": {
+      "description": "Discounted valuation: low forward P/E and reasonable P/S",
+      "all": [
+        { "field": "forward_pe", "operator": "<", "value": 15.0 },
+        { "field": "price_to_sales", "operator": "<", "value": 3.0 }
+      ]
+    },
+    "HIGH_ATR": {
+      "description": "High volatility stock (ATR% > 3.5%)",
+      "field": "atr_percent", "operator": ">", "value": 3.5
+    },
+    "HIGH_QUALITY": {
+      "description": "Strong business quality: high ROIC and operating margin",
+      "all": [
+        { "field": "roic", "operator": ">=", "value": 15.0 },
+        { "field": "operating_margin", "operator": ">=", "value": 0.15 }
+      ]
+    },
+    "SECTOR_LEADER": {
+      "description": "Outperforming its sector ETF significantly on 20-day basis",
+      "field": "rs_vs_sector_20d", "operator": ">=", "value": 3.0
+    },
+    "SECTOR_LAGGARD": {
+      "description": "Underperforming its sector ETF on 20-day basis",
+      "field": "rs_vs_sector_20d", "operator": "<", "value": -3.0
+    },
+    "EARNINGS_NEAR": {
+      "description": "Earnings within the next 14 days — elevated binary risk",
+      "all": [
+        { "field": "earnings_days_away", "operator": "exists" },
+        { "field": "earnings_days_away", "operator": "<=", "value": 14 }
+      ]
+    },
+    "HIGH_SHORT_INTEREST": {
+      "description": "Short float > 15% — squeeze potential but also high conviction bears",
+      "field": "short_float", "operator": ">", "value": 15.0
+    },
+    "HIGH_INSTITUTIONAL_OWNERSHIP": {
+      "description": "Institutional ownership > 70% — strong institutional conviction",
+      "all": [
+        { "field": "institutional_ownership", "operator": ">", "value": 70.0 },
+        { "field": "institutional_ownership", "operator": "<", "value": 95.0 }
+      ]
+    }
+  }
+}

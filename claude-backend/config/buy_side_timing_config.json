@@ -1,0 +1,92 @@
+{
+  "_comment": "Buy-side dislocation-timing config for quality stocks that passed the quality gate.",
+  "decision_thresholds": {
+    "buy_min_score": 60
+  },
+  "rules": [
+    {
+      "id": "rsi_deep_oversold",
+      "logic": {"field": "rsi14", "operator": "between", "value": [20, 40]},
+      "points": 25,
+      "reason": "RSI deeply oversold (20-40): dislocation entry zone"
+    },
+    {
+      "id": "rsi_turning_up",
+      "logic": {"field": "rsi_slope", "operator": ">", "value": 0},
+      "points": 10,
+      "reason": "RSI slope positive: momentum recovering"
+    },
+    {
+      "id": "dist_from_52w_high_deep",
+      "logic": {"field": "dist_from_52w_high", "operator": "<=", "value": -0.20},
+      "points": 15,
+      "reason": "Price ≥ 20% below 52-week high: meaningful pullback from peak"
+    },
+    {
+      "id": "volume_spike",
+      "logic": {"field": "breakout_volume_multiple", "operator": ">=", "value": 1.3},
+      "points": 10,
+      "reason": "Volume spike ≥ 1.3×: institutional accumulation signal"
+    },
+    {
+      "id": "atr_elevated",
+      "logic": {"field": "atr_percent", "operator": ">=", "value": 2.0},
+      "points": 8,
+      "reason": "ATR% ≥ 2%: elevated volatility creates entry opportunity"
+    },
+    {
+      "id": "obv_positive",
+      "logic": {"field": "obv_trend", "operator": ">", "value": 0},
+      "points": 7,
+      "reason": "OBV trend positive: underlying accumulation intact"
+    },
+    {
+      "id": "price_above_vwap",
+      "logic": {"field": "vwap_deviation", "operator": ">", "value": 0},
+      "points": 5,
+      "reason": "Price above VWAP: intraday demand active"
+    },
+    {
+      "id": "stochrsi_oversold",
+      "logic": {"field": "stochastic_rsi", "operator": "<=", "value": 20},
+      "points": 8,
+      "reason": "StochRSI ≤ 20: short-term deeply oversold"
+    },
+    {
+      "id": "cmf_positive",
+      "logic": {"field": "chaikin_money_flow", "operator": ">", "value": 0},
+      "points": 5,
+      "reason": "Chaikin Money Flow positive: buying pressure confirmed"
+    },
+    {
+      "id": "drawdown_significant",
+      "logic": {"field": "max_drawdown_3m", "operator": "<=", "value": -0.15},
+      "points": 7,
+      "reason": "3-month drawdown ≥ 15%: stock has corrected meaningfully"
+    },
+    {
+      "id": "penalty_rsi_overbought",
+      "logic": {"field": "rsi14", "operator": ">", "value": 70},
+      "points": -20,
+      "reason": "PENALTY: RSI > 70 — overbought, poor entry timing"
+    },
+    {
+      "id": "penalty_extended_above_sma20",
+      "logic": {"field": "sma20_relative", "operator": ">", "value": 8.0},
+      "points": -15,
+      "reason": "PENALTY: price > 8% above SMA20 — extended, risk of pullback"
+    },
+    {
+      "id": "penalty_downtrend",
+      "logic": {"field": "sma200_relative", "operator": "<", "value": -15.0},
+      "points": -25,
+      "reason": "PENALTY: price > 15% below SMA200 — structural downtrend"
+    },
+    {
+      "id": "penalty_bear_market",
+      "logic": {"field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF"},
+      "points": -40,
+      "reason": "PENALTY: bear market regime — macro environment hostile to long entries"
+    }
+  ]
+}

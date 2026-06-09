@@ -1,0 +1,37 @@
+{
+  "primary_objective": "realized_return_pct",
+  "secondary_metrics": [
+    "profit_factor",
+    "win_rate_pct",
+    "mfe_capture_pct",
+    "max_drawdown_pct"
+  ],
+  "constraints": {
+    "min_trades": 200,
+    "max_avg_mae_pct": 12.0,
+    "min_profit_factor": 1.2
+  },
+  "walk_forward": {
+    "enabled": true,
+    "train_weeks": 104,
+    "test_weeks": 26,
+    "step_weeks": 13
+  },
+  "entry_parameter_space": {
+    "rsi_oversold_max": [30, 35, 40],
+    "dist_from_52w_high_max": [-15, -20, -25],
+    "sales_growth_yoy_min": [0.05, 0.1, 0.15],
+    "rs_vs_spy_20d_min": [0.0, 2.0, 3.0]
+  },
+  "exit_parameter_space": {
+    "short_term_initial_atr_multiplier": [1.5, 2.0, 2.5],
+    "short_term_target_r_multiple": [1.5, 2.0, 2.5],
+    "short_term_partial_sell_pct": [33, 50, 67],
+    "short_term_trailing_atr_multiplier": [2.0, 2.5, 3.0],
+    "medium_term_initial_atr_multiplier": [2.0, 2.5, 3.0],
+    "medium_term_target_r_multiple": [2.0, 2.5, 3.0],
+    "medium_term_partial_sell_pct": [33, 40, 50],
+    "medium_term_trailing_atr_multiplier": [2.5, 3.0, 3.5]
+  }
+}
+

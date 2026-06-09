@@ -1,0 +1,157 @@
+ticker,date,path_taken,decision,score,fwd_return_20d,fwd_return_60d,reasons
+NVDA,2022-01-03,deteriorating_business,WATCHLIST,15.0,-18.2,-8.06,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2022-02-01,deteriorating_business,WATCHLIST,15.0,-1.68,-19.7,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2022-03-02,deteriorating_business,WATCHLIST,15.0,14.33,-26.3,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2022-03-30,deteriorating_business,WATCHLIST,15.0,-28.56,-39.07,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2022-04-28,deteriorating_business,WATCHLIST,23.0,-9.76,-16.41,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-05-26,deteriorating_business,WATCHLIST,23.0,-5.48,-3.73,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-06-27,deteriorating_business,WATCHLIST,23.0,-1.99,-21.36,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-07-26,deteriorating_business,WATCHLIST,23.0,3.92,-27.09,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-08-23,deteriorating_business,WATCHLIST,23.0,-22.79,-7.37,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-09-21,deteriorating_business,WATCHLIST,23.0,-9.12,27.87,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-10-19,deteriorating_business,WATCHLIST,23.0,32.02,46.93,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+NVDA,2022-11-16,deteriorating_business,WATCHLIST,15.0,6.58,44.42,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2022-12-15,deteriorating_business,WATCHLIST,15.0,4.42,42.95,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-01-17,deteriorating_business,WATCHLIST,15.0,29.76,49.52,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-02-14,deteriorating_business,WATCHLIST,15.0,5.49,24.43,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-03-15,deteriorating_business,WATCHLIST,15.0,9.22,60.04,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-04-13,deteriorating_business,WATCHLIST,15.0,7.99,60.26,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-05-11,deteriorating_business,WATCHLIST,15.0,35.68,56.3,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-06-09,deteriorating_business,WATCHLIST,15.0,9.38,21.4,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-07-11,deteriorating_business,WATCHLIST,15.0,5.33,3.87,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-08-08,deteriorating_business,WATCHLIST,15.0,5.38,-5.23,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-09-06,deteriorating_business,WATCHLIST,15.0,-6.42,-0.62,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-10-04,deteriorating_business,WATCHLIST,15.0,-3.9,12.46,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-11-01,deteriorating_business,WATCHLIST,15.0,10.5,48.33,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-11-30,deteriorating_business,WATCHLIST,15.0,5.89,66.07,[+15] Debt/equity > 2.0: elevated leverage risk
+NVDA,2023-12-29,deteriorating_business,WATCHLIST,15.0,26.76,82.25,[+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-01-03,deteriorating_business,WATCHLIST,25.0,-4.07,-2.21,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-02-01,deteriorating_business,WATCHLIST,25.0,-4.49,-6.16,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-03-02,deteriorating_business,WATCHLIST,25.0,6.73,-13.55,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-03-30,deteriorating_business,WATCHLIST,25.0,-7.95,-20.2,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-04-28,deteriorating_business,WATCHLIST,25.0,-12.01,-7.22,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-05-26,deteriorating_business,WATCHLIST,25.0,-1.47,16.47,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-06-27,deteriorating_business,WATCHLIST,25.0,7.02,8.66,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-07-26,deteriorating_business,WATCHLIST,25.0,10.46,-4.97,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-08-23,deteriorating_business,WATCHLIST,25.0,-8.08,-10.88,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-09-21,deteriorating_business,WATCHLIST,25.0,-6.41,-11.05,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-10-19,deteriorating_business,WATCHLIST,25.0,3.6,-5.35,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-11-16,deteriorating_business,WATCHLIST,25.0,-8.26,3.12,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2022-12-15,deteriorating_business,WATCHLIST,25.0,-0.41,12.25,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-01-17,deteriorating_business,WATCHLIST,25.0,12.87,21.97,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-02-14,deteriorating_business,WATCHLIST,25.0,-0.14,13.41,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-03-15,deteriorating_business,WATCHLIST,25.0,8.22,18.45,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-04-13,deteriorating_business,WATCHLIST,25.0,4.95,13.76,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-05-11,deteriorating_business,WATCHLIST,25.0,4.29,3.63,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-06-09,deteriorating_business,WATCHLIST,25.0,3.93,1.21,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-07-11,deteriorating_business,WATCHLIST,25.0,-4.4,-7.54,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-08-08,deteriorating_business,WATCHLIST,25.0,1.87,-3.11,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-09-06,deteriorating_business,WATCHLIST,25.0,-5.06,3.99,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-10-04,deteriorating_business,WATCHLIST,25.0,0.18,11.01,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-11-01,deteriorating_business,WATCHLIST,25.0,9.33,8.23,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-11-30,deteriorating_business,WATCHLIST,25.0,1.36,-4.37,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+AAPL,2023-12-29,deteriorating_business,WATCHLIST,25.0,-2.33,-9.87,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-01-03,deteriorating_business,WATCHLIST,15.0,-7.76,-6.05,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-02-01,deteriorating_business,WATCHLIST,15.0,-2.57,-6.0,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-03-02,deteriorating_business,WATCHLIST,15.0,4.55,-11.22,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-03-30,deteriorating_business,WATCHLIST,15.0,-7.72,-15.41,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-04-28,deteriorating_business,WATCHLIST,15.0,-7.98,-12.82,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-05-26,deteriorating_business,WATCHLIST,15.0,-0.38,4.18,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-06-27,deteriorating_business,WATCHLIST,15.0,-4.9,-9.6,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-07-26,deteriorating_business,WATCHLIST,15.0,9.97,-5.92,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-08-23,deteriorating_business,WATCHLIST,15.0,-13.56,-12.31,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-09-21,deteriorating_business,WATCHLIST,23.0,-1.03,4.5,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown
+MSFT,2022-10-19,deteriorating_business,WATCHLIST,15.0,2.51,1.92,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-11-16,deteriorating_business,WATCHLIST,15.0,3.01,12.59,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2022-12-15,deteriorating_business,WATCHLIST,15.0,-3.48,6.87,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-01-17,deteriorating_business,WATCHLIST,15.0,13.24,20.89,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-02-14,deteriorating_business,WATCHLIST,15.0,-2.23,14.23,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-03-15,deteriorating_business,WATCHLIST,15.0,9.19,23.38,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-04-13,deteriorating_business,WATCHLIST,15.0,6.99,14.96,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-05-11,deteriorating_business,WATCHLIST,15.0,5.61,5.37,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-06-09,deteriorating_business,WATCHLIST,15.0,1.74,2.08,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-07-11,deteriorating_business,WATCHLIST,15.0,-1.93,-3.86,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-08-08,deteriorating_business,WATCHLIST,15.0,2.31,6.36,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-09-06,deteriorating_business,WATCHLIST,15.0,-4.18,14.06,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-10-04,deteriorating_business,WATCHLIST,15.0,8.5,18.13,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-11-01,deteriorating_business,WATCHLIST,15.0,9.71,18.31,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-11-30,deteriorating_business,WATCHLIST,15.0,-0.76,7.8,[+15] Debt/equity > 2.0: elevated leverage risk
+MSFT,2023-12-29,deteriorating_business,WATCHLIST,15.0,8.66,12.28,[+15] Debt/equity > 2.0: elevated leverage risk
+INTC,2022-01-03,deteriorating_business,WATCHLIST,42.0,-8.01,-2.61,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-02-01,deteriorating_business,WATCHLIST,42.0,0.6,-3.58,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-03-02,deteriorating_business,WATCHLIST,42.0,5.24,-10.33,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-03-30,deteriorating_business,WATCHLIST,42.0,-8.92,-24.29,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-04-28,deteriorating_business,WATCHLIST,42.0,-6.44,-16.17,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-05-26,deteriorating_business,WATCHLIST,42.0,-11.15,-21.13,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2022-06-27,deteriorating_business,WATCHLIST,50.0,0.85,-25.56,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-07-26,deteriorating_business,WATCHLIST,50.0,-11.98,-32.59,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-08-23,deteriorating_business,WATCHLIST,50.0,-16.14,-11.84,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-09-21,deteriorating_business,WATCHLIST,50.0,-8.68,-3.35,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-10-19,deteriorating_business,WATCHLIST,50.0,15.11,15.38,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-11-16,deteriorating_business,WATCHLIST,50.0,-8.06,-1.83,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2022-12-15,deteriorating_business,WATCHLIST,50.0,9.02,5.92,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+8] Price > 15% below SMA200: structural breakdown; [+7] ROE negative: destroying shareholder value
+INTC,2023-01-17,deteriorating_business,WATCHLIST,42.0,-2.06,9.87,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-02-14,deteriorating_business,WATCHLIST,42.0,-0.8,1.18,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-03-15,deteriorating_business,WATCHLIST,42.0,13.09,10.77,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-04-13,deteriorating_business,WATCHLIST,42.0,-9.81,4.07,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-05-11,deteriorating_business,WATCHLIST,42.0,8.59,21.78,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-06-09,deteriorating_business,WATCHLIST,42.0,6.25,18.42,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-07-11,deteriorating_business,WATCHLIST,42.0,5.54,8.29,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-08-08,deteriorating_business,WATCHLIST,42.0,5.6,6.48,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-09-06,deteriorating_business,WATCHLIST,42.0,-2.84,21.27,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-10-04,deteriorating_business,WATCHLIST,42.0,3.79,40.32,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-11-01,deteriorating_business,WATCHLIST,42.0,20.27,15.48,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-11-30,deteriorating_business,WATCHLIST,42.0,12.42,-5.79,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+INTC,2023-12-29,deteriorating_business,WATCHLIST,42.0,-14.59,-12.64,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] FCF negative: cash burn without fundamental support; [+7] ROE negative: destroying shareholder value
+PFE,2022-01-03,deteriorating_business,WATCHLIST,35.0,-5.61,-6.73,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-02-01,deteriorating_business,WATCHLIST,35.0,-10.12,-4.82,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-03-02,deteriorating_business,WATCHLIST,35.0,9.94,14.11,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-03-30,deteriorating_business,WATCHLIST,35.0,-3.68,-0.26,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-04-28,deteriorating_business,WATCHLIST,35.0,7.76,4.39,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-05-26,deteriorating_business,WATCHLIST,35.0,-3.91,-10.39,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-06-27,deteriorating_business,WATCHLIST,35.0,0.81,-14.69,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-07-26,deteriorating_business,WATCHLIST,35.0,-7.49,-16.93,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-08-23,deteriorating_business,WATCHLIST,35.0,-8.52,0.94,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-09-21,deteriorating_business,WATCHLIST,35.0,-1.84,23.11,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-10-19,deteriorating_business,WATCHLIST,35.0,12.41,7.81,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-11-16,deteriorating_business,WATCHLIST,35.0,11.57,-8.18,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2022-12-15,deteriorating_business,WATCHLIST,35.0,-14.05,-24.17,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-01-17,deteriorating_business,WATCHLIST,35.0,-4.25,-9.18,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-02-14,deteriorating_business,WATCHLIST,35.0,-7.87,-13.11,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-03-15,deteriorating_business,WATCHLIST,35.0,2.95,-2.21,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-04-13,deteriorating_business,WATCHLIST,35.0,-8.4,-12.2,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-05-11,deteriorating_business,WATCHLIST,43.0,3.7,-4.11,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-06-09,deteriorating_business,WATCHLIST,35.0,-7.57,-10.82,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-07-11,deteriorating_business,WATCHLIST,43.0,0.05,-6.49,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-08-08,deteriorating_business,WATCHLIST,35.0,-3.56,-14.39,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-09-06,deteriorating_business,WATCHLIST,43.0,-3.08,-10.15,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-10-04,deteriorating_business,WATCHLIST,35.0,-8.41,-12.4,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-11-01,deteriorating_business,WATCHLIST,43.0,1.22,-8.89,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-11-30,deteriorating_business,WATCHLIST,35.0,-5.51,-9.92,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+PFE,2023-12-29,deteriorating_business,WATCHLIST,43.0,-4.74,-2.06,[+10] Revenue QoQ negative: sequential deceleration; [+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-01-03,deteriorating_business,WATCHLIST,25.0,-1.37,-2.5,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-02-01,deteriorating_business,WATCHLIST,25.0,-2.46,6.81,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-03-02,deteriorating_business,WATCHLIST,25.0,1.34,20.21,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-03-30,deteriorating_business,WATCHLIST,25.0,8.05,15.61,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-04-28,deteriorating_business,WATCHLIST,25.0,9.78,-4.51,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-05-26,deteriorating_business,WATCHLIST,25.0,-2.53,-14.16,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-06-27,deteriorating_business,WATCHLIST,25.0,-10.76,-20.76,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-07-26,deteriorating_business,WATCHLIST,25.0,-1.31,-13.57,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-08-23,deteriorating_business,WATCHLIST,25.0,-10.02,6.68,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-09-21,deteriorating_business,WATCHLIST,25.0,-2.67,15.68,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-10-19,deteriorating_business,WATCHLIST,25.0,21.81,26.18,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-11-16,deteriorating_business,WATCHLIST,25.0,-2.43,2.62,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2022-12-15,deteriorating_business,WATCHLIST,25.0,6.17,0.57,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-01-17,deteriorating_business,WATCHLIST,25.0,-0.93,4.72,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-02-14,deteriorating_business,WATCHLIST,25.0,-4.39,-10.18,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-03-15,deteriorating_business,WATCHLIST,25.0,10.56,-11.65,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-04-13,deteriorating_business,WATCHLIST,25.0,-15.03,-22.34,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-05-11,deteriorating_business,WATCHLIST,25.0,-5.96,-14.9,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-06-09,deteriorating_business,WATCHLIST,25.0,-2.81,-6.77,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-07-11,deteriorating_business,WATCHLIST,25.0,-6.89,-3.81,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-08-08,deteriorating_business,WATCHLIST,33.0,3.03,11.97,[+15] Debt/equity > 2.0: elevated leverage risk; [+8] Price > 15% below SMA200: structural breakdown; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-09-06,deteriorating_business,WATCHLIST,25.0,0.27,15.58,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-10-04,deteriorating_business,WATCHLIST,25.0,8.38,16.73,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-11-01,deteriorating_business,WATCHLIST,25.0,6.35,14.35,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-11-30,deteriorating_business,WATCHLIST,25.0,1.27,4.02,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration
+T,2023-12-29,deteriorating_business,WATCHLIST,25.0,6.17,6.29,[+15] Debt/equity > 2.0: elevated leverage risk; [+10] EPS growth YoY negative: earnings deterioration

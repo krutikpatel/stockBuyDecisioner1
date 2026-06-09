@@ -1,0 +1,114 @@
+{
+  "signal_definitions": {
+    "STRONG_UPTREND": {
+      "description": "Price above SMA50 and SMA200, trend classified as uptrend",
+      "all": [
+        { "field": "sma50_relative", "operator": ">", "value": 0 },
+        { "field": "sma200_relative", "operator": ">", "value": 0 },
+        { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] }
+      ]
+    },
+    "SMA50_PULLBACK": {
+      "description": "Price pulled back to SMA50 zone with slope rising",
+      "all": [
+        { "field": "sma50_relative", "operator": ">=", "value": -5 },
+        { "field": "sma50_relative", "operator": "<=", "value": 5 },
+        { "field": "sma50_slope", "operator": ">=", "value": 0 }
+      ]
+    },
+    "RSI_PULLBACK_ZONE": {
+      "description": "RSI pulled back to healthy 38-58 zone without being oversold",
+      "all": [
+        { "field": "rsi14", "operator": ">=", "value": 38 },
+        { "field": "rsi14", "operator": "<=", "value": 58 }
+      ]
+    },
+    "VOLUME_DRY_UP": {
+      "description": "Volume drying up on pullback — sellers not pressing",
+      "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8
+    },
+    "BREAKOUT_CONFIRMED": {
+      "description": "Price breaking out above resistance on elevated volume",
+      "all": [
+        { "field": "breakout_volume_multiple", "operator": ">=", "value": 1.5 },
+        { "field": "sma50_relative", "operator": ">", "value": 0 },
+        { "field": "dist_from_20d_high", "operator": ">=", "value": -1 }
+      ]
+    },
+    "RS_LEADER_VS_SPY": {
+      "description": "Stock outperforming SPY on 20-day basis",
+      "field": "rs_vs_spy_20d", "operator": ">=", "value": 0
+    },
+    "TRUE_BROKEN_CHART": {
+      "description": "Confirmed downtrend: below both SMAs, trend = downtrend, weak RS",
+      "all": [
+        { "field": "trend_label", "operator": "==", "value": "downtrend" },
+        { "field": "sma50_relative", "operator": "<", "value": -5 },
+        { "field": "sma200_relative", "operator": "<", "value": 0 }
+      ]
+    },
+    "BROKEN_SUPPORT": {
+      "description": "Heavy-volume break of recent support: large 1W loss on high relative volume",
+      "all": [
+        { "field": "perf_1w", "operator": "<", "value": -3 },
+        { "field": "breakout_volume_multiple", "operator": ">=", "value": 1.5 },
+        { "field": "rsi_slope", "operator": "<", "value": 0 }
+      ]
+    },
+    "OVERSOLD_REVERSAL": {
+      "description": "RSI in oversold zone (25-42) and starting to turn up",
+      "all": [
+        { "field": "rsi14", "operator": ">=", "value": 25 },
+        { "field": "rsi14", "operator": "<=", "value": 42 },
+        { "field": "rsi_slope", "operator": ">", "value": 0 }
+      ]
+    },
+    "EXTENDED_ABOVE_SMA20": {
+      "description": "Price is over-extended above 20-day SMA — chasing risk",
+      "field": "sma20_relative", "operator": ">", "value": 8
+    }
+  },
+
+  "technical_setups": {
+    "BROKEN_CHART_QUALITY_RECOVERY": {
+      "priority": 0,
+      "description": "Broken chart but RSI turning up from oversold — quality recovery candidate",
+      "required_signals": ["TRUE_BROKEN_CHART", "OVERSOLD_REVERSAL"],
+      "optional_signals": ["VOLUME_DRY_UP"],
+      "blocking_signals": [],
+      "min_required_optional_signals": 0
+    },
+    "TRUE_BROKEN_CHART_AVOID": {
+      "priority": 1,
+      "description": "Always avoid — chart structure is broken without recovery signals",
+      "required_signals": ["TRUE_BROKEN_CHART"],
+      "optional_signals": [],
+      "blocking_signals": [],
+      "min_required_optional_signals": 0
+    },
+    "GROWTH_LEADER_PULLBACK": {
+      "priority": 2,
+      "description": "Strong-uptrend growth leader pulling back to SMA50 zone",
+      "required_signals": ["STRONG_UPTREND", "SMA50_PULLBACK", "RSI_PULLBACK_ZONE"],
+      "optional_signals": ["VOLUME_DRY_UP", "RS_LEADER_VS_SPY"],
+      "blocking_signals": ["TRUE_BROKEN_CHART", "BROKEN_SUPPORT", "EXTENDED_ABOVE_SMA20"],
+      "min_required_optional_signals": 2
+    },
+    "BREAKOUT_MOMENTUM": {
+      "priority": 3,
+      "description": "Price breaking out with volume confirmation",
+      "required_signals": ["BREAKOUT_CONFIRMED"],
+      "optional_signals": ["STRONG_UPTREND", "RS_LEADER_VS_SPY"],
+      "blocking_signals": ["TRUE_BROKEN_CHART"],
+      "min_required_optional_signals": 1
+    },
+    "DOWNTREND_REBOUND_CANDIDATE": {
+      "priority": 4,
+      "description": "Oversold chart turning up — potential rebound but not confirmed uptrend",
+      "required_signals": ["OVERSOLD_REVERSAL"],
+      "optional_signals": ["VOLUME_DRY_UP"],
+      "blocking_signals": [],
+      "min_required_optional_signals": 0
+    }
+  }
+}

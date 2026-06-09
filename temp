@@ -17,3 +17,90 @@ And following is status from last session progress:
 i re-ran backtest after  changes as per Issues a to f mentioned in changelog/2_signal_improvement_plan.md, but i dont see much improvements. check the backtest report at backend/backtest/results/report.html and suggest imptovements. use relevant multi-perona subject
   matter experts in this area to comeup with solution. do not make
     any code changes yet
+
+---
+new approach:
+separate into buy and sell signals
+-backtest shall not be done on specific nth day sell (eg 20th, 63rd)
+
+What to Build
+
+    Current (broken):
+      One composite score → routes to buy or avoid
+      Problem: features for buying and avoiding are opposite
+
+    Better architecture:
+      ┌─────────────────────────────────┐
+      │  Quality gate (is this a        │
+      │  fundamentally sound business?) │
+      └────────────┬────────────────────┘
+                   │
+           ┌───────┴────────┐
+           ▼                ▼
+      YES: quality       NO: deteriorating
+           │                │
+           ▼                ▼
+      Buy-side model    Avoid-side model
+      "When to buy?"    "How bad is it?"
+      Features:         Features:
+      - dislocation     - revenue decel
+      - RSI recovery    - margin compress
+      - vol spike       - debt rising
+      - 52W distance    - insider selling
+           │                │
+           ▼                ▼
+      BUY / WAIT       AVOID / WATCHLIST
+
+    The quality gate is the first split. Everything that passes (quality intact) enters the buy-side engine. Only things that fail (business deteriorating) go to the avoid engine. This matches how fundamental investors actually think: you only ask "when to buy" after
+    you've already decided "worth owning."
+
+    ---
+    Short answer: Yes, split the engine. The buy-side should be a dislocation-timing model scored on MFE. The avoid-side should be a fundamental-deterioration model that only applies to stocks with genuine business problems — and needs losers added to the universe to
+  be
+    trainable at all. create a detailed concrete plan to implement this on current backend, forget about frontend for now. i want to use as many config params as possible from current ones in this new engine approach. ask me clarifying questions
+
+
+    ====
+
+    codex Clarifying Questions
+
+1.Do you want the app to track actual open positions, including entry date, entry price, size, current P&L, peak P&L, stop, and target?
+-not for now
+
+2.Should the sell engine work only for positions you explicitly own, or should it also generate hypothetical exit analysis for every historical buy signal?
+-generate hypothetical exit analysis for every historical buy signal
+
+3.Do you want separate sell rules by setup type? For example, OVERSOLD_REBOUND_CANDIDATE exits faster, while bull-regime leaders get wider trailing stops.
+-not for now
+
+4.Should the system optimize primarily for absolute return, SPY excess return, QQQ/sector excess return, or risk-adjusted return?
+-system optimize primarily for absolute return
+
+5.For short-term trades, what is your preferred style: quick tactical exits at +2R, partial profit-taking, or trailing stops?
+-partial profit-taking and trailing stops
+
+6.Should BUY_STARTER_STRONG_BUT_EXTENDED be allowed as a new entry, or should it mostly mean “hold existing winner / add only small starter”?
+-BUY_STARTER_STRONG_BUT_EXTENDED should be allowed as a new entry
+
+7.Do you want the new architecture to keep the existing labels for compatibility, or are you open to replacing them with cleaner entry/exit labels?
+-i want clean work, dont worry about compatibility. i will replace old work, or think of writing fresh engine
+
+8.Should config remain pure JSON, or are YAML/TOML acceptable if they make the strategy rules easier to read?
+-config shall remain as pure json
+
+9.backtest shall  not be done on specific nth day sell (eg 20th, 63rd), i need smarter backtest. because once i am in profit, i could sell on any day.
+
+===
+codex: backtest and fine tuning
+Our base working directory is: codex_backed. all changes shall remain inside this directory
+refer to agennts.md (hosted at root level) )file for quick reference on this project, also refer readme.md and backtest_readme , HLD.md and LLD.md (these are inside codex_backed directory) to familiarize
+
+task:
+now do following steps in loop for 100 times:
+-run backtests (using 8 workers)
+-iinvestigate the result and suggest improvements. But refer to codex-backed/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md to see what has been tried sofar so that you dont repeat yourself. then suggest optimal improvements.
+-log the improvements in same md file
+-then imeplement those improvements
+
+pause for 1 minute between each iteration.
+

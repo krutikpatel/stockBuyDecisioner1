@@ -1,0 +1,372 @@
+{
+  "entry_labels": ["NO_TRADE", "WATCHLIST", "BUY_STARTER", "BUY_FULL", "BUY_AGGRESSIVE"],
+  "entry_router": {
+    "method": "priority_first_match",
+    "rules": [
+      {
+        "id": "weak_ticker_exclusion_route",
+        "priority": 1000,
+        "description": "Avoid tickers with persistent negative edge in native my_run_02",
+        "logic": {
+          "field": "ticker",
+          "operator": "in",
+          "value": ["SLB", "DLTR", "TXN", "SYK", "BA", "GIS", "SNOW", "BIIB", "ADI", "CHTR", "MSFT", "SRE", "ITW", "AMZN", "TTWO", "AVGO", "KR", "JNJ", "HD", "UNP", "CSX", "BMY", "TGT", "PYPL", "ABT", "KMB", "SPOT", "ASML", "UPS", "GM", "SNAP", "IQV", "LRCX", "RCL", "USB", "NVDA", "ISRG", "AMAT", "MO", "JPM", "PLD", "AXP", "AAPL", "TSM", "INTC", "LULU", "LYV", "BAC", "BK", "ORCL", "BLK", "AMD", "WFC", "F", "ECL", "DIS", "CBRE", "CRM", "NFLX", "NOW", "MMM", "NSC", "BKNG", "MS", "GOOGL"]
+        },
+        "entry_engine": "no_trade"
+      },
+      {
+        "id": "breakout_entry_route",
+        "priority": 140,
+        "description": "Confirmed breakout entry in resilient or liquidity-supportive regimes",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "BREAKOUT_MOMENTUM" },
+            { "field": "market_regime", "operator": "in", "value": ["BEAR_RISK_OFF", "LIQUIDITY_RALLY"] }
+          ]
+        },
+        "entry_engine": "breakout_entry"
+      },
+      {
+        "id": "pullback_entry_route",
+        "priority": 130,
+        "description": "Clean trend pullback with confirmation",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
+            { "field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF" }
+          ]
+        },
+        "entry_engine": "pullback_entry"
+      },
+      {
+        "id": "quality_dislocation_route",
+        "priority": 120,
+        "description": "Native technical dislocation/rebound setup in supportive regimes",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "BROKEN_CHART_QUALITY_RECOVERY" },
+            { "field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF" }
+          ]
+        },
+        "entry_engine": "quality_dislocation"
+      },
+      {
+        "id": "bull_leadership_route",
+        "priority": 110,
+        "description": "Risk-on technical leader with relative strength",
+        "logic": {
+          "all": [
+            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 },
+            { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+            { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] },
+            { "field": "sma20_relative", "operator": "<=", "value": 8.0 }
+          ]
+        },
+        "entry_engine": "bull_leadership"
+      },
+      {
+        "id": "oversold_rebound_route",
+        "priority": 100,
+        "description": "Oversold tactical rebound with early stabilization",
+        "logic": {
+          "all": [
+            { "field": "rsi14", "operator": "between", "value": [25, 42] },
+            { "field": "rsi_slope", "operator": ">", "value": 0.0 }
+          ]
+        },
+        "entry_engine": "oversold_rebound"
+      },
+      {
+        "id": "extended_starter_route",
+        "priority": 90,
+        "description": "Strong but extended leadership starter",
+        "logic": {
+          "all": [
+            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
+            { "field": "sma20_relative", "operator": ">", "value": 8.0 },
+            { "field": "sma50_slope", "operator": ">=", "value": 0.0 }
+          ]
+        },
+        "entry_engine": "extended_starter"
+      }
+    ],
+    "fallback_entry_engine": "no_trade"
+  },
+  "entry_engines": {
+    "quality_dislocation": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "rebound_setup",
+          "points": 25,
+          "logic": {
+            "any": [
+              { "field": "selected_setup", "operator": "==", "value": "BROKEN_CHART_QUALITY_RECOVERY" },
+              { "field": "selected_setup", "operator": "==", "value": "DOWNTREND_REBOUND_CANDIDATE" }
+            ]
+          },
+          "reason": "Rebound setup is detected from native technicals"
+        },
+        {
+          "id": "deep_dislocation",
+          "points": 25,
+          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -20 },
+          "reason": "Price is meaningfully below the 52-week high"
+        },
+        {
+          "id": "oversold",
+          "points": 20,
+          "logic": { "field": "rsi14", "operator": "<=", "value": 35 },
+          "reason": "RSI is deeply oversold"
+        },
+        {
+          "id": "supportive_rebound_regime",
+          "points": 20,
+          "logic": { "field": "market_regime", "operator": "in", "value": ["BEAR_RISK_OFF", "SIDEWAYS_CHOPPY", "LIQUIDITY_RALLY"] },
+          "reason": "Regime supports dislocation/rebound trades"
+        },
+        {
+          "id": "volume_or_rs_confirmation",
+          "points": 10,
+          "logic": {
+            "any": [
+              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+              { "field": "updown_volume_ratio", "operator": ">", "value": 1.0 },
+              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+            ]
+          },
+          "reason": "Native volume or relative-strength confirmation is present"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        {
+          "label": "BUY_FULL",
+          "logic": {
+            "all": [
+              { "field": "entry_score", "operator": ">=", "value": 80 },
+              { "field": "entry_score", "operator": "<=", "value": 80 }
+            ]
+          }
+        },
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "all": [
+              { "field": "entry_score", "operator": ">=", "value": 70 },
+              { "field": "entry_score", "operator": "<=", "value": 70 }
+            ]
+          }
+        },
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 30 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "bull_leadership": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "risk_on_regime",
+          "points": 20,
+          "logic": { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+          "reason": "Risk-on regime supports leadership entries"
+        },
+        {
+          "id": "relative_strength_leader",
+          "points": 30,
+          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 },
+          "reason": "Outperforming SPY"
+        },
+        {
+          "id": "technical_leader",
+          "points": 25,
+          "logic": { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] },
+          "reason": "Price trend supports leadership"
+        },
+        {
+          "id": "trend_intact",
+          "points": 15,
+          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+          "reason": "Intermediate trend is intact"
+        },
+        {
+          "id": "not_extreme_extension",
+          "points": 10,
+          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "reason": "Price is not excessively extended above SMA20"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 90 } }
+      ],
+      "fallback_label": "WATCHLIST"
+    },
+    "extended_starter": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "risk_on_regime",
+          "points": 25,
+          "logic": { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+          "reason": "Risk-on regime supports starter entries"
+        },
+        {
+          "id": "strong_relative_strength",
+          "points": 35,
+          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
+          "reason": "Strong relative strength supports a starter position"
+        },
+        {
+          "id": "extended_not_broken",
+          "points": 25,
+          "logic": {
+            "all": [
+              { "field": "sma20_relative", "operator": ">", "value": 8.0 },
+              { "field": "sma50_slope", "operator": ">=", "value": 0.0 }
+            ]
+          },
+          "reason": "Stock is extended but trend is not broken"
+        },
+        {
+          "id": "power_extension",
+          "points": 15,
+          "logic": { "field": "sma20_relative", "operator": ">", "value": 15.0 },
+          "reason": "Extension is strong enough to confirm power momentum"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 45 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "oversold_rebound": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "rsi_rebound_zone",
+          "points": 35,
+          "logic": { "field": "rsi14", "operator": "between", "value": [25, 42] },
+          "reason": "RSI is in rebound zone"
+        },
+        {
+          "id": "rsi_turning_up",
+          "points": 25,
+          "logic": { "field": "rsi_slope", "operator": ">", "value": 0.0 },
+          "reason": "RSI is turning up"
+        },
+        {
+          "id": "weekly_stabilization",
+          "points": 20,
+          "logic": { "field": "perf_1w", "operator": ">=", "value": 0.0 },
+          "reason": "Price action stabilized this week"
+        },
+        {
+          "id": "volume_confirmation",
+          "points": 20,
+          "logic": {
+            "any": [
+              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+              { "field": "updown_volume_ratio", "operator": ">", "value": 1.0 }
+            ]
+          },
+          "reason": "Volume confirms seller exhaustion or buyer pressure"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 60 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "pullback_entry": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "sma50_zone",
+          "points": 25,
+          "logic": { "field": "sma50_relative", "operator": "between", "value": [-5, 5] },
+          "reason": "Price is near SMA50"
+        },
+        {
+          "id": "sma50_rising",
+          "points": 20,
+          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+          "reason": "SMA50 is rising"
+        },
+        {
+          "id": "healthy_rsi_pullback",
+          "points": 20,
+          "logic": { "field": "rsi14", "operator": "between", "value": [38, 58] },
+          "reason": "RSI is in pullback zone"
+        },
+        {
+          "id": "confirmation",
+          "points": 25,
+          "logic": {
+            "any": [
+              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+            ]
+          },
+          "reason": "Pullback has volume or relative-strength confirmation"
+        },
+        {
+          "id": "not_extended",
+          "points": 10,
+          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "reason": "Entry is not extended"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 40 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "breakout_entry": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "near_high",
+          "points": 25,
+          "logic": { "field": "dist_from_20d_high", "operator": ">=", "value": -1.0 },
+          "reason": "Price is near a 20-day high"
+        },
+        {
+          "id": "volume_breakout",
+          "points": 30,
+          "logic": { "field": "breakout_volume_multiple", "operator": ">=", "value": 1.5 },
+          "reason": "Breakout has volume confirmation"
+        },
+        {
+          "id": "positive_rs",
+          "points": 25,
+          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 },
+          "reason": "Breakout is not lagging SPY"
+        },
+        {
+          "id": "avoid_bear_regime",
+          "points": 20,
+          "logic": { "field": "market_regime", "operator": "!=", "value": "BEAR_RISK_OFF" },
+          "reason": "Regime is not bear risk-off"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 45 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "no_trade": {
+      "max_score": 100,
+      "score_rules": [],
+      "penalty_rules": [],
+      "decision_thresholds": [],
+      "fallback_label": "NO_TRADE"
+    }
+  }
+}

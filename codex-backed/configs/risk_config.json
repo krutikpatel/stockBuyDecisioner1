@@ -1,0 +1,19 @@
+{
+  "position_sizing": {
+    "NO_TRADE": 0.0,
+    "WATCHLIST": 0.0,
+    "BUY_STARTER": 0.5,
+    "BUY_FULL": 1.0,
+    "BUY_AGGRESSIVE": 1.0
+  },
+  "risk_caps": {
+    "max_risk_per_trade_pct": 1.0,
+    "max_position_size_pct": 10.0,
+    "high_atr_threshold_pct": 5.0,
+    "high_atr_position_cap_pct": 50
+  },
+  "earnings_risk": {
+    "avoid_new_entries_within_days": 3,
+    "starter_only_within_days": 10
+  }
+}

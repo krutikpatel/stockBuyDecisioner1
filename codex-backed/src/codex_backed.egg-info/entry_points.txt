@@ -1,0 +1,2 @@
+[console_scripts]
+codex-backed = codex_backed.cli:main
