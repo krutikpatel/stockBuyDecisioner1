@@ -10,6 +10,7 @@ The system separates four concerns:
 - Exit: how should a trade be sold after entry?
 - Risk: how large should the position be, and where are stop/target levels?
 - Backtest: how would historical entry signals perform under the configured exit policy?
+- Analyze: what does the tuned entry engine say about today's watchlist using fresh market data?
 
 This is intentionally different from the older one-score model where buy and avoid decisions came from the same composite score. The new architecture avoids mixing entry signals and sell signals.
 
@@ -53,6 +54,22 @@ codex-backed/results/<run_id>/
   metrics.json
   sliced metric CSVs
   report.html
+
+Fresh yfinance data
+  watchlist_config.json
+        |
+        v
+codex-backed analyze
+  live OHLCV fetch
+  latest native feature snapshots
+  entry engine
+  risk/stop preview
+        |
+        v
+codex-backed/results/<run_id>/
+  entry_decisions.csv
+  actionable_watchlist.csv
+  metrics.json
 ```
 
 ## 5. Main Runtime Flow
@@ -70,6 +87,20 @@ codex-backed backtest
   -> simulate trades for actionable entries
   -> write artifacts
   -> write report
+```
+
+```text
+codex-backed analyze
+  -> load JSON configs
+  -> validate configs
+  -> read default watchlist unless --tickers is supplied
+  -> use today's local date as requested analysis date
+  -> fetch fresh OHLCV bars from yfinance for watchlist + benchmarks
+  -> build daily native features through the latest available bar
+  -> select the latest row per ticker/horizon
+  -> run entry decision engine
+  -> compute position size and stop/target preview
+  -> write entry_decisions.csv, actionable_watchlist.csv, metrics.json
 ```
 
 ## 6. Entry Engine
@@ -163,13 +194,12 @@ This approach is inherited from the parent `backend/backtest` runner because it 
 
 Current version:
 
-- Price bars: `codex-backed/cache/prices.pkl`
-- Historical features: `backend/backtest/results/signals_with_outcomes.csv`
+- Backtest price bars: `codex-backed/cache/prices.pkl`
+- Backtest native features: generated locally from OHLCV bars and cached in `codex-backed/cache/features.pkl`
+- Live analysis price bars: fresh yfinance daily OHLCV fetched at runtime
 
 Planned version:
 
-- Native `codex-backed` feature builder.
-- Native feature cache with config-hash invalidation.
 - Optional parquet-based cache if pickle becomes too large.
 
 ## 11. Output Artifacts
@@ -188,6 +218,15 @@ by_market_regime.csv
 by_exit_reason.csv
 by_ticker.csv
 report.html
+```
+
+Each analyze run writes:
+
+```text
+manifest.json
+entry_decisions.csv
+actionable_watchlist.csv
+metrics.json
 ```
 
 ## 12. Quality Attributes
@@ -210,11 +249,11 @@ Testability:
 - Config validation tests.
 - Rule engine tests.
 - Backtest runner integration test with synthetic fixtures.
+- Analyze runner tests with fake live-data fetcher fixtures.
 
 ## 13. Known Limitations
 
-- Historical feature generation is not native yet.
-- The current feature source is the parent signal CSV.
-- Some raw feature fields are proxied from signal-card scores.
 - The HTML report is basic and should be expanded.
 - Optimizer commands are scaffolded but not implemented.
+- Live analysis depends on yfinance availability and data freshness.
+- Live analysis does not place trades or track open positions.

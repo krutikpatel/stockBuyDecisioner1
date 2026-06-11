@@ -42,7 +42,7 @@ def test_entry_engine_routes_clean_quality_dislocation_to_buy_full():
     bundle = _bundle()
     engine = EntryDecisionEngine(bundle.get("entry"), bundle.get("technical_setup"))
     snapshot = FeatureSnapshot(
-        ticker="NVDA",
+        ticker="ROKU",
         date="2024-01-02",
         price=100,
         market_regime="BEAR_RISK_OFF",
@@ -67,7 +67,7 @@ def test_entry_engine_routes_overdistressed_quality_dislocation_to_watchlist():
     bundle = _bundle()
     engine = EntryDecisionEngine(bundle.get("entry"), bundle.get("technical_setup"))
     snapshot = FeatureSnapshot(
-        ticker="NVDA",
+        ticker="ROKU",
         date="2024-01-02",
         price=100,
         market_regime="BEAR_RISK_OFF",
@@ -92,7 +92,7 @@ def test_entry_engine_routes_broad_bull_leadership_to_watchlist_only():
     bundle = _bundle()
     engine = EntryDecisionEngine(bundle.get("entry"), bundle.get("technical_setup"))
     snapshot = FeatureSnapshot(
-        ticker="AAPL",
+        ticker="ROKU",
         date="2024-01-02",
         price=100,
         market_regime="BULL_RISK_ON",

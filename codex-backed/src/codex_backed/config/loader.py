@@ -16,6 +16,7 @@ REQUIRED_CONFIG_FILES = {
     "technical_setup": "technical_setup_config.json",
     "market_universe": "market_and_universe_config.json",
     "stock_classification": "stock_classification_config.json",
+    "watchlist": "watchlist_config.json",
 }
 
 VALID_OPERATORS = {
@@ -81,6 +82,7 @@ def validate_config_bundle(bundle: ConfigBundle) -> None:
     _validate_risk_config(bundle.get("risk"))
     _validate_backtest_config(bundle.get("backtest"))
     _validate_backtest_universe_config(bundle.get("backtest_universe"))
+    _validate_watchlist_config(bundle.get("watchlist"))
     _validate_optimization_config(bundle.get("optimization"))
     _validate_technical_setup_config(bundle.get("technical_setup"))
 
@@ -258,6 +260,50 @@ def _validate_backtest_universe_config(config: dict[str, Any]) -> None:
         seen.add(normalized)
     if duplicates:
         raise ConfigError(f"backtest ticker universe contains duplicate tickers: {sorted(set(duplicates))}")
+
+
+def _validate_watchlist_config(config: dict[str, Any]) -> None:
+    tickers = config.get("tickers")
+    if not isinstance(tickers, list) or not tickers:
+        raise ConfigError("watchlist config must define a non-empty tickers list")
+    _validate_ticker_list(tickers, "watchlist tickers")
+
+    horizons = config.get("horizons", ["short_term"])
+    if not isinstance(horizons, list) or not horizons:
+        raise ConfigError("watchlist horizons must be a non-empty list")
+    invalid_horizons = sorted(set(horizons).difference(VALID_HORIZONS))
+    if invalid_horizons:
+        raise ConfigError(f"watchlist horizons are invalid: {invalid_horizons}")
+
+    benchmarks = config.get("benchmark_tickers", ["SPY"])
+    if not isinstance(benchmarks, list) or not benchmarks:
+        raise ConfigError("watchlist benchmark_tickers must be a non-empty list")
+    _validate_ticker_list(benchmarks, "watchlist benchmark_tickers")
+
+    yfinance_config = _require_dict(config, "yfinance")
+    for key in ("period", "interval"):
+        value = yfinance_config.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigError(f"watchlist yfinance.{key} must be a non-empty string")
+    auto_adjust = yfinance_config.get("auto_adjust", False)
+    if not isinstance(auto_adjust, bool):
+        raise ConfigError("watchlist yfinance.auto_adjust must be boolean")
+
+
+def _validate_ticker_list(tickers: list[Any], path: str) -> None:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for idx, ticker in enumerate(tickers):
+        if not isinstance(ticker, str) or not ticker.strip():
+            raise ConfigError(f"{path}[{idx}] must be a non-empty string")
+        normalized = ticker.strip().upper()
+        if normalized != ticker:
+            raise ConfigError(f"{path}[{idx}] must be uppercase without surrounding whitespace")
+        if normalized in seen:
+            duplicates.append(normalized)
+        seen.add(normalized)
+    if duplicates:
+        raise ConfigError(f"{path} contains duplicate tickers: {sorted(set(duplicates))}")
 
 
 def _validate_optimization_config(config: dict[str, Any]) -> None:

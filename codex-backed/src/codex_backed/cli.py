@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from codex_backed.analyze import AnalyzeOptions, run_watchlist_analysis
 from codex_backed.backtest.runner import BacktestOptions, run_lifecycle_backtest
 from codex_backed.config.loader import ConfigError, load_config_bundle, validate_config_bundle
 from codex_backed.results import create_run_paths, write_manifest
@@ -23,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for command, help_text in [
         ("validate-config", "Validate JSON config files."),
+        ("analyze", "Analyze today's watchlist using fresh yfinance data."),
         ("backtest", "Run lifecycle backtest and write result artifacts."),
         ("optimize-entry", "Optimize entry rules with a fixed exit policy."),
         ("optimize-exit", "Optimize exit rules with fixed entry signals."),
@@ -35,13 +37,18 @@ def build_parser() -> argparse.ArgumentParser:
             default=str(DEFAULT_CONFIG_DIR),
             help=f"Directory containing JSON configs (default: {DEFAULT_CONFIG_DIR})",
         )
-        if command in {"backtest", "optimize-entry", "optimize-exit"}:
+        if command in {"analyze", "backtest", "optimize-entry", "optimize-exit"}:
             sub.add_argument(
                 "--output-dir",
                 default=str(DEFAULT_OUTPUT_DIR),
                 help=f"Directory for run results (default: {DEFAULT_OUTPUT_DIR})",
             )
             sub.add_argument("--run-id", default=None, help="Optional explicit run id.")
+        if command == "analyze":
+            sub.add_argument("--tickers", default=None, help="Comma-separated ticker list. Defaults to watchlist_config.json.")
+            sub.add_argument("--horizons", default=None, help="Comma-separated horizons. Defaults to watchlist_config.json.")
+            sub.add_argument("--period", default=None, help="yfinance lookback period. Defaults to watchlist_config.json.")
+            sub.add_argument("--interval", default=None, help="yfinance interval. Defaults to watchlist_config.json.")
         if command == "backtest":
             sub.add_argument("--tickers", default=None, help="Comma-separated ticker list.")
             sub.add_argument("--start", default=None, help="Backtest start date YYYY-MM-DD.")
@@ -78,6 +85,34 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "validate-config":
         print(json.dumps({"status": "ok", "config_dir": str(config_dir)}, indent=2))
+        return 0
+
+    if args.command == "analyze":
+        output_dir = Path(args.output_dir).resolve()
+        paths = create_run_paths(output_dir, run_id=args.run_id)
+        write_manifest(
+            paths,
+            command=args.command,
+            cli_args=vars(args),
+            config_dir=config_dir,
+        )
+        tickers = [ticker.strip().upper() for ticker in args.tickers.split(",")] if args.tickers else None
+        horizons = [horizon.strip() for horizon in args.horizons.split(",")] if args.horizons else None
+        try:
+            result = run_watchlist_analysis(
+                bundle,
+                paths,
+                AnalyzeOptions(
+                    tickers=tickers,
+                    horizons=horizons,
+                    period=args.period,
+                    interval=args.interval,
+                ),
+            )
+        except Exception as exc:
+            print(f"Analyze error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps({"status": "ok", **result}, indent=2))
         return 0
 
     if args.command == "backtest":

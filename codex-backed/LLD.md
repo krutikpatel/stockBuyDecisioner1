@@ -7,6 +7,7 @@ codex-backed/
   configs/
   src/codex_backed/
     cli.py
+    analyze.py
     results.py
     config/
       loader.py
@@ -29,6 +30,7 @@ codex-backed/
     data/
       bars.py
       loader.py
+      yfinance_live.py
     backtest/
       metrics.py
       runner.py
@@ -47,12 +49,14 @@ Responsibilities:
 - Load and validate config bundle.
 - Create run directories.
 - Dispatch to backtest runner.
+- Dispatch to live watchlist analysis runner.
 - Keep scaffold commands for future optimization/report/compare commands.
 
 Implemented commands:
 
 ```text
 validate-config
+analyze
 backtest
 ```
 
@@ -64,6 +68,20 @@ optimize-exit
 report
 compare
 ```
+
+Analyze options:
+
+```text
+--config-dir
+--output-dir
+--run-id
+--tickers
+--horizons
+--period
+--interval
+```
+
+`analyze` intentionally has no date option. It uses today's local date as the requested analysis date and the latest bar returned by yfinance as the actual signal date.
 
 Backtest options:
 
@@ -100,6 +118,7 @@ optimization_config.json
 technical_setup_config.json
 market_and_universe_config.json
 stock_classification_config.json
+watchlist_config.json
 ```
 
 Validation checks:
@@ -112,6 +131,7 @@ Validation checks:
 - Exit percentages are between 0 and 100.
 - Stop, target, ATR, and risk numbers have valid bounds.
 - Backtest data source paths are configured.
+- Watchlist tickers, horizons, benchmark tickers, and yfinance options are valid.
 
 ## 4. Rule Engine
 
@@ -456,7 +476,82 @@ Temporary field proxies:
 
 These proxies are explicitly temporary until native historical feature generation is added.
 
-## 10. Backtest Layer
+### yfinance Live Fetcher
+
+File: `src/codex_backed/data/yfinance_live.py`
+
+Function:
+
+- `fetch_yfinance_bars`
+
+Responsibilities:
+
+- Fetch fresh OHLCV bars from yfinance.
+- Normalize data into the same lower-case bar shape used by backtests.
+- Support multi-ticker and single-ticker yfinance responses.
+- Avoid reading or writing `codex-backed/cache/prices.pkl`.
+- Avoid reading or writing `codex-backed/cache/features.pkl`.
+
+Inputs:
+
+```text
+tickers
+period
+interval
+auto_adjust
+```
+
+Output:
+
+```text
+dict[ticker, list[bar]]
+```
+
+## 10. Analyze Layer
+
+File: `src/codex_backed/analyze.py`
+
+Class:
+
+- `AnalyzeOptions`
+
+Function:
+
+- `run_watchlist_analysis`
+
+Responsibilities:
+
+- Read `watchlist_config.json`.
+- Accept temporary CLI ticker/horizon overrides.
+- Use today's date as the requested analysis date.
+- Fetch fresh bars for watchlist tickers plus benchmark tickers.
+- Build daily native historical feature rows through today.
+- Select the latest available feature row per ticker/horizon.
+- Run `EntryDecisionEngine`.
+- Compute position size with `risk_config.json`.
+- Compute initial stop and target preview with `exit_policy_config.json`.
+- Write analysis artifacts.
+
+Artifacts:
+
+```text
+manifest.json
+entry_decisions.csv
+actionable_watchlist.csv
+metrics.json
+```
+
+`metrics.json` records:
+
+- requested analysis date
+- latest signal date actually used
+- requested tickers
+- missing data tickers
+- decision counts
+- label/horizon/strategy distributions
+- data source metadata with `cache_used: false`
+
+## 11. Backtest Layer
 
 ### Runner
 

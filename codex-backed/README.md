@@ -44,6 +44,7 @@ The engine is designed for short-term and medium-term trade decisions. It does n
   - max simulation window
 - Parallel ticker-level backtest runner.
 - Native OHLCV historical feature generation for backtests.
+- Live watchlist analysis using fresh yfinance OHLCV data.
 - Feature caching with config-hash invalidation.
 - CSV, JSON, and diagnostic HTML report output.
 
@@ -80,6 +81,7 @@ codex-backed/.venv/bin/python -m pytest codex-backed/tests -q
 
 ```bash
 codex-backed/.venv/bin/codex-backed validate-config
+codex-backed/.venv/bin/codex-backed analyze
 codex-backed/.venv/bin/codex-backed backtest
 codex-backed/.venv/bin/codex-backed optimize-entry
 codex-backed/.venv/bin/codex-backed optimize-exit
@@ -87,15 +89,61 @@ codex-backed/.venv/bin/codex-backed report
 codex-backed/.venv/bin/codex-backed compare
 ```
 
-Only `validate-config` and `backtest` are fully wired today. Optimization/report/compare commands are scaffolded.
+`validate-config`, `analyze`, and `backtest` are fully wired today. Optimization/report/compare commands are scaffolded.
+
+## Daily Watchlist Analysis
+
+`analyze` is the current-date watchlist command. It does not accept or require a date. Each run uses today's local date as the analysis date, pulls fresh daily OHLCV data from yfinance, builds latest native feature snapshots, scores both configured horizons, and writes a small watchlist artifact set.
+
+By default, `analyze` reads:
+
+```text
+codex-backed/configs/watchlist_config.json
+```
+
+Default command:
+
+```bash
+codex-backed/.venv/bin/codex-backed analyze \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id today_watchlist
+```
+
+Temporary ticker override:
+
+```bash
+codex-backed/.venv/bin/codex-backed analyze \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id today_aapl_msft \
+  --tickers AAPL,MSFT
+```
+
+Outputs land in `codex-backed/results/<run-id>/`:
+
+```text
+manifest.json
+entry_decisions.csv
+actionable_watchlist.csv
+metrics.json
+```
+
+Important behavior:
+
+- `analyze` always fetches fresh yfinance data.
+- `analyze` does not read `codex-backed/cache/prices.pkl`.
+- `analyze` does not read or write `codex-backed/cache/features.pkl`.
+- `actionable_watchlist.csv` contains only `BUY_STARTER`, `BUY_FULL`, and `BUY_AGGRESSIVE` rows.
+- If yfinance's latest returned bar is from the previous trading day, the run still records today's requested analysis date and the latest signal date actually used.
 
 ## Daily Usage Workflow
 
 Use this as a decision-support tool, not an automatic trading bot. The daily workflow should separate new entries from trade management.
 
-1. Refresh or generate the upstream price cache used by `codex-backed`.
+1. Run `analyze` for the default watchlist or a temporary ticker override.
 2. Run `validate-config` after any config change.
-3. Run a focused backtest or current-date analysis on the watchlist you care about.
+3. Review the current-date `entry_decisions.csv` and `actionable_watchlist.csv`.
 4. Review `entry_decisions.csv` first.
 5. Focus on actionable labels:
    - `BUY_STARTER`: valid setup, but use smaller size.
@@ -103,7 +151,7 @@ Use this as a decision-support tool, not an automatic trading bot. The daily wor
    - `BUY_AGGRESSIVE`: rare high-conviction setup; still respect stops.
 6. Treat `WATCHLIST` as no immediate entry unless the setup improves or price reaches a planned trigger.
 7. Treat `NO_TRADE` as no action.
-8. Review `trades.csv` and `metrics.json` to understand how similar historical signals behaved under the configured sell policy.
+8. Review `metrics.json` and recent backtests to understand how similar historical signals behaved under the configured sell policy.
 9. For any candidate, check the stop, target, expected position size, exit policy, and current market regime before acting.
 10. Keep a trade log with entry label, entry strategy, regime, entry price, stop, target, exit reason, and realized result.
 
@@ -143,6 +191,8 @@ codex-backed/.venv/bin/codex-backed backtest \
 Use `--workers 1` for debugging. Use higher worker counts for faster runs when the environment allows process spawning.
 
 When adding or removing default backtest tickers, edit `codex-backed/configs/backtest_ticker_universe_config.json` and then run `validate-config`. A ticker also needs price bars in `codex-backed/cache/prices.pkl`; otherwise it will not produce feature rows or trades until the price cache is expanded.
+
+When adding or removing default daily analysis tickers, edit `codex-backed/configs/watchlist_config.json` and then run `validate-config`.
 
 ## Backtest Feature Sources
 

@@ -77,3 +77,20 @@ def test_invalid_backtest_universe_reference_fails_validation(tmp_path):
     bundle = load_config_bundle(target)
     with pytest.raises(ConfigError, match="ticker_universe.default_config"):
         validate_config_bundle(bundle)
+
+
+def test_invalid_watchlist_duplicate_fails_validation(tmp_path):
+    config_dir = Path(__file__).resolve().parents[1] / "configs"
+    target = tmp_path / "configs"
+    target.mkdir()
+    for path in config_dir.glob("*.json"):
+        (target / path.name).write_text(path.read_text())
+
+    watchlist_path = target / "watchlist_config.json"
+    watchlist_config = json.loads(watchlist_path.read_text())
+    watchlist_config["tickers"] = ["AAPL", "AAPL"]
+    watchlist_path.write_text(json.dumps(watchlist_config))
+
+    bundle = load_config_bundle(target)
+    with pytest.raises(ConfigError, match="watchlist tickers contains duplicate"):
+        validate_config_bundle(bundle)

@@ -7,7 +7,7 @@ name = "codex-backed"
 version = "0.1.0"
 description = "CLI-only trade lifecycle engine with separate entry and exit optimization."
 requires-python = ">=3.11"
-dependencies = ["pandas>=2.0"]
+dependencies = ["pandas>=2.0", "yfinance>=0.2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
