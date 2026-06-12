@@ -1,0 +1,4 @@
+avg_return_pct,count,exit_reason,median_return_pct,profit_factor,win_rate_pct
+29.9335,25,MAX_SIM_WINDOW_EXIT,29.9331,390.7996,96.0
+-6.7388,116,STOP_LOSS_EXIT,-5.9754,0.0,0.0
+9.075,625,TRAILING_STOP_EXIT,4.7513,,100.0

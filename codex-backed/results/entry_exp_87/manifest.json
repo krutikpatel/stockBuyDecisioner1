@@ -1,0 +1,30 @@
+{
+  "run_id": "entry_exp_87",
+  "created_at_utc": "2026-06-12T18:58:16.661853+00:00",
+  "command": "backtest",
+  "cli_args": {
+    "command": "backtest",
+    "config_dir": "codex-backed/configs",
+    "output_dir": "codex-backed/results",
+    "run_id": "entry_exp_87",
+    "tickers": null,
+    "start": null,
+    "end": null,
+    "workers": 8,
+    "feature_source": null,
+    "force_refresh": false,
+    "rebuild_feature_cache": false,
+    "no_report": false
+  },
+  "config_dir": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/configs",
+  "git_commit": "74134acba4b958f0931e9fafb4baec3b0a239467",
+  "paths": {
+    "run_id": "entry_exp_87",
+    "run_dir": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87",
+    "manifest_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87/manifest.json",
+    "trades_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87/trades.csv",
+    "entry_decisions_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87/entry_decisions.csv",
+    "metrics_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87/metrics.json",
+    "report_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/entry_exp_87/report.html"
+  }
+}

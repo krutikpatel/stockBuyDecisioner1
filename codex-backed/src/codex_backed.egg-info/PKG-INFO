@@ -4,5 +4,6 @@ Version: 0.1.0
 Summary: CLI-only trade lifecycle engine with separate entry and exit optimization.
 Requires-Python: >=3.11
 Requires-Dist: pandas>=2.0
+Requires-Dist: yfinance>=0.2
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"

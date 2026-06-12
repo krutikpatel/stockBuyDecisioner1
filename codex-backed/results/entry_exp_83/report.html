@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Codex-Backed Lifecycle Backtest</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; }
+    code { background: #f3f4f6; padding: 0.1rem 0.25rem; border-radius: 4px; }
+    pre { background: #111827; color: #f9fafb; padding: 1rem; overflow: auto; }
+    table { border-collapse: collapse; margin: 1rem 0 2rem; min-width: 520px; }
+    th, td { border: 1px solid #d1d5db; padding: 0.35rem 0.55rem; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    th { background: #f3f4f6; }
+  </style>
+</head>
+<body>
+  <h1>Codex-Backed Lifecycle Backtest</h1>
+  <p>Entry decisions: <strong>158208</strong></p>
+  <p>Simulated trades: <strong>102</strong></p>
+  <p>Feature source: <strong>native</strong>; cache: <strong>rebuilt</strong></p>
+  <p>This report uses lifecycle exits. Fixed 20D/63D returns are not the primary result.</p>
+  <h2>Overall Metrics</h2>
+  <table><thead><tr><th>metric</th><th>value</th></tr></thead><tbody><tr><td>count</td><td>102</td></tr><tr><td>avg_return_pct</td><td>15.0974</td></tr><tr><td>median_return_pct</td><td>2.3935</td></tr><tr><td>win_rate_pct</td><td>98.0392</td></tr><tr><td>profit_factor</td><td>151.8457</td></tr></tbody></table>
+  <h2>Input Quality</h2>
+  <h3>Missing Fields</h3>
+  <table><thead><tr><th>Field</th><th>count</th></tr></thead><tbody><tr><td>sma200_relative</td><td>2672</td></tr><tr><td>sma50_relative</td><td>180</td></tr><tr><td>rs_vs_spy_20d</td><td>90</td></tr><tr><td>breakout_volume_multiple</td><td>72</td></tr><tr><td>sma20_relative</td><td>72</td></tr><tr><td>volume_dryup_ratio</td><td>72</td></tr><tr><td>rsi14</td><td>54</td></tr><tr><td>perf_1w</td><td>18</td></tr><tr><td>sma50_slope</td><td>4</td></tr><tr><td>rsi_slope</td><td>2</td></tr></tbody></table>
+  <h3>Decision Setup Distribution</h3>
+  <table><thead><tr><th>Setup</th><th>count</th></tr></thead><tbody><tr><td>None</td><td>146420</td></tr><tr><td>DOWNTREND_REBOUND_CANDIDATE</td><td>6126</td></tr><tr><td>BREAKOUT_MOMENTUM</td><td>2048</td></tr><tr><td>GROWTH_LEADER_PULLBACK</td><td>1718</td></tr><tr><td>TRUE_BROKEN_CHART_AVOID</td><td>1370</td></tr><tr><td>BROKEN_CHART_QUALITY_RECOVERY</td><td>526</td></tr></tbody></table>
+  <h3>Actionable By Setup</h3>
+  <table><thead><tr><th>selected_setup</th><th>total</th><th>actionable</th><th>actionable_rate_pct</th></tr></thead><tbody><tr><td>BROKEN_CHART_QUALITY_RECOVERY</td><td>526</td><td>102</td><td>19.3916</td></tr><tr><td>BREAKOUT_MOMENTUM</td><td>2048</td><td>0</td><td>0.0</td></tr><tr><td>DOWNTREND_REBOUND_CANDIDATE</td><td>6126</td><td>0</td><td>0.0</td></tr><tr><td>GROWTH_LEADER_PULLBACK</td><td>1718</td><td>0</td><td>0.0</td></tr><tr><td>None</td><td>146420</td><td>0</td><td>0.0</td></tr><tr><td>TRUE_BROKEN_CHART_AVOID</td><td>1370</td><td>0</td><td>0.0</td></tr></tbody></table>
+  <h2>Entry Quality</h2>
+  <h3>By Entry Label</h3>
+  <table><thead><tr><th>entry_label</th><th>count</th><th>avg_return_pct</th><th>median_return_pct</th><th>win_rate_pct</th><th>profit_factor</th></tr></thead><tbody><tr><td>BUY_FULL</td><td>32</td><td>14.7907</td><td>4.0245</td><td>100.0</td><td></td></tr><tr><td>BUY_STARTER</td><td>70</td><td>15.2377</td><td>2.3935</td><td>97.1429</td><td>105.4831</td></tr></tbody></table>
+  <h3>By Entry Setup</h3>
+  <table><thead><tr><th>selected_setup</th><th>count</th><th>avg_return_pct</th><th>median_return_pct</th><th>win_rate_pct</th><th>profit_factor</th></tr></thead><tbody><tr><td>BROKEN_CHART_QUALITY_RECOVERY</td><td>102</td><td>15.0974</td><td>2.3935</td><td>98.0392</td><td>151.8457</td></tr></tbody></table>
+  <h3>By Horizon</h3>
+  <table><thead><tr><th>horizon</th><th>count</th><th>avg_return_pct</th><th>median_return_pct</th><th>win_rate_pct</th><th>profit_factor</th></tr></thead><tbody><tr><td>medium_term</td><td>51</td><td>12.6291</td><td>0.0533</td><td>98.0392</td><td>111.5024</td></tr><tr><td>short_term</td><td>51</td><td>17.5658</td><td>11.9892</td><td>98.0392</td><td>205.5328</td></tr></tbody></table>
+  <h2>Exit Reasons</h2>
+  <table><thead><tr><th>exit_reason</th><th>count</th><th>avg_return_pct</th><th>median_return_pct</th><th>win_rate_pct</th><th>profit_factor</th></tr></thead><tbody><tr><td>MAX_SIM_WINDOW_EXIT</td><td>14</td><td>49.158</td><td>36.3826</td><td>100.0</td><td></td></tr><tr><td>STOP_LOSS_EXIT</td><td>42</td><td>-0.2002</td><td>0.0428</td><td>95.2381</td><td>0.1763</td></tr><tr><td>TRAILING_STOP_EXIT</td><td>46</td><td>18.6986</td><td>14.4404</td><td>100.0</td><td></td></tr></tbody></table>
+</body>
+</html>

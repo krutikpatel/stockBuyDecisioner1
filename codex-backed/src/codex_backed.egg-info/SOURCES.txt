@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/codex_backed/__init__.py
+src/codex_backed/analyze.py
 src/codex_backed/cli.py
 src/codex_backed/results.py
 src/codex_backed.egg-info/PKG-INFO
@@ -19,6 +20,7 @@ src/codex_backed/config/loader.py
 src/codex_backed/data/__init__.py
 src/codex_backed/data/bars.py
 src/codex_backed/data/loader.py
+src/codex_backed/data/yfinance_live.py
 src/codex_backed/entry/__init__.py
 src/codex_backed/entry/engine.py
 src/codex_backed/entry/labels.py
@@ -37,11 +39,13 @@ src/codex_backed/simulation/__init__.py
 src/codex_backed/simulation/entry_simulator.py
 src/codex_backed/simulation/trade.py
 src/codex_backed/simulation/trade_simulator.py
+tests/test_analyze_runner.py
 tests/test_backtest_runner.py
 tests/test_config_loader.py
 tests/test_entry_engine.py
 tests/test_feature_snapshot.py
 tests/test_historical_features.py
+tests/test_optimize_loop_script.py
 tests/test_rule_engine.py
 tests/test_sizing_and_metrics.py
 tests/test_trade_simulator.py
