@@ -112,7 +112,7 @@
         {
           "id": "deep_dislocation",
           "points": 25,
-          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -20 },
+          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -30 },
           "reason": "Price is meaningfully below the 52-week high"
         },
         {

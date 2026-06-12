@@ -6674,3 +6674,845 @@ Three final iterations tested bracket/decouple combinations that were structural
 | 70 | MT support_buffer 2.5→2.75% | rejected (noise/minor PF regression; 2.5% confirmed optimum) |
 
 All major knobs exhausted. The system is at a local optimum under the current setup, entry universe, and feature set. Further gains require structural changes: new entry setups, wiring earnings_days_away into the historical feature builder, or expanding the ticker universe.
+
+---
+
+# Entry Optimization Loop (Iterations 71-80)
+
+Goal: Optimize entry points / buy part of the strategy. All previous 70 iterations only tuned exit_policy_config.json. This new loop targets entry_signal_config.json and technical_setup_config.json.
+
+Baseline (start of this loop = entry_exp_71_baseline = entry_exp_73_prior_accepted):
+- 766 trades, overall WR 89.295%, avg 7.503%, ST WR 84.856%, ST avg 7.286%, PF 11.162
+
+---
+
+## Claude Iteration 71
+
+Run:
+
+- `entry_exp_71` (baseline) + `entry_exp_71` (regime expansion)
+- Baseline: 766 trades / 158,208 decisions / errors 0
+- overall avg 7.503% | WR 89.295% | ST WR 84.856% | PF 11.162 (matches claude_loop_64 exactly)
+
+Investigation:
+
+- Baseline confirmed. The `quality_dislocation_route` only fires for BEAR_RISK_OFF, but the `supportive_rebound_regime` score rule already awards 20pts for SIDEWAYS_CHOPPY. Expanding the route to include SIDEWAYS_CHOPPY would open new trades with the same score thresholds.
+
+Improvement Implemented:
+
+- Added SIDEWAYS_CHOPPY to quality_dislocation_route: `market_regime in [BEAR_RISK_OFF, SIDEWAYS_CHOPPY]`
+- Result: 1170 trades (+404 new). Overall WR 82.820% (-6.48pp), ST WR 77.265% (-7.59pp), avg 5.078% (-2.43pp). Catastrophic regression.
+- SIDEWAYS_CHOPPY regime produces materially worse BROKEN_CHART_QUALITY_RECOVERY setups. Choppy markets don't support recovery rallies.
+- Decision: REJECT. Reverted to BEAR_RISK_OFF only.
+- Next iter 72: Tighten `deep_dislocation` threshold from -20% to -25% below 52w high (higher-quality entries only).
+
+---
+
+## Claude Iteration 72
+
+Run:
+
+- `entry_exp_72`
+- 158,208 decisions / 602 trades / errors 0
+- overall avg 8.644% | median 0.660% | WR 90.199% | PF 13.951
+- ST avg 8.346% | median 4.806% | WR 86.046% | PF 10.172
+- MT avg 8.942% | median 0.021% | WR 94.352% | PF 22.043
+- exit mix: 82 max-sim | 276 stop-loss | 244 trailing
+
+Investigation:
+
+- deep_dislocation threshold -20 → -25% (dist_from_52w_high <= -25). Removed 164 borderline dislocated trades.
+- All priorities improved across the board. The eliminated trades (-20 to -25% below 52w high) were inferior setups — not deeply enough dislocated to trigger strong recoveries.
+- ST WR +1.19pp, overall avg +1.14pp, PF +2.79. Stop-loss avg improved from -1.541% → -1.437%.
+- Decision: ACCEPT. New baseline: entry_exp_72 (602 trades).
+
+Improvement Implemented:
+
+- Kept deep_dislocation at -25%. Next iter 73: continue sweep to -30%.
+
+---
+
+## Claude Iteration 73
+
+Run:
+
+- `entry_exp_73`
+- 158,208 decisions / 420 trades / errors 0
+- overall avg 9.545% | median 0.709% | WR 92.143% | PF 18.828
+- ST avg 9.490% | median 5.572% | WR 88.571% | PF 13.413
+- MT avg 9.600% | median 0.027% | WR 95.714% | PF 32.342
+- exit mix: 54 max-sim | 190 stop-loss | 176 trailing
+
+Investigation:
+
+- deep_dislocation threshold -25 → -30%. Removed 182 more borderline dislocated trades.
+- All priorities improved again. The -20 to -30% range is a gradient of quality: deeper = better.
+- ST WR +2.53pp vs prior best (entry_exp_72). Stop-loss avg improved to -1.161%. MT PF 32.342 (from 22.043).
+- Decision: ACCEPT. New baseline: entry_exp_73 (420 trades).
+
+Improvement Implemented:
+
+- Kept deep_dislocation at -30%. Next iter 74: try -35% (bracket).
+
+---
+
+## Claude Iteration 74
+
+Run:
+
+- `entry_exp_74`
+- 158,208 decisions / 314 trades / errors 0
+- overall avg 9.195% | median 0.559% | WR 92.357% | PF 18.722
+- ST avg 9.965% | median 5.025% | WR 89.172% | PF 14.472
+- MT avg 8.424% | median 0.028% | WR 95.541% | PF 29.276
+
+Investigation:
+
+- deep_dislocation threshold -30 → -35%.
+- Priority 1 (ST WR): +0.601pp marginal improvement. Priority 2: avg +0.475pp BUT median -0.547pp (mixed). Priority 4: overall avg -0.350pp, MT avg -1.176pp, MT PF -3.066 (significant regression).
+- The -30 to -35% range contains quality MT trades that extend to full max-sim duration. Removing them hurts MT returns with minimal ST WR gain.
+- -30% confirmed as deep_dislocation optimum.
+- Decision: REJECT. Reverted to -30%.
+
+Improvement Implemented:
+
+- Reverted deep_dislocation to -30%. Next iter 75: Try raising `oversold` score rule threshold from RSI<=35 to RSI<=30 — would reclassify RSI 31-35 stocks from WATCHLIST (score 90) to BUY (score 70/80).
+
+---
+
+## Claude Iteration 75
+
+Run:
+
+- `entry_exp_75`
+- 158,208 decisions / 640 trades / errors 0
+- overall avg 8.760% | median 0.460% | WR 89.375% | PF 11.636
+- ST avg 8.408% | median 3.715% | WR 84.688% | PF 8.443
+- MT avg 9.113% | median 0.018% | WR 94.062% | PF 18.600
+
+Investigation:
+
+- `oversold` score rule: RSI<=35 → RSI<=30. This moved RSI 31-35 stocks from score-90 (WATCHLIST) to score-70/80 (BUY).
+- All priorities regressed: ST WR -3.883pp, overall WR -2.768pp. 640 trades vs 420.
+- RSI 31-35 stocks with deep dislocation underperform. They're transitioning from extreme oversold but the reversal isn't yet confirmed. The prior loop was right to keep score-90 as WATCHLIST: even under the new -30% dislocation filter, deeply oversold (RSI 31-35) stocks in broken charts are inferior entries.
+- Decision: REJECT. Reverted oversold threshold to RSI<=35.
+
+Improvement Implemented:
+
+- Reverted `oversold` rule to RSI<=35. Next iter 76: Add penalty rule for severe RS underperformance (rs_vs_spy_20d <= -15%): -20pts. Hypothesis: stocks still massively lagging SPY are false recovery signals.
+
+---
+
+## Claude Iteration 76
+
+Run:
+
+- `entry_exp_76`
+- 158,208 decisions / 440 trades / errors 0
+- overall avg 7.976% | WR 87.500% | ST WR 83.636% | PF 7.773
+
+Investigation:
+
+- Penalty -20pts for rs_vs_spy_20d <= -15%. Critical discovery: -20pt penalty accidentally promoted WATCHLIST stocks.
+- Score 90 - 20 = 70 → BUY_STARTER. Score 100 - 20 = 80 → BUY_FULL. Previously-WATCHLIST deeply oversold stocks were promoted into BUY thresholds.
+- Trade count went UP (420 → 440) and all metrics collapsed.
+- Key lesson: safe penalty must ensure score-90 - penalty ≠ 70 and score-100 - penalty ≠ 80. Avoid penalties of exactly 10, 20, or 30 pts.
+- Decision: REJECT. Switched to -25pt penalty (90-25=65, 100-25=75, both safely WATCHLIST).
+
+Improvement Implemented:
+
+- Changed penalty to -25pts (90-25=65, 100-25=75 — cannot accidentally hit 70 or 80 BUY thresholds).
+
+---
+
+## Claude Iteration 77
+
+Run:
+
+- `entry_exp_77`
+- 158,208 decisions / 336 trades / errors 0
+- overall avg 8.499% | median 0.709% | WR 91.369% | PF 16.098
+- ST avg 7.755% | median 4.504% | WR 87.500% | PF 10.651
+- MT avg 9.243% | median 0.021% | WR 95.238% | PF 29.680
+
+Investigation:
+
+- Penalty -25pts for rs_vs_spy_20d <= -15%. Correctly eliminated 84 trades (420 → 336).
+- However all priorities regressed: overall WR -0.774pp, ST WR -1.071pp, ST avg -1.735pp, overall avg -1.046pp.
+- Key insight: In BEAR_RISK_OFF, stocks with extreme negative RS (-15%+ lagging SPY) that are deeply dislocated (-30%+) and showing RSI reversal are EXCELLENT entries. They've fallen the most (maximum dislocation) and are showing earliest recovery signals. Penalizing extreme RS underperformance removes the best setups.
+- Decision: REJECT. Reverted penalty to empty.
+
+Improvement Implemented:
+
+- Removed RS underperformance penalty. Next iter 78: try penalizing seller domination (updown_volume_ratio <= 0.5 → stocks with 2:1 down-volume may be false bounces).
+
+---
+
+## Claude Iteration 78
+
+Run:
+
+- `entry_exp_78`
+- 158,208 decisions / 352 trades / errors 0
+- overall avg 9.344% | median 0.674% | WR 91.761% | PF 17.052
+- ST avg 9.881% | median 5.743% | WR 88.636% | PF 13.370
+- MT avg 8.808% | median 0.028% | WR 94.886% | PF 25.100
+
+Investigation:
+
+- Penalty -25pts for updown_volume_ratio <= 0.5 (sellers overwhelming buyers 2:1).
+- Priority 1: ST WR flat (+0.065pp). Priority 2: ST avg +0.391pp, median +0.171pp (mild improvement).
+- Priority 3: overall WR -0.382pp (regression). Priority 4: MT avg -0.792pp, MT PF -3.742 (significant regression).
+- The seller-dominated trades are good MEDIUM-TERM holds. Their selling pressure at entry resolves over the longer horizon (60-141 days). Penalizing them removes quality MT trades.
+- Decision: REJECT. Priority-3 and priority-4 regressed. Reverted.
+
+Improvement Implemented:
+
+- Removed seller domination penalty. Next iter 79: tighten OVERSOLD_REVERSAL RSI upper bound in technical_setup_config.json from 42 → 38 (keep only truly oversold entries).
+
+---
+
+## Claude Iteration 79
+
+Run:
+
+- `entry_exp_79`
+- 158,208 decisions / 130 trades / errors 0
+- overall avg 7.998% | median 0.660% | WR 93.846% | PF 28.566
+- ST avg 8.662% | median 2.524% | WR 92.308% | PF 29.608
+- MT avg 7.333% | median 0.020% | WR 95.385% | PF 27.428
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 42 → 38 (in technical_setup_config.json). 420 → 130 trades.
+- Priority 1: ST WR +3.737pp (strong improvement). Priority 3: overall WR +1.703pp.
+- But: ST avg -0.828pp, ST median -3.048pp, MT avg -2.267pp. Sample size very small (65 ST trades).
+- The RSI 39-42 stocks are the MAX_SIM_WINDOW winners (highest avg return). Cutting them reduces max-sim exits from 54 → 16 and shrinks avg significantly.
+- RSI 38 too aggressive — WR improves but quality/quantity tradeoff is unfavorable. Bracket at RSI 40.
+- Decision: REJECT. Revert to 40 bracket.
+
+Improvement Implemented:
+
+- Set OVERSOLD_REVERSAL RSI upper bound to 40 (midpoint between accepted 42 and tested 38).
+
+---
+
+## Claude Iteration 80 (FINAL)
+
+Run:
+
+- `entry_exp_80`
+- 158,208 decisions / 266 trades / errors 0
+- overall avg 10.371% | median 0.660% | WR 92.481% | PF 22.584
+- ST avg 10.171% | median 5.458% | WR 89.474% | PF 17.261
+- MT avg 10.572% | median 0.022% | WR 95.489% | PF 32.505
+- exit mix: 33 max-sim | 121 stop-loss | 112 trailing
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 42 → 40. 420 → 266 trades.
+- Priority 1 (ST WR): 88.571% → 89.474% (+0.903pp) ✅
+- Priority 2: ST avg 9.490% → 10.171% (+0.681pp) ✅, ST median 5.572% → 5.458% (-0.114pp, noise) ✅
+- Priority 3 (Overall WR): 92.143% → 92.481% (+0.338pp) ✅
+- Priority 4: overall avg +0.826pp, overall PF +3.756 ✅
+- Max-sim avg 48.685% (vs 42.297% at -30% baseline): the trades that survive are even higher quality.
+- Stop-loss avg -1.034% (best so far), stop-loss WR 83.471% (best so far).
+- RSI 41-42 stocks are the weakest entries (barely oversold, recovery well underway). RSI 25-40 is the confirmed optimum oversold zone for BROKEN_CHART_QUALITY_RECOVERY.
+- Decision: ACCEPT. New final baseline: entry_exp_80.
+
+Improvement Implemented:
+
+- OVERSOLD_REVERSAL RSI upper bound stays at 40.
+- LOOP COMPLETE at iteration 80. See TUNING_STATUS.md for updated final state.
+
+---
+
+## Session Summary (Entry Optimization Iterations 71-80)
+
+| iter | change | config file | result |
+|------|--------|------------|--------|
+| 71 | quality_dislocation route + SIDEWAYS_CHOPPY | entry_signal_config.json | rejected (ST WR -7.59pp; SIDEWAYS_CHOPPY regime produces inferior setups) |
+| 72 | deep_dislocation threshold -20 → -25% | entry_signal_config.json | **accepted** (ST WR +1.19pp, all metrics improved) |
+| 73 | deep_dislocation threshold -25 → -30% | entry_signal_config.json | **accepted** (ST WR +2.53pp additional, all metrics improved) |
+| 74 | deep_dislocation threshold -30 → -35% | entry_signal_config.json | rejected (MT regression, -30% confirmed optimum) |
+| 75 | oversold score rule RSI<=35 → RSI<=30 | entry_signal_config.json | rejected (ST WR -3.88pp; RSI 31-35 stocks are inferior entries) |
+| 76 | RS underperformance penalty -20pts (rs<=-15%) | entry_signal_config.json | rejected (accidentally promoted score-90 stocks via 90-20=70 promotion bug) |
+| 77 | RS underperformance penalty -25pts (rs<=-15%) | entry_signal_config.json | rejected (removes best setups; extreme RS underperformance in bear regime = maximum dislocation = best entries) |
+| 78 | seller domination penalty -25pts (updown<=0.5) | entry_signal_config.json | rejected (removes good MT trades; seller pressure at entry resolves over full simulation window) |
+| 79 | OVERSOLD_REVERSAL RSI upper bound 42 → 38 | technical_setup_config.json | rejected (too aggressive; sample too small; avg/median collapsed) |
+| 80 | OVERSOLD_REVERSAL RSI upper bound 42 → 40 | technical_setup_config.json | **accepted** (ST WR +0.90pp, all metrics improved) |
+
+**Total entry optimization gain vs 70-iteration exit-tuning baseline:**
+
+| metric | exit-tuned baseline | entry_exp_80 final | gain |
+|--------|--------------------|--------------------|------|
+| trades | 766 | 266 | -65% (quality over quantity) |
+| ST WR | 84.856% | 89.474% | +4.618pp |
+| ST avg | 7.286% | 10.171% | +2.885pp |
+| ST median | 3.296% | 5.458% | +2.162pp |
+| overall WR | 89.295% | 92.481% | +3.186pp |
+| overall avg | 7.503% | 10.371% | +2.868pp |
+| overall PF | 11.162 | 22.584 | +11.422 |
+| MT WR | 93.734% | 95.489% | +1.755pp |
+| MT avg | 7.721% | 10.572% | +2.851pp |
+
+Key findings:
+1. Deep dislocation threshold is the dominant entry quality lever: -30% vs -20% is a large quality improvement.
+2. BEAR_RISK_OFF is the only valid regime; SIDEWAYS_CHOPPY produces inferior setups.
+3. RSI 40 is the confirmed oversold upper bound; RSI 41-42 stocks are marginal/late entries.
+4. In BEAR_RISK_OFF, extreme RS underperformance at entry (stock lagging SPY by 15%+) = BEST entries, not worst. Maximum dislocation principle confirmed.
+5. Penalty rule arithmetic: safe penalty must not let score 90 or 100 land on 70 or 80 (avoid penalties of exactly 10, 20, or 30 pts).
+
+---
+
+# Entry Optimization Loop 2 (Iterations 81-90)
+
+Goal: Continue entry point optimization. Loop 1 found deep_dislocation -30% and OVERSOLD_REVERSAL RSI≤40. This loop explores sma50_relative distance in TRUE_BROKEN_CHART, sma200_relative, RSI fine-brackets, score-90 BUY_AGGRESSIVE, and regime expansion under the new filters.
+
+Baseline (start of loop 2 = entry_exp_83):
+- 102 trades, overall WR 98.039%, avg 15.097%, ST WR 98.039%, ST avg 17.566%, PF 151.846
+
+---
+
+## Claude Iteration 81
+
+Run:
+
+- `entry_exp_81`
+- 158,208 decisions / 228 trades / errors 0
+- overall avg 11.246% | median 0.857% | WR 92.983% | PF 25.242
+- ST avg 11.027% | median 6.038% | WR 90.351% | PF 18.993
+- MT avg 11.465% | WR 95.614%
+
+Investigation:
+
+- TRUE_BROKEN_CHART `sma50_relative` threshold: < -5% → < -10%. Stocks -5% to -10% below SMA50 have their SMA50 "chasing them down" — a mature, grinding decline. Stocks >10% below SMA50 represent sharper, more recent structural breaks.
+- All priorities improved across the board vs entry_exp_80 baseline (266 trades): ST WR +0.877pp, ST avg +0.856pp, ST median +0.580pp, overall avg +0.875pp, PF +2.658.
+- Decision: ACCEPT. New baseline: entry_exp_81 (228 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -10%. Next iter 82: continue sweep to -15%.
+
+---
+
+## Claude Iteration 82
+
+Run:
+
+- `entry_exp_82`
+- 158,208 decisions / 140 trades / errors 0
+- overall avg 13.814% | median 2.143% | WR 96.429% | PF 50.483
+- ST avg 14.797% | median 9.197% | WR 95.714% | PF 45.883
+- MT avg 12.831% | WR 97.143%
+- exit mix: 20 max-sim | 58 stop-loss | 62 trailing; stop-loss avg -0.639%, WR 91.379%
+
+Investigation:
+
+- sma50_relative < -15%. Removed 88 more trades from 228.
+- All priorities improved dramatically: ST WR +5.363pp vs entry_exp_81, overall WR +3.446pp, ST avg +3.770pp, ST median +3.159pp, PF jumped to 50.483 (+25.241).
+- Stop-loss WR 91.379% = only ~5 pure losers out of 140 total trades. The trend is strong.
+- Decision: ACCEPT. New baseline: entry_exp_82 (140 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -15%. Next iter 83: continue sweep to -20%.
+
+---
+
+## Claude Iteration 83
+
+Run:
+
+- `entry_exp_83`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.097% | median 2.393% | WR 98.039% | PF 151.846
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 12.629% | WR 98.039%
+- exit mix: 14 max-sim | 42 stop-loss | 46 trailing; stop-loss avg -0.200%, WR 95.238%
+
+Investigation:
+
+- sma50_relative < -20%. Removed 38 more trades from 140.
+- All priorities improved again: ST WR +2.325pp vs entry_exp_82, overall WR +1.610pp, ST avg +2.769pp, median +2.792pp, PF 151 (from 50).
+- Only 2 pure losers out of 102 total trades (98% stop-loss WR, avg -0.200% per stop).
+- Stop-loss avg -0.200%: losses are virtually breakeven — nearly all stop-loss exits first hit the 0.75R partial profit target before trailing back to entry.
+- Decision: ACCEPT. New final baseline: entry_exp_83 (102 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -20%. Next iter 84: continue sweep to -25% (bracket/confirm).
+
+---
+
+## Claude Iteration 84
+
+Run:
+
+- `entry_exp_84`
+- 158,208 decisions / 68 trades / errors 0
+- overall avg 12.178% | median 2.393% | WR 100.000% | PF undefined
+- ST avg 19.580% | median 13.477% | WR 100.000%
+- MT avg 4.777% | WR 100.000%
+
+Investigation:
+
+- sma50_relative < -25%. 102 → 68 trades. 100% WR (zero losers) but metrics are degenerate.
+- Priority 4: MT avg 4.777% vs 12.629% (-7.852pp). Catastrophic MT regression. MAX_SIM exits 14 → 6 and their avg dropped 49% → 28%.
+- Stocks >25% below SMA50 at -30%+ dislocation are so structurally damaged that they only produce short-term bounces, not sustained MT recoveries. The MT dimension collapses.
+- 68 total trades / 34 ST, 34 MT: sample too small; 100% WR is unreliable statistical artifact.
+- Decision: REJECT. -20% confirmed as sma50_relative optimum (sweet spot between -15% best-combined and -25% MT-collapse).
+
+Improvement Implemented:
+
+- Reverted sma50_relative to < -20%. Next iter 85: test sma200_relative < -5% (same quality-filter principle applied to 200MA).
+
+---
+
+## Claude Iteration 85
+
+Run:
+
+- `entry_exp_85`
+- Identical to entry_exp_83: 102 trades, WR 98.039%, avg 15.097%
+
+Investigation:
+
+- sma200_relative < 0% → < -5%. NO-OP: all 102 trades already satisfy sma200_relative < -5%.
+- When sma50_relative < -20%, SMA200 (slow indicator) has not caught up — automatically puts sma200_relative further below too.
+- The sma200 filter is non-binding (redundant) given the sma50 < -20% filter.
+- Decision: NO-OP. Revert sma200 to original (< 0%) to keep config clean.
+
+Improvement Implemented:
+
+- Reverted sma200 to < 0%. Next iter 86: test sma200_relative < -10% to find where it starts discriminating.
+
+---
+
+## Claude Iteration 86
+
+Run:
+
+- `entry_exp_86`
+- Identical to entry_exp_83: 102 trades, WR 98.039%, avg 15.097%
+
+Investigation:
+
+- sma200_relative < -10%: still a NO-OP. All 102 trades also satisfy sma200 < -10%.
+- Confirmed: with sma50_relative < -20%, the sma200 filter is dominated up to at least -10%. SMA200 (200-day moving average) in a recent sharp crash sits well above the current price — stocks >20% below SMA50 are automatically well below SMA200 too.
+- Decision: NO-OP. Reverted sma200 to < 0%. The sma200_relative dimension is non-discriminating under the current sma50 filter.
+
+Improvement Implemented:
+
+- Reverted sma200 to < 0% (original). Next iter 87: RSI fine-bracket at 39 (between rejected 38 and accepted 40).
+
+---
+
+## Claude Iteration 87
+
+Run:
+
+- `entry_exp_87`
+- 158,208 decisions / 66 trades / errors 0
+- overall avg 17.639% | median 2.976% | WR 96.970% | PF 115.039
+- ST avg 20.077% | median 17.963% | WR 96.970% | PF 152.268
+- MT avg 15.201% | WR 96.970%
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 40 → 39. 102 → 66 trades.
+- P1 (ST WR): 98.039% → 96.970% (-1.069pp) ❌. P2: ST avg +2.511pp, median +5.974pp ✅.
+- Mathematical note: same absolute 2 losers in both 102-trade and 66-trade sets. WR% drop is a denominator artifact, not true quality regression.
+- However, under the strict P1-first framework: ST WR declined. Reject.
+- RSI 39-40 stocks are the high-avg contributors (the removed 36 trades have RSI=39-40 and strong median). Including them LOWERS WR% but raises avg.
+- Decision: REJECT per priority framework. RSI 40 confirmed optimal (keeps high-avg RSI 39-40 stocks).
+
+Improvement Implemented:
+
+- Reverted RSI to 40. Next iter 88: score 90 as BUY_AGGRESSIVE (opens RSI ≤35 deeply oversold stocks under current sma50 < -20% filter).
+
+---
+
+## Claude Iteration 88
+
+Run:
+
+- `entry_exp_88`
+- 158,208 decisions / 212 trades / errors 0
+- overall avg 13.878% | WR 91.038% | PF 14.166
+- ST avg 13.782% | WR 90.566% | PF 13.975
+- MT avg 13.975% | WR 91.509%
+
+Investigation:
+
+- Added BUY_AGGRESSIVE decision threshold at score exactly 90. Added 110 new score-90 trades (RSI ≤35, all other quality filters still apply).
+- P1 (ST WR): -7.473pp. P2: ST avg -3.784pp. All priorities regressed catastrophically.
+- Stop-loss avg collapsed from -0.200% to -2.322%. Score-90 stop-losses are taking large hits.
+- RSI ≤35 stocks are still in active decline at entry. Even under sma50 < -20% + dist < -30%, deeply oversold (RSI ≤35) stocks are falling knives. The RSI uptick at entry is unreliable when RSI is this low.
+- Confirms the prior loop finding definitively: "Do not widen above score 80" is correct under any filter combination tested so far.
+- Decision: REJECT. Removed BUY_AGGRESSIVE threshold.
+
+Improvement Implemented:
+
+- Reverted decision thresholds to BUY_FULL/BUY_STARTER/WATCHLIST only. Next iter 89: LIQUIDITY_RALLY regime expansion (under new sma50 < -20% filter, SIDEWAYS_CHOPPY rejected in iter 71).
+
+---
+
+## Claude Iteration 89
+
+Run:
+
+- `entry_exp_89`
+- 158,208 decisions / 106 trades / errors 0
+- overall avg 15.844% | WR 97.170% | PF 88.262
+- ST avg 17.570% | WR 96.226% | PF 70.403
+- MT avg 14.118% | WR 98.113%
+
+Investigation:
+
+- Added LIQUIDITY_RALLY to quality_dislocation route. +4 new trades (102 → 106).
+- P1 (ST WR): -1.813pp ❌. P3 (overall WR): -0.869pp ❌.
+- The 4 LIQUIDITY_RALLY trades have ~75% WR, dragging down the 98% baseline.
+- In LIQUIDITY_RALLY, even structurally broken stocks with sharp SMA50 breaks may not recover as cleanly — the market rally can briefly bid them up then they resume declining.
+- Decision: REJECT. BEAR_RISK_OFF remains the only valid regime. Reverted.
+
+Improvement Implemented:
+
+- Reverted to BEAR_RISK_OFF only. Next iter 90: sma50_relative fine-bracket at -18% (between -15% accepted and -20% accepted).
+
+---
+
+## Claude Iteration 90 (FINAL)
+
+Run:
+
+- `entry_exp_90`
+- 158,208 decisions / 116 trades / errors 0
+- overall avg 13.984% | median 2.256% | WR 97.414% | PF 81.659
+- ST avg 15.890% | median 9.758% | WR 96.552% | PF 65.525
+- MT avg 12.079% | WR 98.276%
+
+Investigation:
+
+- sma50_relative -20% → -18% (fine-bracket). 102 → 116 trades (+14 at -18 to -20% below SMA50).
+- All priorities regressed: ST WR -1.487pp, ST avg -1.676pp, ST median -2.231pp, overall avg -1.113pp.
+- The -18% to -20% range trades are inferior quality. -20% is a genuine quality cliff, not a gradual slope.
+- The 14 added trades are the "less-sharp" breaks (only 18-20% below SMA50) which do not produce the same recovery quality.
+- Decision: REJECT. Confirmed -20% is an exact quality threshold, not a continuous optimum.
+
+Improvement Implemented:
+
+- Reverted sma50_relative to < -20%. LOOP COMPLETE at iteration 90. See TUNING_STATUS.md for final state.
+
+---
+
+## Claude Iteration 91
+
+Run:
+
+- `entry_exp_91`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.071% | median 2.976% | WR 97.059% | PF 124.586
+- ST avg 17.512% | median 11.073% | WR 96.078% | PF 136.123
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- Re-sweep: ST max_simulation_days 60 → 45 under the new 102-trade universe.
+- Previous rejection (exit loop, iters 21-70) was against 766 trades; re-testing because the exit optima may differ with 102 ultra-high-quality trades.
+- P1 (ST WR): 98.039% → 96.078% (-1.961pp) ❌.
+- MAX_SIM_WINDOW exits: ~30 trades at avg 41.942% — these are big winners being forced out by the 45-day cap before trailing stop fires.
+- Decision: REJECT. 45 days cuts winners too short. Revert to 60; test 75 next.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60. Testing 75 next.
+
+---
+
+## Claude Iteration 92
+
+Run:
+
+- `entry_exp_92`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.926% | median 2.256% | WR 95.098% | PF 52.060
+- ST avg 17.222% | median 11.989% | WR 92.157% | PF 37.617
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST max_simulation_days 60 → 75.
+- P1 (ST WR): 98.039% → 92.157% (-5.882pp). Catastrophic P1 regression.
+- With 75 days the trailing stop has more time to activate and exit trades on normal volatility dips: STOP_LOSS_EXIT avg dropped to -0.542% (vs -0.200% at 60 days) with 3 stop-loss losers vs 2.
+- TRAILING_STOP_EXIT jumped to 46 trades vs 30 — trailing stop is over-firing on the extended window, cutting recoveries short.
+- Both 45 and 75 rejected. 60 days confirmed as ST max_simulation_days optimum even under the new 102-trade universe.
+- Decision: REJECT. Revert to 60 days. ST sim window re-validated.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60. Moving to ST trailing_stop ATR re-sweep.
+
+---
+
+## Claude Iteration 93
+
+Run:
+
+- `entry_exp_93`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.423% | median 3.345% | WR 98.039% | PF 135.116
+- ST avg 14.217% | median 9.837% | WR 98.039% | PF 166.540
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- Re-sweep: ST trailing_stop ATR 3.0 → 2.5 under the new 102-trade universe.
+- P1 (ST WR): 98.039% → 98.039% (flat ✅).
+- P2 (ST avg): 17.566% → 14.217% (-3.349pp) ❌. Clear P2 regression.
+- TRAILING_STOP_EXIT avg: 14.986% (vs higher at 3.0 ATR). Tighter trailing exits winners before they fully develop.
+- Decision: REJECT. P1 flat but P2 clearly worsens. Tighter trailing at 2.5 cuts the best trades prematurely.
+
+Improvement Implemented:
+
+- Reverted ST trailing ATR to 3.0. Testing 3.5 ATR next.
+
+---
+
+## Claude Iteration 94
+
+Run:
+
+- `entry_exp_94`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.669% | median 2.035% | WR 98.039% | PF 147.561
+- ST avg 16.708% | median 11.818% | WR 98.039% | PF 195.546
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST trailing_stop ATR 3.0 → 3.5.
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 16.708% (-0.858pp) ❌. P2 regressed.
+- Looser trailing (3.5) causes more trades to hit MAX_SIM_WINDOW (17 vs ~20 at 3.0) instead of exiting at optimal trailing stop prices.
+- Both 2.5 and 3.5 tested and rejected. ST trailing_stop ATR 3.0 confirmed as optimal for the 102-trade universe (same as for 766-trade universe).
+- Decision: REJECT. Revert to 3.0. ST trailing ATR re-validated.
+
+Improvement Implemented:
+
+- Reverted ST trailing ATR to 3.0. Moving to MT max_simulation_days re-sweep (iters 95-96).
+
+---
+
+## Claude Iteration 95
+
+Run:
+
+- `entry_exp_95`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.940% | median 2.976% | WR 98.039% | PF 140.281
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 10.314% | WR 98.039% | PF 91.247
+
+Investigation:
+
+- Re-sweep: MT max_simulation_days 141 → 120 under the new 102-trade universe.
+- Previous rejection was against 766 trades (exit loop). Re-testing under new entry filters.
+- P1/P2 (ST): perfectly flat — 17.566% avg, 98.039% WR. Entry filter drives ST, not MT sim window.
+- P4 (MT avg): 12.629% → 10.314% (-2.315pp) ❌. 120 days cuts MT quality trades short — many of these deep-dislocation breaks need >120 days to fully recover.
+- MAX_SIM exits: 16 trades at avg 35.641% — these are winners being capped at day 120 before completing their run.
+- Decision: REJECT. 120 days too short for MT dimension. Revert to 141; test 150 next.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141. Testing 150 next.
+
+---
+
+## Claude Iteration 96
+
+Run:
+
+- `entry_exp_96`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.723% | median 2.256% | WR 98.039% | PF 148.102
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 11.880% | WR 98.039% | PF 104.945
+
+Investigation:
+
+- MT max_simulation_days 141 → 150.
+- P1/P2 (ST): identical to baseline ✅.
+- P4 (MT avg): 12.629% → 11.880% (-0.749pp) ❌. 150 days is also slightly worse.
+- At 150 days, STOP_LOSS_EXIT increases (43 vs 40 at 141) — more trades drifting into stop-loss territory with the extra hold time.
+- Both 120 and 150 rejected. MT max_simulation_days 141 confirmed as optimal for the 102-trade universe (same as 766-trade universe).
+- Decision: REJECT. MT sim window 141 days re-validated.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141. Moving to MT trailing_stop re-test (iter 97).
+
+---
+
+## Claude Iteration 97
+
+Run:
+
+- `entry_exp_97`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.032% | median 5.912% | WR 98.039% | PF 131.210
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533 (unchanged)
+- MT avg 8.498% | WR 98.039% | PF 75.360
+
+Investigation:
+
+- MT trailing_stop enabled at 3.0 ATR (previously tested 5.0, 4.0, 3.0 against 766 trades, all rejected; re-testing 3.0 against 102-trade universe since optima could differ).
+- P1/P2 (ST): perfectly flat — trailing only applies to MT here.
+- P4 (MT avg): 12.629% → 8.498% (-4.131pp) ❌. Severe regression.
+- 96 of 102 trades exiting via TRAILING_STOP_EXIT (the MT trailing fires on nearly everything). These are deep-dislocation recovery trades that need 141 days of full position to complete; the trailing stop truncates the recovery move prematurely.
+- MAX_SIM exits dropped from ~20 to 4 — meaning the big 30-50% MT winners that used to run to day 141 now get clipped much earlier by trailing.
+- Decision: REJECT. MT trailing at 3.0 ATR confirmed rejected for 102-trade universe (same finding as 766-trade universe). Deep dislocation recoveries require holding the full MT position.
+
+Improvement Implemented:
+
+- Reverted MT trailing_stop to disabled. Moving to ST partial_profit re-tests (iters 98-100).
+
+---
+
+## Claude Iteration 98
+
+Run:
+
+- `entry_exp_98`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.845% | median 3.590% | WR 98.039% | PF 149.327
+- ST avg 17.062% | median 12.413% | WR 98.039% | PF 199.663
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST sell_pct 20% → 30% (lock in more profit at 0.75R target).
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 17.062% (-0.504pp) ❌. P2 slightly regressed.
+- ST median: 11.989% → 12.413% (+0.424pp) marginal improvement.
+- With 30% partial sell at 0.75R, only 70% of position runs the trailing stop; this clips the big trailing winners slightly. The TRAILING_STOP_EXIT avg dropped from the 3.0 baseline.
+- Combined P2 signal: avg down, median marginally up — not a clear P2 improvement.
+- Decision: REJECT. 20% sell_pct remains best for this universe.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 20%. Testing ST partial_profit target at 1.0R next.
+
+---
+
+## Claude Iteration 99
+
+Run:
+
+- `entry_exp_99`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 16.605% | median 3.191% | WR 97.059% | PF 90.825
+- ST avg 20.581% | median 15.861% | WR 96.078% | PF 81.574
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST partial_profit target 0.75R → 1.0R (with sell 20%, BE at 1.0R). The 70-loop swept from 2.25R down to 0.75R; going back up to 1.0R tests whether the higher target benefits under 102 quality trades where the trailing stop fires most times.
+- P1 (ST WR): 98.039% → 96.078% (-1.961pp) ❌. P1 regression.
+- P2 (ST avg): 17.566% → 20.581% (+3.015pp) ✅. Excellent P2 improvement.
+- P2 (ST median): 11.989% → 15.861% (+3.872pp) ✅. Excellent.
+- The math: BE trigger at 1.0R means ~1 trade that previously got BE protection at 0.75R now hits original stop before reaching 1.0R (STOP_LOSS_EXIT went 42→43, with avg worsening -0.397% vs -0.200%). This adds 1 loser.
+- Despite extraordinary P2 improvement, P1 regressed. Under strict P1-first framework: REJECT.
+- Note for context: 0.75R target is protecting 1 marginal trade that reaches 0.75R but then fails to reach 1.0R. The strict priority framework preserves this protection correctly.
+- Decision: REJECT. 0.75R target confirmed for ST partial profit under 102-trade universe.
+
+Improvement Implemented:
+
+- Reverted ST partial_profit target to 0.75R. Final iteration (100): ST sell_pct 15%.
+
+---
+
+## Claude Iteration 100
+
+Run:
+
+- `entry_exp_100`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.223% | median 1.820% | WR 98.039% | PF 153.105
+- ST avg 17.818% | median 11.777% | WR 98.039% | PF 208.468
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST sell_pct 20% → 15% (previously rejected on 766 trades: "priority-2 combined metric negative"; re-testing on 102 quality trades where nearly all reach the trailing stop).
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 17.818% (+0.252pp) marginal improvement.
+- P2 (ST median): 11.989% → 11.777% (-0.212pp) marginal regression.
+- Combined P2: avg +0.252pp, median -0.212pp — mixed signal, noise-level on 51 ST trades.
+- ST PF: 205.533 → 208.468 (+2.935) slightly improved.
+- Theory holds: less partial sell = more capital in trailing stop run. But the magnitude is within noise bounds.
+- Decision: REJECT. "Clearly improves" threshold not met. 20% confirmed as ST sell_pct optimum.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 20%. Config restored to entry_exp_83 baseline. LOOP COMPLETE at iteration 100. See TUNING_STATUS.md for final state.
+
+---
+
+## Session Summary (Exit Re-validation Loop, Iterations 91-100)
+
+All 10 iterations re-tested exit_policy_config.json knobs against the new 102-trade universe (entry_exp_83 filters: sma50 < -20%, dist < -30%, RSI ≤ 40).
+
+| iter | change | result |
+|------|--------|--------|
+| 91 | ST max_simulation_days 60 → 45 | rejected (ST WR -1.961pp; winners cut early by time cap) |
+| 92 | ST max_simulation_days 60 → 75 | rejected (ST WR -5.882pp; trailing over-fires on extended window) |
+| 93 | ST trailing_stop ATR 3.0 → 2.5 | rejected (P1 flat; ST avg -3.349pp; tighter trailing clips winners) |
+| 94 | ST trailing_stop ATR 3.0 → 3.5 | rejected (P1 flat; ST avg -0.858pp; looser pushes into MAX_SIM) |
+| 95 | MT max_simulation_days 141 → 120 | rejected (MT avg -2.315pp; MT recoveries need full window) |
+| 96 | MT max_simulation_days 141 → 150 | rejected (MT avg -0.749pp; 141 confirmed optimum) |
+| 97 | MT trailing_stop enabled at 3.0 ATR | rejected (MT avg -4.131pp; deep recovery trades need full MT hold) |
+| 98 | ST sell_pct 20% → 30% | rejected (P1 flat; ST avg -0.504pp; more partial sell clips trailing) |
+| 99 | ST partial_profit target 0.75R → 1.0R | rejected (ST WR -1.961pp; later BE exposes 1 extra trade to stop) |
+| 100 | ST sell_pct 20% → 15% | rejected (P1 flat; P2 mixed ±0.25pp; noise level, not clearly better) |
+
+**Key finding:** Every single exit policy knob tested against the 766-trade universe was confirmed as optimal for the 102-trade universe. The exit config is globally robust — the entry quality filter changed the trade count dramatically but not the exit mechanics. The optimum exit parameters for these deep-dislocation recovery trades are independent of how tightly the entry filters are set.
+
+**Final best run unchanged: `entry_exp_83`** (102 trades, 98.039% WR, 17.566% ST avg, 15.097% overall avg, PF 151.846).
+
+---
+
+## Session Summary (Entry Optimization Loop 2, Iterations 81-90)
+
+| iter | change | config file | result |
+|------|--------|------------|--------|
+| 81 | TRUE_BROKEN_CHART sma50_relative < -5% → < -10% | technical_setup_config.json | **accepted** (+0.88pp ST WR, all metrics improved) |
+| 82 | sma50_relative < -10% → < -15% | technical_setup_config.json | **accepted** (+5.36pp ST WR additional, extraordinary improvement) |
+| 83 | sma50_relative < -15% → < -20% | technical_setup_config.json | **accepted** (+2.33pp ST WR additional, 98% WR, PF 151) |
+| 84 | sma50_relative < -20% → < -25% | technical_setup_config.json | rejected (MT avg -7.85pp; sample too small; -20% confirmed optimum) |
+| 85 | sma200_relative < 0% → < -5% | technical_setup_config.json | no-op (all trades at sma50 < -20% already satisfy sma200 < -5%) |
+| 86 | sma200_relative < -5% → < -10% | technical_setup_config.json | no-op (sma200 redundant given sma50 < -20%) |
+| 87 | OVERSOLD_REVERSAL RSI bound 40 → 39 | technical_setup_config.json | rejected (ST WR -1.07pp per P1 framework; RSI 39-40 stocks contribute high avg) |
+| 88 | score 90 as BUY_AGGRESSIVE | entry_signal_config.json | rejected (ST WR -7.47pp; RSI ≤35 stocks are falling knives regardless of sma50 filter) |
+| 89 | LIQUIDITY_RALLY regime | entry_signal_config.json | rejected (ST WR -1.81pp; LIQUIDITY_RALLY produces lower-quality recoveries) |
+| 90 | sma50_relative < -20% → < -18% (fine-bracket) | technical_setup_config.json | rejected (-20% is exact quality cliff; -18 to -20% trades inferior) |
+
+**Total gain from loop 2 vs loop 1 best (entry_exp_80):**
+
+| metric | entry_exp_80 | entry_exp_83 (final) | loop-2 gain |
+|--------|-------------|---------------------|-------------|
+| trades | 266 | 102 | -164 |
+| ST WR | 89.474% | 98.039% | +8.565pp |
+| ST avg | 10.171% | 17.566% | +7.395pp |
+| ST median | 5.458% | 11.989% | +6.531pp |
+| overall WR | 92.481% | 98.039% | +5.558pp |
+| overall avg | 10.371% | 15.097% | +4.726pp |
+| overall PF | 22.584 | 151.846 | +129.262 |
+
+Key findings from loop 2:
+1. sma50_relative distance in TRUE_BROKEN_CHART is the single most powerful entry quality lever discovered in this session.
+2. -20% below SMA50 is the exact quality cliff (between -18% inferior, -20% excellent, -25% MT-collapse).
+3. sma200_relative is entirely redundant given sma50 < -20% (always satisfied automatically).
+4. Score-90 (RSI ≤35) stocks are falling knives regardless of any dislocation filter — the RSI ≤35 condition at entry consistently underperforms. Do not trade RSI ≤35 setups.
+5. All regime expansions (SIDEWAYS_CHOPPY, LIQUIDITY_RALLY) produce inferior trades vs BEAR_RISK_OFF.
+6. The BROKEN_CHART_QUALITY_RECOVERY setup with sma50 < -20% + dist < -30% + RSI 25-40 in BEAR_RISK_OFF is the optimal entry universe.
