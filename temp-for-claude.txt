@@ -1,0 +1,57 @@
+refer claude.md, codex-backed/TUNING_STATUS.md and then:
+  task:
+  now do following steps in loop for 10 times:
+  -run backtests (using 8 workers)
+  -iinvestigate the result and suggest improvements. But refer to codex-backed/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md to see what has been tried sofar so that you dont repeat yourself. then suggest optimal improvements.
+  -log the improvements in same md file
+  -then imeplement those improvements
+
+  pause for 1 minute between each iteration.
+  keep in mind that our main working directory for code read/write is codex-backed
+
+---
+
+give me prompt for next session to run 10 more iterations
+
+---
+Read codex-backed/TUNING_STATUS.md and the tail of ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md (last ~200 lines) before doing anything else.
+
+  Context:
+  We have completed 90 total optimization iterations across exit policy (iters 1-70) and entry signal (iters 71-90). The current best run is entry_exp_83.
+
+  Current accepted config changes vs original:
+  - entry_signal_config.json: deep_dislocation → dist_from_52w_high <= -30
+  - technical_setup_config.json: OVERSOLD_REVERSAL RSI upper bound <= 40 (was 42)
+  - technical_setup_config.json: TRUE_BROKEN_CHART sma50_relative < -20 (was -5)
+
+  Current best metrics (entry_exp_83, 102 trades):
+  - ST WR 98.039% | ST avg 17.566% | overall avg 15.097% | PF 151.846
+
+  Task: Run 10 more backtest iterations (name them entry_exp_91 through entry_exp_100) using 8 workers. Focus on the one unexplored opportunity from TUNING_STATUS: re-validate the exit policy config (exit_policy_config.json) against the new 102-trade universe — it was
+  optimized against 766 trades and the entry filters have changed dramatically.
+
+  Specifically explore:
+  1. ST max_simulation_days (currently 60) — re-sweep 45/75 under the new entry universe
+  2. ST trailing_stop ATR (currently 3.0) — re-sweep 2.5/3.5 under new entry universe
+  3. ST partial_profit target (currently 0.75R, 20% sell) — re-test with the higher-quality trades
+  4. MT max_simulation_days (currently 141) — re-validate 120/150 under new entry universe
+  5. MT trailing_stop (currently disabled) — with only 102 trades all from sharp breaks, re-test enabling trailing at 3.0 ATR
+  6. Any entry dimensions not yet tested (check log to avoid repeats)
+
+  Rules:
+  - Change one knob per iteration, run backtest, compare to entry_exp_83 baseline, accept/reject, log it
+  - Use 8 workers: PYTHONPATH=codex-backed/src claude-backend/.venv/bin/python -m codex_backed.cli backtest --config-dir codex-backed/configs --output-dir codex-backed/results --run-id entry_exp_NN --workers 8
+  - Read metrics: claude-backend/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/entry_exp_NN
+  - Accept only if priority 1 (ST WR) improves OR stays flat while priority 2 (ST avg+median) clearly improves
+  - After each 2-3 iterations, append a ## Claude Iteration NN block to ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md
+  - Update TUNING_STATUS.md at the end with the new best run and all accepted changes
+
+  Hard constraints (do not re-test):
+  - Do NOT open score 90/100 as BUY (tested iters 88 — catastrophic)
+  - Do NOT add SIDEWAYS_CHOPPY or LIQUIDITY_RALLY to route (tested iters 71, 89 — both rejected)
+  - Do NOT loosen sma50_relative above -18% or tighten below -25%
+  - Do NOT loosen OVERSOLD_REVERSAL RSI above 40 or tighten below 39
+  - Do NOT add RS-based penalties (removes best trades)
+  - Do NOT use penalty values of exactly 10, 20, or 30 pts (score-90 promotion bug)
+
+

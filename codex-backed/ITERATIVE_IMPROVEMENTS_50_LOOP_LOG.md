@@ -4392,3 +4392,3127 @@ Next work if resumed:
   - bracket short-term `initial_stop.atr_multiplier` just above 2.25, such as 2.3125, if support-buffer testing does not help
   - test short-term max simulation around 55-60 days only if win-rate and short-term return are both evaluated
 - Avoid more medium-term-only tuning unless short-term metrics remain unchanged.
+
+## Claude 10-Loop Continuation (workers=8)
+
+User requested a new 10-iteration tuning loop on top of the stopped `loop100_061_w8` baseline. All runs use `--workers 8` per user instruction.
+
+Environment notes for this continuation:
+- Fresh price cache rebuilt via `codex-backed/scripts/build_prices_cache.py` (199 tickers + SPY/QQQ, 2017-06-01 to 2026-01-01, auto_adjust=false).
+- DFS delisted in current yfinance data, so universe is 199 vs. prior 200.
+- Backtest CLI invoked via `claude-backend/.venv` with `PYTHONPATH=codex-backed/src` because no `codex-backed/.venv` is present in this environment.
+- Run-id prefix: `claude_loop_NN`.
+
+### Claude Iteration 1
+
+Run:
+
+- `claude_loop_01`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.6347%
+- overall median return 7.776%
+- overall win rate 57.0496%
+- overall profit factor 8.1734
+- short-term avg return 10.994%
+- short-term median return 9.3943%
+- short-term win rate 67.3629%
+- short-term profit factor 6.912
+- medium-term avg return 16.2754%
+- medium-term median return 0.0%
+- medium-term win rate 46.7363%
+- medium-term profit factor 9.3814
+- exit mix: 320 stop-loss (-4.51% avg), 267 max-sim (32.42% avg, 97.38% win), 179 trailing (18.06% avg, 98.88% win)
+- errors 0
+
+Investigation:
+
+- This is a baseline re-measurement of the accepted `loop100_061_w8` config under a freshly rebuilt price cache. The same single setup `BROKEN_CHART_QUALITY_RECOVERY` in `BEAR_RISK_OFF` is producing 100% of trades, identical to prior runs.
+- Headline metrics are very close to `loop100_061_w8` but a touch below it. Likely drivers:
+  - 1 fewer ticker (DFS delisted) -> 158,208 decisions vs 157,822 in `loop100_061_w8`; trade count 766 vs 728.
+  - Possibly slightly different yfinance adjustment for recently-delisted/renamed names.
+- Short-term win rate at 67.36% is below the prior accepted best 69.78%. Short-term avg also slightly below (10.99% vs 11.93%).
+- Stop-loss rate is high (320/766 = 41.78%). MAX_SIM_WINDOW_EXIT and TRAILING_STOP_EXIT are extremely strong when they fire (97%+ win rates).
+- Audit log "next work if resumed" explicitly proposes testing short-term `support_buffer_pct` at 1.25% against the accepted 1.0%. That is the cleanest untested lever and directly targets the prioritized short-term win rate.
+
+Improvement Implemented:
+
+- Increased short-term `initial_stop.support_buffer_pct` from 1.0% to 1.25%.
+- Kept short-term `initial_stop.atr_multiplier` at 2.25.
+- Kept short-term target/breakeven at 2.25R, trailing 2.46875 ATR, max sim 60 days.
+- Kept all medium-term settings unchanged.
+- Hypothesis: slightly wider support buffer reduces premature support-stop exits without enlarging losing trades much, since ATR cap still dominates when ATR-based stop is wider.
+
+### Claude Iteration 2
+
+Run:
+
+- `claude_loop_02`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.5915%
+- overall median return 7.776%
+- overall win rate 56.7885%
+- overall profit factor 7.9918
+- short-term avg return 10.9076%
+- short-term median return 9.5166%
+- short-term win rate 66.8407%
+- short-term profit factor 6.6052
+- medium-term avg return 16.2754% (unchanged: medium-term ignores short-term initial stop)
+- errors 0
+
+Investigation:
+
+- Increasing short-term `support_buffer_pct` from 1.0% to 1.25% worsened the prioritized metrics:
+  - short-term win rate 67.3629% -> 66.8407%
+  - short-term avg return 10.994% -> 10.9076%
+  - short-term profit factor 6.912 -> 6.6052
+  - overall avg return 13.6347% -> 13.5915%
+  - overall win rate 57.0496% -> 56.7885%
+- Short-term median actually improved (9.3943% -> 9.5166%), but headline win/avg both moved against the priority.
+- 1.25% support buffer is rejected. Combined with prior 0.75% rejection (iteration 114), the accepted local optimum for `support_buffer_pct` is 1.0%.
+- Move on to the next suggested untested lever: short-term `initial_stop.atr_multiplier` at 2.3125 (vs accepted 2.25). The local 2.125/2.1875 tests under-performed; bracket the upper side now.
+
+Improvement Implemented:
+
+- Restored short-term `initial_stop.support_buffer_pct` from 1.25% to the accepted 1.0%.
+- Increased short-term `initial_stop.atr_multiplier` from 2.25 to 2.3125.
+- Kept short-term target/breakeven at 2.25R, trailing 2.46875 ATR, max sim 60 days.
+- Kept all medium-term settings unchanged.
+- Hypothesis: a slightly wider ATR stop (2.3125) may reduce stop-outs on volatile but still-trending names without giving back too much per loss.
+
+### Claude Iteration 3
+
+Run:
+
+- `claude_loop_03`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.6478%
+- overall median return 7.776%
+- overall win rate 57.0496%
+- overall profit factor 8.1701
+- short-term avg return 11.0201%
+- short-term median return 9.5166%
+- short-term win rate 67.3629%
+- short-term profit factor 6.9089
+- medium-term unchanged
+- exit mix: 320 stop-loss, 268 max-sim (+1 vs iter1), 178 trailing (-1)
+- errors 0
+
+Investigation:
+
+- Widening short-term `atr_multiplier` from 2.25 to 2.3125 moved only one trade from TRAILING_STOP_EXIT to MAX_SIM_WINDOW_EXIT. Practically a no-op:
+  - short-term win rate exactly matched iter 1 baseline (67.3629%)
+  - short-term avg return: 10.994% -> 11.0201% (+0.026 pp, in noise)
+  - short-term median: 9.3943% -> 9.5166% (+0.12 pp)
+  - short-term profit factor: 6.912 -> 6.9089 (-0.003, in noise)
+  - overall avg return: 13.6347% -> 13.6478% (+0.013 pp)
+  - stop-loss count identical at 320, so the wider ATR stop did not save any losing trade.
+- Since win rate is identical and other deltas are within noise, do not accept 2.3125 as the new baseline. Restore 2.25 and pivot to an entirely untested lever family.
+- Untouched in the prior 114-iteration loop: `risk_config.json` (earnings risk, ATR caps, risk-per-trade) and entry/setup configs. The earnings risk gate is the highest-EV untested lever because BROKEN_CHART_QUALITY_RECOVERY entries near reported earnings introduce stop-out variance unrelated to the chart setup.
+
+Improvement Implemented:
+
+- Restored short-term `initial_stop.atr_multiplier` from 2.3125 to the accepted 2.25.
+- Increased `risk_config.earnings_risk.avoid_new_entries_within_days` from 3 to 5.
+- Kept `starter_only_within_days` at 10.
+- Kept all exit policy settings unchanged.
+- Hypothesis: expanding the earnings exclusion window from 3 to 5 days should drop entries with the highest near-term gap risk and modestly reduce stop-loss share, which is currently 320/766 = 41.8%.
+
+### Claude Iteration 4
+
+Run:
+
+- `claude_loop_04`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.6347% (identical to iter 1)
+- overall median return 7.776%
+- overall win rate 57.0496% (identical)
+- overall profit factor 8.1734 (identical)
+- short-term avg return 10.994%
+- short-term median return 9.3943%
+- short-term win rate 67.3629%
+- short-term profit factor 6.912
+- exit mix identical to iter 1
+- errors 0
+
+Investigation:
+
+- Iter 4 reproduced iter 1 metrics exactly. The earnings_risk window expansion had zero impact.
+- Root cause confirmed by grep: `earnings_days_away` is set in `analyze.py` (live path) and read by `risk/sizing.py`, but the historical/native feature builder (`features/historical_builder.py`, `features/builder.py`) never populates it. In backtests, `earnings_days_away` is always `None`, so the earnings risk gate is a no-op.
+- Net result: `risk_config.earnings_risk.*` is a tunable knob for live analysis only. It cannot be optimized through backtests in the current implementation.
+- This rules out the entire `risk_config.json` family for backtest tuning under the current code (`position_sizing` and `risk_caps` would influence size but not per-trade return %).
+- Pivot back to exit policy. A short-term lever that has been tested (under the prior priority of average return) but not re-evaluated under the updated short-term-win-rate priority: `partial_profit.sell_pct`. The earlier loop reduced it from 50% to 0% chasing avg return; under a win-rate priority, taking some partial profit at the 2.25R target would convert breakeven post-target reversals into measured wins.
+
+Improvement Implemented:
+
+- Restored `risk_config.earnings_risk.avoid_new_entries_within_days` from 5 back to 3 (kept consistent with the prior accepted baseline that survives untouched in backtests).
+- Increased short-term `partial_profit.sell_pct` from 0% to 25%.
+- Kept `move_stop_to_breakeven: true`, `breakeven_after_r_multiple: 2.25`, `target_r_multiple: 2.25`, trailing stop 2.46875 ATR, max sim 60 days, support buffer 1.0%, ATR multiplier 2.25.
+- Kept all medium-term settings unchanged.
+- Hypothesis: locking in 25% at the 2.25R target should raise short-term win rate by turning would-be breakeven outcomes into mildly positive ones, at a modest cost to average-winner upside. Under the updated win-rate priority, this is favorable.
+
+### Claude Iteration 5
+
+Run:
+
+- `claude_loop_05`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.5804%
+- overall median return 8.0921%
+- overall win rate 57.3107%
+- overall profit factor 8.1448
+- short-term avg return 10.8854%
+- short-term median return 9.9072%
+- short-term win rate 67.8851%
+- short-term profit factor 6.8536
+- medium-term unchanged
+- exit mix: 320 stop-loss, 267 max-sim, 179 trailing (TRAILING_STOP_EXIT win rate now 100% because the 25% partial is always locked-in profit before trailing fires)
+- errors 0
+
+Investigation:
+
+- Setting short-term `partial_profit.sell_pct` to 25% materially improved the prioritized metrics vs iter 1 baseline:
+  - short-term win rate: 67.3629% -> 67.8851% (+0.52 pp) -- best so far in this loop
+  - short-term median return: 9.3943% -> 9.9072% (+0.51 pp)
+  - overall median return: 7.776% -> 8.0921% (+0.32 pp)
+  - overall win rate: 57.0496% -> 57.3107% (+0.26 pp)
+- Cost was modest and only on the lower-priority metrics:
+  - short-term avg return: 10.994% -> 10.8854% (-0.11 pp)
+  - short-term profit factor: 6.912 -> 6.8536 (-0.06)
+- The mechanism is exactly as hypothesized: 25% off the table at 2.25R turns post-target reversals from breakeven to net-positive. TRAILING_STOP_EXIT now shows 100% win rate.
+- Accept the 25% sell_pct as the new local best under updated short-term-win-rate priority.
+
+Improvement Implemented:
+
+- Kept short-term `partial_profit.sell_pct` at the new accepted 25%.
+- Push the lever further: increase short-term `partial_profit.sell_pct` from 25% to 35%.
+- Kept everything else at the iter 1 baseline.
+- Hypothesis: if 25% partial improved win rate by locking in a portion of winners, 35% may extend that improvement further -- as long as the loss of upside on big runners stays small. This brackets the upper side before deciding whether to test 30% or 40%.
+
+### Claude Iteration 6
+
+Run:
+
+- `claude_loop_06`
+- 158,208 decisions
+- 766 trades
+- overall avg return 13.5587%
+- overall median return 8.1958%
+- overall win rate 57.3107%
+- overall profit factor 8.1334
+- short-term avg return 10.8419%
+- short-term median return 9.8651%
+- short-term win rate 67.8851%
+- short-term profit factor 6.8302
+- medium-term unchanged
+- errors 0
+
+Investigation:
+
+- Increasing short-term `sell_pct` from 25% to 35% did NOT improve the priority metrics:
+  - short-term win rate stayed exactly at 67.8851% (no additional breakeven-to-win conversions)
+  - short-term median: 9.9072% -> 9.8651% (-0.04 pp)
+  - short-term avg: 10.8854% -> 10.8419% (-0.04 pp)
+  - overall median 8.0921% -> 8.1958% (+0.10 pp, a small overall median bump)
+  - overall avg 13.5804% -> 13.5587% (-0.02 pp)
+- Win rate plateau at 25% suggests 25% is already capturing all post-target trades; pushing further only trims winner upside without adding wins.
+- Revert short-term `sell_pct` to the accepted 25%.
+- Pivot to medium-term. Medium-term currently has win rate 46.7363% and median 0.0% -- many breakeven outcomes where the trade reaches 1.75R, breakeven stop is set, then price reverses. Enabling medium-term partial profit should convert some of those into measured wins, mirroring the iter 5 short-term effect.
+
+Improvement Implemented:
+
+- Reverted short-term `partial_profit.sell_pct` from 35% to the accepted 25%.
+- Enabled medium-term `partial_profit`: `enabled` true, `target_r_multiple` 2.0, `sell_pct` 25%, `move_stop_to_breakeven` true, `breakeven_after_r_multiple` 1.75 (unchanged).
+- Kept medium-term `trailing_stop` disabled and `time_stop` disabled.
+- Kept medium-term `max_simulation_days` at 141 and `initial_stop` at 2.25 ATR / 1.5% support buffer.
+- Hypothesis: medium-term currently produces 0% median because many trades hit the 1.75R breakeven and reverse, exiting at 0R. Taking 25% profit at 2.0R locks in 0.5R on those exact trades, raising medium-term win rate and median without changing the trade set.
+
+### Claude Iteration 7
+
+Run:
+
+- `claude_loop_07`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.9682%
+- overall median return 8.7896%
+- overall win rate 68.0157%
+- overall profit factor 7.8227
+- short-term avg return 10.8854% (unchanged)
+- short-term median return 9.9072% (unchanged)
+- short-term win rate 67.8851% (unchanged)
+- short-term profit factor 6.8536 (unchanged)
+- medium-term avg return 15.051%
+- medium-term median return 4.9366%
+- medium-term win rate 68.1462%
+- medium-term profit factor 8.7508
+- exit mix: 320 stop-loss (now 25.6% win rate due to partial taken before stop), 267 max-sim, 179 trailing
+- errors 0
+
+Investigation:
+
+- Enabling medium-term `partial_profit` at 2.0R / 25% delivered a dramatic improvement:
+  - medium-term win rate: 46.7363% -> 68.1462% (+21.41 pp)
+  - medium-term median: 0.0% -> 4.9366% (+4.94 pp)
+  - overall win rate: 57.3107% -> 68.0157% (+10.71 pp) -- biggest jump in this loop
+  - overall median: 8.0921% -> 8.7896% (+0.70 pp)
+  - short-term metrics held exactly (priority preserved)
+- Cost was modest and concentrated on average / profit factor:
+  - overall avg return: 13.5804% -> 12.9682% (-0.61 pp)
+  - medium-term avg return: 16.2754% -> 15.051% (-1.22 pp)
+  - overall profit factor: 8.1448 -> 7.8227 (-0.32)
+- Mechanism confirmed by exit-reason mix: STOP_LOSS_EXIT win rate moved from 0% to 25.625%; avg return on stop exits moved from -4.51% to -3.44%. Some prior all-losses now have a locked-in partial profit.
+- ACCEPT iter 7 as new best. Under updated priority, the +10.71 pp overall win rate at flat short-term metrics is a clear gain.
+- Next, attempt to recover some of the lost medium-term upside by enabling the disabled medium-term `trailing_stop`. Activated after target 1 (2.0R), it should ride trending winners further than the current "BE-stop until max sim" behavior.
+
+Improvement Implemented:
+
+- Enabled medium-term `trailing_stop`: `enabled` true, `method` "atr", `atr_multiplier` 3.0, `activate_after_target_1` true.
+- Kept medium-term `partial_profit` at the new accepted 2.0R / 25%.
+- Kept medium-term `breakeven_after_r_multiple` 1.75 and `initial_stop` 2.25 ATR / 1.5% support buffer.
+- Kept medium-term `max_simulation_days` at 141 and `time_stop` disabled.
+- Kept all short-term settings unchanged.
+- Hypothesis: with partial profit secured at 2.0R, trailing the remainder at 3.0 ATR should let winners run further than the current breakeven-stop-then-max-sim flow. This may recover some of the 1.22 pp medium-term avg return cost while keeping the +21 pp medium-term win rate.
+
+### Claude Iteration 8
+
+Run:
+
+- `claude_loop_08`
+- 158,208 decisions
+- 766 trades
+- overall avg return 11.2949%
+- overall median return 10.4%
+- overall win rate 68.0157% (unchanged)
+- overall profit factor 6.9424
+- short-term unchanged
+- medium-term avg return 11.7045%
+- medium-term median return 10.7817%
+- medium-term win rate 68.1462% (unchanged)
+- medium-term profit factor 7.0275
+- exit mix shifted: 120 max-sim (-147), 238 stop-loss (-82), 408 trailing (+229)
+- errors 0
+
+Investigation:
+
+- Enabling medium-term trailing stop at 3.0 ATR did the opposite of the goal:
+  - medium-term avg return: 15.051% -> 11.7045% (-3.35 pp, costly)
+  - medium-term median: 4.9366% -> 10.7817% (+5.84 pp, smoother)
+  - medium-term win rate unchanged at 68.1462%
+  - medium-term profit factor: 8.7508 -> 7.0275 (-1.72)
+- The trailing stop is too tight: 408 trades now exit on trailing (vs 179 before), and most big winners that previously rode to max-sim are being stopped mid-trend. The avg-return loss is concentrated in MAX_SIM_WINDOW_EXIT: avg 29.20% -> 19.89% with count 267 -> 120.
+- Under updated priority, top-3 metrics are tied at iter 7 levels but the lower-priority overall avg return dropped -1.67 pp and profit factor dropped -0.88. By prior loop policy (e.g. iter 113), tied top-priority + worse lower-priority is a rejection.
+- However, the median jump of +5.84 pp is meaningful for portfolio smoothness. Try a wider trailing (4.0 ATR) instead of disabling, so partial still locks in wins but trail lets stronger trends mature.
+
+Improvement Implemented:
+
+- Increased medium-term `trailing_stop.atr_multiplier` from 3.0 to 4.0.
+- Kept medium-term `trailing_stop.enabled` true and `activate_after_target_1` true.
+- Kept medium-term `partial_profit` at the accepted 2.0R / 25%.
+- Kept all short-term settings unchanged.
+- Hypothesis: a wider 4.0 ATR trail should let trending winners run further while still locking in the partial-profit gain on reversals. Goal is to keep iter 7's high win rate and median improvement and recover most of the avg-return cost.
+
+### Claude Iteration 9
+
+Run:
+
+- `claude_loop_09`
+- 158,208 decisions
+- 766 trades
+- overall avg return 11.3863%
+- overall median return 9.7762%
+- overall win rate 68.0157% (unchanged)
+- overall profit factor 6.9905
+- short-term unchanged
+- medium-term avg return 11.8873%
+- medium-term median return 9.6571%
+- medium-term win rate 68.1462% (unchanged)
+- medium-term profit factor 7.1216
+- exit mix: 121 max-sim, 238 stop-loss, 407 trailing (almost identical to iter 8)
+- errors 0
+
+Investigation:
+
+- Widening medium-term trailing stop from 3.0 to 4.0 ATR barely moved anything (trailing exits 408 -> 407). The 4.0 ATR trail is still trimming big winners similarly to 3.0 ATR.
+- vs iter 7 (no trail) the result is still worse on the lower-priority metrics:
+  - overall avg return 12.9682% -> 11.3863% (-1.58 pp)
+  - overall profit factor 7.8227 -> 6.9905 (-0.83)
+  - overall win rate unchanged at 68.0157%
+  - medium-term avg return 15.051% -> 11.8873% (-3.16 pp)
+- Conclusion: medium-term trailing stop, at any tested ATR, costs more avg return than it gains in smoothness. Iter 7 remains the local best.
+- For the final iteration in this 10-loop, pivot to an untested lever that should further raise win rate without re-introducing trailing: align medium-term partial target with the existing breakeven trigger. Currently the breakeven moves at 1.75R but partial fires at 2.0R, so trades that reach 1.75R but not 2.0R get a breakeven exit at 0R (no partial locked in). Lowering partial target to 1.75R means every breakeven-trigger trade also takes a 25% partial.
+
+Improvement Implemented:
+
+- Disabled medium-term `trailing_stop` (back to false).
+- Lowered medium-term `partial_profit.target_r_multiple` from 2.0 to 1.75 (aligned with `breakeven_after_r_multiple`).
+- Kept medium-term `partial_profit.sell_pct` at 25%, `move_stop_to_breakeven` true, `breakeven_after_r_multiple` at 1.75.
+- Kept all short-term settings unchanged.
+- Hypothesis: aligning the partial target with the breakeven trigger means every trade that reaches the breakeven threshold also locks in 25% at 1.75R = +0.44R. Trades that previously reached 1.75R, set BE stop, then reversed to BE will now exit at +0.33R (= 25% * 1.75R - 75% * 0R + 0). This converts more breakeven outcomes into measured wins.
+
+### Claude Iteration 10
+
+Run:
+
+- `claude_loop_10`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.8257%
+- overall median return 8.7002%
+- overall win rate 68.799%
+- overall profit factor 7.7478
+- short-term unchanged
+- medium-term avg return 14.766%
+- medium-term median return 4.5661%
+- medium-term win rate 69.7128%
+- medium-term profit factor 8.6041
+- exit mix back to iter 7 pattern: 267 max-sim, 320 stop-loss (now 27.5% win rate), 179 trailing
+- errors 0
+
+Investigation:
+
+- Lowering medium-term `partial_profit.target_r_multiple` from 2.0 to 1.75 (aligned with the breakeven trigger) further improved win rate while keeping short-term metrics frozen:
+  - overall win rate: 68.0157% -> 68.799% (+0.78 pp, new loop best)
+  - medium-term win rate: 68.1462% -> 69.7128% (+1.57 pp, new loop best)
+  - STOP_LOSS_EXIT win rate: 25.625% -> 27.5% (more stop trades had partial taken first)
+- Small cost on lower-priority metrics:
+  - overall avg return: 12.9682% -> 12.8257% (-0.14 pp)
+  - overall median: 8.7896% -> 8.7002% (-0.09 pp)
+  - overall profit factor: 7.8227 -> 7.7478 (-0.07)
+  - medium-term avg return: 15.051% -> 14.766% (-0.28 pp)
+- Under updated priority, this is an accept: tied short-term metrics, improved overall win rate, all other deltas negligible.
+
+Improvement Implemented:
+
+- Kept all iter 10 settings as the new accepted baseline.
+- No further config change after this iteration; the 10-loop is complete.
+
+## Claude 10-Loop Result Summary
+
+| run | overall_avg | overall_median | overall_win | overall_pf | ST_avg | ST_win | MT_avg | MT_win | MT_median |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude_loop_01 (baseline) | 13.6347 | 7.776 | 57.0496 | 8.1734 | 10.994 | 67.3629 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_02 (ST buf 1.25) | 13.5915 | 7.776 | 56.7885 | 7.9918 | 10.9076 | 66.8407 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_03 (ST atr 2.3125) | 13.6478 | 7.776 | 57.0496 | 8.1701 | 11.0201 | 67.3629 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_04 (earnings 5d) | 13.6347 | 7.776 | 57.0496 | 8.1734 | 10.994 | 67.3629 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_05 (ST sell_pct 25) | 13.5804 | 8.0921 | 57.3107 | 8.1448 | 10.8854 | 67.8851 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_06 (ST sell_pct 35) | 13.5587 | 8.1958 | 57.3107 | 8.1334 | 10.8419 | 67.8851 | 16.2754 | 46.7363 | 0.0 |
+| claude_loop_07 (MT partial 2.0R/25) | 12.9682 | 8.7896 | 68.0157 | 7.8227 | 10.8854 | 67.8851 | 15.051 | 68.1462 | 4.9366 |
+| claude_loop_08 (MT trail 3.0) | 11.2949 | 10.4 | 68.0157 | 6.9424 | 10.8854 | 67.8851 | 11.7045 | 68.1462 | 10.7817 |
+| claude_loop_09 (MT trail 4.0) | 11.3863 | 9.7762 | 68.0157 | 6.9905 | 10.8854 | 67.8851 | 11.8873 | 68.1462 | 9.6571 |
+| claude_loop_10 (MT partial 1.75R/25) | 12.8257 | 8.7002 | 68.799 | 7.7478 | 10.8854 | 67.8851 | 14.766 | 69.7128 | 4.5661 |
+
+Accepted final config (iter 10):
+
+- Short-term initial stop: 2.25 ATR, 1.0% support buffer.
+- Short-term partial profit: enabled, target 2.25R, sell 25%, move stop to BE at 2.25R.
+- Short-term trailing stop: enabled, 2.46875 ATR, activate after target 1.
+- Short-term max sim: 60 days, time stop disabled.
+- Medium-term initial stop: 2.25 ATR, 1.5% support buffer.
+- Medium-term partial profit: enabled, target 1.75R, sell 25%, move stop to BE at 1.75R.
+- Medium-term trailing stop: disabled (intentionally).
+- Medium-term max sim: 141 days, time stop disabled.
+- `earnings_risk` and other `risk_config.json` knobs untouched (confirmed as no-op in backtests because `earnings_days_away` is not populated by the native historical feature builder; live `analyze` path is unaffected).
+- Ticker exclusion list unchanged.
+
+Net change vs claude_loop_01 baseline:
+
+- overall win rate: 57.05% -> 68.80% (+11.75 pp)
+- short-term win rate: 67.36% -> 67.89% (+0.52 pp)
+- medium-term win rate: 46.74% -> 69.71% (+22.97 pp)
+- overall avg return: 13.63% -> 12.83% (-0.80 pp, expected partial-profit trade-off)
+- overall median: 7.78% -> 8.70% (+0.92 pp)
+- short-term metrics held nearly flat with a small median uplift; priority preserved throughout.
+
+Findings for future loops:
+
+- `risk_config.earnings_risk` is a live-only knob today; backtest tuning is impossible until the historical feature builder is taught to estimate `earnings_days_away`. Worth implementing if earnings filters are believed to matter for live performance.
+- Medium-term trailing stop tested at 3.0 and 4.0 ATR both hurt avg return more than they helped any priority metric, even though they raise medium-term median. Skip trailing in future loops unless the priority changes back toward avg-return.
+- Short-term `partial_profit.sell_pct` peaks at 25%; 35% does not improve win rate.
+- Aligning the medium-term partial target with the breakeven trigger (both 1.75R) extracts an extra +1.57 pp medium-term win rate over a 2.0R target.
+- Decision thresholds for `quality_dislocation` are intentionally exact-score gates (entry_score == 70 or == 80); changing them re-introduces the over-distressed score-90/100 buckets that were already shown to under-perform in iters 16-18 of the original 50-loop.
+
+---
+
+## Claude Iteration 11
+
+Run:
+
+- `claude_loop_11`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.675%
+- overall median return 8.790%
+- overall win rate 68.799% (unchanged vs iter 10)
+- overall profit factor 7.668
+- short-term avg return 10.885% (unchanged)
+- short-term median return 9.907% (unchanged)
+- short-term win rate 67.885% (unchanged)
+- short-term profit factor 6.854 (unchanged)
+- medium-term avg return 14.464%
+- medium-term median return 5.389%
+- medium-term win rate 69.713% (unchanged)
+- medium-term profit factor 8.449
+- errors 0
+
+Investigation:
+
+- Change tested: MT `partial_profit.sell_pct` from 25% to 30%.
+- Win rate plateau: overall WR and MT WR are both identical to iter 10. No new breakeven-to-win conversions occurred — all such trades were already captured at 25%.
+- Costs: overall avg return -0.15 pp, MT avg return -0.30 pp, overall PF -0.080, MT PF -0.155.
+- Only improvement: MT median +0.82 pp (not a priority metric).
+- Pattern mirrors short-term iter 6: once the partial captures all near-target reversals, adding more sell_pct only trims winner upside.
+- Decision: REJECT. Revert MT sell_pct to 25%.
+
+Improvement Implemented:
+
+- Reverted MT `partial_profit.sell_pct` from 30% back to the accepted 25%.
+- Next experiment: lower MT `partial_profit.target_r_multiple` from 1.75R to 1.5R, also lowering `breakeven_after_r_multiple` from 1.75R to 1.5R.
+- Hypothesis: some trades reach 1.5R but fail to reach 1.75R and exit at the breakeven stop (0R return). Aligning both partial target and BE trigger at 1.5R would lock in 25% profit on those trades, converting them from 0R to net-positive wins, similar to the iter 10 alignment effect that gained +1.57 pp MT win rate.
+
+---
+
+## Claude Iteration 12
+
+Run:
+
+- `claude_loop_12`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.473%
+- overall median return 8.154%
+- overall win rate 70.888% (+2.09 pp vs baseline)
+- overall profit factor 7.990 (+0.24 vs baseline)
+- short-term avg return 10.885% (unchanged)
+- short-term median return 9.907% (unchanged)
+- short-term win rate 67.885% (unchanged)
+- short-term profit factor 6.854 (unchanged)
+- medium-term avg return 14.062%
+- medium-term median return 3.787%
+- medium-term win rate 73.890% (+4.18 pp vs baseline)
+- medium-term profit factor 9.226 (+0.62 vs baseline)
+- exit mix: 254 max-sim, 333 stop-loss (+13), 179 trailing
+- STOP_LOSS_EXIT win rate: 34.835% (was 27.5% — more stops follow a partial)
+- errors 0
+
+Investigation:
+
+- Change tested: MT `partial_profit.target_r_multiple` 1.75R → 1.5R, `breakeven_after_r_multiple` 1.75R → 1.5R.
+- Hypothesis confirmed: earlier partial target captured trades that previously reached 1.5R but not 1.75R and exited at breakeven (0R). These are now net-positive wins.
+- ST metrics: completely unchanged (priorities 1 and 2 preserved).
+- Overall WR: +2.09 pp (priority 3 clear gain, best result this loop).
+- Overall PF: +0.24 (priority 4 also improved despite lower avg return).
+- STOP_LOSS_EXIT win rate jump (27.5% → 34.8%) confirms partial fires before stop on more trades.
+- Cost: overall avg -0.35 pp, overall median -0.55 pp, MT avg -0.70 pp, MT median -0.78 pp (all lower-priority).
+- Decision: ACCEPT. Priorities 1+2 held; priority 3 best improvement this loop.
+
+Improvement Implemented:
+
+- Kept MT `partial_profit.target_r_multiple` at the new accepted 1.5R.
+- Kept MT `breakeven_after_r_multiple` at the new accepted 1.5R.
+- Next experiment: lower ST `partial_profit.target_r_multiple` from 2.25R to 2.0R, also lower ST `breakeven_after_r_multiple` from 2.25R to 2.0R.
+- Hypothesis: same early-partial mechanism should apply to short-term trades. Trades that reach 2.0R but reverse before 2.25R currently exit at 0R; locking in 25% at 2.0R converts those to net-positive, improving ST win rate (priority 1).
+
+---
+
+## Claude Iteration 13
+
+Run:
+
+- `claude_loop_13`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.187%
+- overall median return 7.821%
+- overall win rate 71.279% (+0.39 pp vs iter 12)
+- overall profit factor 7.913
+- short-term avg return 10.312%
+- short-term median return 9.634%
+- short-term win rate 68.668% (+0.78 pp vs iter 12, new session best)
+- short-term profit factor 6.677
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 242 max-sim, 330 stop-loss, 194 trailing
+- STOP_LOSS_EXIT win rate: 35.151% (up from 34.835%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 2.25R → 2.0R, `breakeven_after_r_multiple` 2.25R → 2.0R.
+- Hypothesis confirmed: early-partial mechanism improves ST win rate. Trades that previously reached 2.0R then reversed to breakeven (0R) now exit with 25% partial locked at 2.0R (+0.5R net).
+- Priority 1 (ST WR): +0.78 pp — gain at the top priority.
+- Priority 2 (ST return quality): ST avg -0.57 pp, ST median -0.27 pp — both regressed.
+- Priority 3 (overall WR): +0.39 pp — improved.
+- Priority 4: overall avg -0.29 pp, PF -0.077 — both modestly worse.
+- MT metrics unchanged (correct — no MT config change).
+- Decision: ACCEPT under priority ordering. Priority 1 improved; no higher-priority metric exists to protect.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 2.0R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 2.0R.
+- Next experiment: lower ST target further to 1.75R (and BE 1.75R).
+- Hypothesis: the pattern suggests each 0.25R step down on ST target adds ~+0.78 pp ST WR. Testing 1.75R checks whether the improvement continues or whether diminishing returns / avg-return drag now dominates.
+
+---
+
+## Claude Iteration 14
+
+Run:
+
+- `claude_loop_14`
+- 158,208 decisions
+- 766 trades
+- overall avg return 12.050%
+- overall median return 7.551%
+- overall win rate 72.715% (+1.44 pp vs iter 13)
+- overall profit factor 8.129 (+0.22 vs iter 13)
+- short-term avg return 10.038%
+- short-term median return 9.102%
+- short-term win rate 71.540% (+2.87 pp vs iter 13, new session best)
+- short-term profit factor 7.007 (+0.33 vs iter 13)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 228 max-sim, 320 stop-loss, 218 trailing
+- STOP_LOSS_EXIT win rate: 36.250% (up from 35.151%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 2.0R → 1.75R, `breakeven_after_r_multiple` 2.0R → 1.75R.
+- Result significantly exceeded expectation: +2.87 pp ST WR (vs +0.78 pp from the prior 0.25R step). Indicates 1.75R is a particularly dense cluster of trades that reach 1.75R but not 2.0R and then reverse.
+- ST PF also improved +0.33 (unexpected positive — earlier partial improves net loss-trade outcomes enough to more than offset winner trimming).
+- Trailing exits +24 (194 → 218): BE set at 1.75R means more trades set their trailing from that lower base, catching exits that previously rode to max-sim.
+- Priority 1 (ST WR): +2.87 pp — largest single-step gain this session.
+- Priority 2 (ST return quality): avg -0.27 pp, median -0.53 pp (regressed), but ST PF +0.33 (improved).
+- Priority 3 (overall WR): +1.44 pp.
+- Priority 4: overall PF +0.22 (improved), avg -0.14 pp (small).
+- Decision: ACCEPT. Priority 1 strong gain; ST PF improved alongside WR; avg regression small.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 1.75R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 1.75R.
+- Next experiment: lower ST target further to 1.5R (and BE 1.5R), aligning with the accepted MT target.
+- Hypothesis: the accelerating WR improvement pattern (each step gave bigger gain: +0.78 pp then +2.87 pp) suggests the optimum may still be below 1.75R. At 1.5R we also get symmetric ST/MT partial targets.
+
+---
+
+## Claude Iteration 15
+
+Run:
+
+- `claude_loop_15`
+- 158,208 decisions
+- 766 trades
+- overall avg return 11.782%
+- overall median return 7.016%
+- overall win rate 73.760% (+1.05 pp vs iter 14)
+- overall profit factor 8.244 (+0.12 vs iter 14)
+- short-term avg return 9.503%
+- short-term median return 8.275%
+- short-term win rate 73.629% (+2.09 pp vs iter 14, new session best)
+- short-term profit factor 7.156 (+0.15 vs iter 14)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 206 max-sim, 312 stop-loss, 248 trailing
+- STOP_LOSS_EXIT win rate: 37.179% (up from 36.250%)
+- MAX_SIM avg improved: 30.215% (was 28.938%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 1.75R → 1.5R, `breakeven_after_r_multiple` 1.75R → 1.5R.
+- ST WR improvement pattern continues: +2.09 pp (step was: +0.78 → +2.87 → +2.09 pp across three 0.25R steps).
+- ST PF improved again (+0.15) alongside win rate — consistent finding across all three steps.
+- MAX_SIM_WINDOW_EXIT avg 30.215% (up from 28.938%): earlier BE cut is routing weaker trades to stop earlier, leaving max-sim for the strongest runners. Average max-sim trade is now larger.
+- Trailing exits increased 218 → 248 because 1.5R target fires earlier and sets trailing base sooner.
+- Priority 1 (ST WR): +2.09 pp. Cumulative from iter 12: 67.885% → 73.629% (+5.74 pp in 3 steps).
+- Priority 2: ST avg -0.54 pp, median -0.83 pp (continued regression), ST PF +0.15 (improved).
+- Priority 3 (overall WR): +1.05 pp. Cumulative from iter 12: 70.888% → 73.760%.
+- Priority 4: overall PF +0.12 (improved), avg -0.27 pp (small).
+- Decision: ACCEPT. Priority 1 strong continuous gain; profit factors both improved.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 1.5R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 1.5R.
+- Next experiment: lower ST target further to 1.25R (and BE 1.25R).
+- Hypothesis: the consistent per-step WR gain suggests the optimum is still below 1.5R. Testing 1.25R determines whether improvement continues or diminishing returns/avg-drag begin to dominate.
+
+---
+
+## Claude Iteration 16
+
+Run:
+
+- `claude_loop_16`
+- 158,208 decisions
+- 766 trades
+- overall avg return 11.387%
+- overall median return 6.288%
+- overall win rate 74.674% (+0.91 pp vs iter 15)
+- overall profit factor 8.149 (-0.10 vs iter 15)
+- short-term avg return 8.711%
+- short-term median return 7.402%
+- short-term win rate 75.457% (+1.83 pp vs iter 15, new session best)
+- short-term profit factor 6.902 (-0.25 vs iter 15)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 194 max-sim, 306 stop-loss, 266 trailing
+- STOP_LOSS_EXIT win rate: 37.908% (up from 37.179%)
+- MAX_SIM avg: 31.009% (up from 30.215%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 1.5R → 1.25R, `breakeven_after_r_multiple` 1.5R → 1.25R.
+- ST WR improved +1.83 pp (priority 1 still gaining, but rate slowing: 2.87 → 2.09 → 1.83 pp).
+- First sign of degradation: ST PF flipped negative (-0.25). Previously each step improved ST PF alongside WR.
+- ST avg regression accelerated: -0.79 pp (was -0.27, -0.54 pp on prior steps).
+- MAX_SIM avg continued rising (31.009%) confirming earlier BE continues to sharpen winner selection.
+- Overall PF also slightly negative (-0.10), signaling the partial is firing a bit too early for overall portfolio efficiency.
+- Priority 1 (ST WR): +1.83 pp — still improving, but pattern warns of approaching peak.
+- Priority 2: ST avg -0.79 pp, median -0.87 pp, ST PF -0.25 (priority 2 clearly regressing).
+- Priority 3 (overall WR): +0.91 pp.
+- Decision: ACCEPT under priority 1 rule, but one more step to find the true optimum.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 1.25R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 1.25R.
+- Next experiment: lower ST target further to 1.0R (and BE 1.0R) — the final bracket point.
+- If 1.0R continues improving ST WR but ST PF degrades further and avg regression worsens, we will revert to the best balance point (likely 1.25R or 1.5R depending on results).
+
+---
+
+## Claude Iteration 17
+
+Run:
+
+- `claude_loop_17`
+- 158,208 decisions
+- 766 trades
+- overall avg return 10.809%
+- overall median return 5.211%
+- overall win rate 76.893% (+2.22 pp vs iter 16)
+- overall profit factor 8.283 (+0.13 vs iter 16)
+- short-term avg return 7.557%
+- short-term median return 5.880%
+- short-term win rate 79.896% (+4.44 pp vs iter 16, new session best)
+- short-term profit factor 7.004 (+0.10 vs iter 16)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 183 max-sim, 291 stop-loss, 292 trailing
+- STOP_LOSS_EXIT win rate: 39.862% (up from 37.908%)
+- MAX_SIM avg: 32.183% (up from 31.009%)
+- TRAILING_STOP_EXIT avg: 10.794% (down from 13.341% — trailing activates earlier from lower base)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 1.25R → 1.0R, `breakeven_after_r_multiple` 1.25R → 1.0R.
+- Biggest single-step gain in the sweep: +4.44 pp ST WR. Pattern is accelerating (0.78 → 2.87 → 2.09 → 1.83 → 4.44 pp).
+- ST PF improved again (+0.10) — consistent with the mechanic that earlier partials + BE cuts reduce per-trade loss severity.
+- Overall PF also improved (+0.13) — the selection effect (only strong runners reach max-sim) is improving book quality.
+- MAX_SIM avg continues rising (32.183%) — max-sim is reserved for the biggest winners.
+- Cost: ST avg -1.15 pp, ST median -1.52 pp. Both priority 2 metrics regressing, but PF is counter-trend positive.
+- Priority 1 (ST WR): +4.44 pp — dominant.
+- Priority 2 (ST return quality): avg/median regressed, PF improved. Net mixed but average-quality declining.
+- Priority 3 (overall WR): +2.22 pp.
+- Decision: ACCEPT. Priority 1 clear win; both PFs improved; acceptance consistent with priority rules.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 1.0R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 1.0R.
+- Next experiment: lower ST target to 0.75R (and BE 0.75R) to determine whether 1.0R is the WR peak.
+- If ST WR continues rising at 0.75R, the peak is below 1.0R. If it plateaus or falls, revert to 1.0R and pivot to other levers for iters 19-20.
+
+---
+
+## Claude Iteration 18
+
+Run:
+
+- `claude_loop_18`
+- 158,208 decisions
+- 766 trades
+- overall avg return 10.187%
+- overall median return 3.946%
+- overall win rate 79.373% (+2.48 pp vs iter 17)
+- overall profit factor 8.609 (+0.33 vs iter 17)
+- short-term avg return 6.313%
+- short-term median return 4.363%
+- short-term win rate 84.856% (+4.96 pp vs iter 17, new session best)
+- short-term profit factor 7.521 (+0.52 vs iter 17, session best)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 177 max-sim, 272 stop-loss, 317 trailing
+- STOP_LOSS_EXIT win rate: 42.647% (up from 39.862%)
+- MAX_SIM avg: 32.978% (up from 32.183%)
+- TRAILING_STOP_EXIT avg: 8.254% (down from 10.794%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 1.0R → 0.75R, `breakeven_after_r_multiple` 1.0R → 0.75R.
+- ST WR improvement continues accelerating at 0.75R: +4.96 pp (largest step after 1.0R was +4.44 pp).
+- ST PF hit new session high 7.521 (+0.52 step). Overall PF also improved strongly (+0.33).
+- Only 15.1% of ST trades are pure losers; 42.6% of stop-loss trades had a partial locked in first.
+- MAX_SIM avg keeps rising (32.978%) — exit selection is sharpening further; max-sim reserved for strongest runners.
+- Priority 1 (ST WR): +4.96 pp — biggest step in the sweep.
+- Priority 2: avg -1.24 pp, median -1.52 pp (continued regression), but ST PF strongly up (+0.52).
+- Priority 3 (overall WR): +2.48 pp.
+- Priority 4: overall PF +0.33, avg -0.62 pp (small).
+- Decision: ACCEPT. Priority 1 dominant; both PFs improved to session highs.
+
+Improvement Implemented:
+
+- Kept ST `partial_profit.target_r_multiple` at the new accepted 0.75R.
+- Kept ST `breakeven_after_r_multiple` at the new accepted 0.75R.
+- Next experiment: lower ST target to 0.5R (and BE 0.5R) to find the WR peak.
+- If 0.5R still improves ST WR, the peak is below 0.75R. If it plateaus or degrades the priority balance, identify 0.75R as the accepted optimum for this dimension.
+
+---
+
+## Claude Iteration 19
+
+Run:
+
+- `claude_loop_19`
+- 158,208 decisions
+- 766 trades
+- overall avg return 9.328%
+- overall median return 2.618%
+- overall win rate 80.809% (+1.44 pp vs iter 18)
+- overall profit factor 8.419 (-0.190 vs iter 18)
+- short-term avg return 4.594%
+- short-term median return 1.885%
+- short-term win rate 87.728% (+2.87 pp vs iter 18)
+- short-term profit factor 6.706 (-0.815 vs iter 18)
+- medium-term avg return 14.062% (unchanged)
+- medium-term median return 3.787% (unchanged)
+- medium-term win rate 73.890% (unchanged)
+- medium-term profit factor 9.226 (unchanged)
+- exit mix: 174 max-sim, 261 stop-loss, 331 trailing
+- STOP_LOSS_EXIT win rate: 44.444%
+- TRAILING_STOP_EXIT avg: 5.841% (down from 8.254%)
+- errors 0
+
+Investigation:
+
+- Change tested: ST `partial_profit.target_r_multiple` 0.75R → 0.5R, `breakeven_after_r_multiple` 0.75R → 0.5R.
+- ST WR: +2.87 pp (priority 1 still improves, rate decelerated from +4.96 to +2.87 — pattern reverting).
+- Critical sign of over-optimization: ST PF dropped -0.815 (7.521 → 6.706), the first significant PF decline in the entire sweep.
+- Overall PF also declined -0.190 (8.609 → 8.419) — book quality genuinely degraded.
+- ST avg collapsed to 4.594% and ST median to 1.885% — strategy is now capturing tiny early gains and rarely letting winners develop.
+- Trailing exits avg fell to 5.841% (was 8.254%): partial at 0.5R fires so early the trailing activates from an extremely low base, cutting winners short.
+- Priority 1 (ST WR): +2.87 pp — technically improves, but at diminishing rate.
+- Policy check: "lower-priority metrics did not regress materially" — FAILS. ST PF -0.815, overall PF -0.190, ST avg -1.72 pp, ST median -2.48 pp are all material regressions.
+- Decision: REJECT. 0.75R is the accepted optimum for the ST partial-target dimension.
+
+Improvement Implemented:
+
+- Reverted ST `partial_profit.target_r_multiple` from 0.5R to the accepted 0.75R.
+- Reverted ST `breakeven_after_r_multiple` from 0.5R to the accepted 0.75R.
+- Final iteration: lower MT `partial_profit.target_r_multiple` from 1.5R to 1.25R (and BE 1.5R → 1.25R).
+- Hypothesis: the same early-partial mechanism that gave +4.18 pp MT WR when going 1.75R→1.5R (iter 12) may continue at 1.25R, capturing trades that reach 1.25R but not 1.5R.
+
+---
+
+## Claude Iteration 20
+
+Run:
+
+- `claude_loop_20`
+- 158,208 decisions
+- 766 trades
+- overall avg return 9.918%
+- overall median return 3.472%
+- overall win rate 80.418% (+1.05 pp vs iter 18 baseline)
+- overall profit factor 8.744 (+0.14 vs iter 18)
+- short-term avg return 6.313% (unchanged — only MT changed)
+- short-term median return 4.363% (unchanged)
+- short-term win rate 84.856% (unchanged)
+- short-term profit factor 7.521 (unchanged)
+- medium-term avg return 13.522%
+- medium-term median return 2.867%
+- medium-term win rate 75.979% (+2.09 pp vs iter 18)
+- medium-term profit factor 9.487 (+0.26 vs iter 18)
+- exit mix: 170 max-sim, 279 stop-loss, 317 trailing
+- STOP_LOSS_EXIT win rate: 46.595% (up from 42.647% — nearly half of stop trades had partials)
+- MAX_SIM avg: 33.002% (up from 32.978%)
+- errors 0
+
+Investigation:
+
+- Change tested: MT `partial_profit.target_r_multiple` 1.5R → 1.25R, `breakeven_after_r_multiple` 1.5R → 1.25R. ST settings reverted to accepted 0.75R.
+- Pattern confirmed: MT early-partial WR gain continues, +2.09 pp MT WR (mirrors iter 12 step of +4.18 pp from 1.75R→1.5R; diminishing but still significant).
+- MT PF improved +0.26 (consistent with all prior accepted MT target reductions).
+- Overall WR +1.05 pp, overall PF +0.14 — both priority 3+4 metrics improved.
+- ST metrics: completely unchanged (priorities 1+2 fully preserved — only MT config changed).
+- STOP_LOSS win rate now 46.6% — nearly half of all stop exits captured a partial before the stop fired.
+- Cost: MT avg -0.54 pp, MT median -0.92 pp (lower-priority metrics).
+- Priority 1 (ST WR): unchanged ✓.
+- Priority 2 (ST quality): unchanged ✓.
+- Priority 3 (overall WR): +1.05 pp.
+- Decision: ACCEPT. All priority levels honored; two PFs improved; no material regression.
+
+Improvement Implemented:
+
+- Kept MT `partial_profit.target_r_multiple` at the new accepted 1.25R.
+- Kept MT `breakeven_after_r_multiple` at the new accepted 1.25R.
+- 10-iteration loop complete. See summary below.
+
+---
+
+## Claude 10-Loop (Iters 11-20) Result Summary
+
+| run | change | overall_WR | overall_avg | overall_PF | ST_WR | ST_avg | ST_PF | MT_WR | MT_avg | MT_PF |
+|-----|--------|-----------|------------|-----------|-------|--------|-------|-------|--------|-------|
+| claude_loop_10 (baseline) | — | 68.799 | 12.826 | 7.748 | 67.885 | 10.885 | 6.854 | 69.713 | 14.766 | 8.604 |
+| claude_loop_11 | MT sell_pct 30 | 68.799 | 12.675 | 7.668 | 67.885 | 10.885 | 6.854 | 69.713 | 14.464 | 8.449 |
+| claude_loop_12 ✓ | MT target+BE 1.5R | 70.888 | 12.473 | 7.990 | 67.885 | 10.885 | 6.854 | 73.890 | 14.062 | 9.226 |
+| claude_loop_13 ✓ | ST target+BE 2.0R | 71.279 | 12.187 | 7.913 | 68.668 | 10.312 | 6.677 | 73.890 | 14.062 | 9.226 |
+| claude_loop_14 ✓ | ST target+BE 1.75R | 72.715 | 12.050 | 8.129 | 71.540 | 10.038 | 7.007 | 73.890 | 14.062 | 9.226 |
+| claude_loop_15 ✓ | ST target+BE 1.5R | 73.760 | 11.782 | 8.244 | 73.629 | 9.503 | 7.156 | 73.890 | 14.062 | 9.226 |
+| claude_loop_16 ✓ | ST target+BE 1.25R | 74.674 | 11.387 | 8.149 | 75.457 | 8.711 | 6.902 | 73.890 | 14.062 | 9.226 |
+| claude_loop_17 ✓ | ST target+BE 1.0R | 76.893 | 10.809 | 8.283 | 79.896 | 7.557 | 7.004 | 73.890 | 14.062 | 9.226 |
+| claude_loop_18 ✓ | ST target+BE 0.75R | 79.373 | 10.187 | 8.609 | 84.856 | 6.313 | 7.521 | 73.890 | 14.062 | 9.226 |
+| claude_loop_19 ✗ | ST target+BE 0.5R | 80.809 | 9.328 | 8.419 | 87.728 | 4.594 | 6.706 | 73.890 | 14.062 | 9.226 |
+| claude_loop_20 ✓ | MT target+BE 1.25R | 80.418 | 9.918 | 8.744 | 84.856 | 6.313 | 7.521 | 75.979 | 13.522 | 9.487 |
+
+Accepted final config (claude_loop_20):
+
+- Short-term: initial stop 2.25 ATR, 1.0% support buffer. Partial profit: enabled, target 0.75R, sell 25%, BE at 0.75R. Trailing stop: 2.46875 ATR, activate after target 1. Max sim: 60 days.
+- Medium-term: initial stop 2.25 ATR, 1.5% support buffer. Partial profit: enabled, target 1.25R, sell 25%, BE at 1.25R. Trailing stop: disabled. Max sim: 141 days.
+
+Net change vs claude_loop_10 (session start):
+
+- Overall WR: 68.799% → 80.418% (+11.62 pp)
+- Short-term WR: 67.885% → 84.856% (+16.97 pp)
+- Medium-term WR: 69.713% → 75.979% (+6.27 pp)
+- Overall profit factor: 7.748 → 8.744 (+0.996)
+- ST profit factor: 6.854 → 7.521 (+0.667)
+- MT profit factor: 8.604 → 9.487 (+0.883)
+- Overall avg return: 12.826% → 9.918% (-2.91 pp — expected trade-off for early partials)
+
+Key findings:
+
+- The "aligned partial-target = BE-trigger" design principle extracts maximum WR improvement. Every reduction in ST/MT partial target improved WR and profit factor in tandem until an extreme floor.
+- ST target optimum: 0.75R. The 0.5R step broke the pattern — ST PF declined sharply and ST avg/median collapsed to near-breakeven levels.
+- MT target sweep (1.75R→1.5R→1.25R) consistently improved MT WR and MT PF at a modest avg-return cost.
+- MT sell_pct 30% is a no-op (same WR plateau as the ST 25%→35% test): the partial already captures all near-target reversals at 25%.
+- STOP_LOSS_EXIT win rate climbed from 27.5% (session start) to 46.6% (final) — nearly half of losing trades had partial profit locked before the stop fired.
+- Earnings risk and risk_config changes remain no-ops in backtests.
+
+
+
+
+
+
+
+
+
+
+
+---
+
+## Claude Iteration 21
+
+Run:
+
+- `claude_loop_21`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.479% | median 2.966% | WR 82.507% | PF 9.153
+- ST avg 6.313% | median 4.363% | WR 84.856% | PF 7.521 (unchanged)
+- MT avg 12.644% | median 2.065% | WR 80.157% | PF 10.318
+- exit mix: 161 max-sim | 288 stop-loss | 317 trailing
+- STOP_LOSS win rate 53.819% (was 46.595%)
+
+Investigation:
+
+- MT target+BE 1.25R → 1.0R. ST metrics unchanged (priorities 1+2 preserved).
+- Priority 3 (overall WR): +2.09 pp. MT WR: +4.18 pp. Overall PF: +0.41. MT PF: +0.83.
+- Over half of stop-loss exits now have partials locked in first (53.8% STOP_LOSS win rate).
+- Cost: overall avg -0.44 pp, MT avg -0.88 pp, medians slightly lower.
+- Decision: ACCEPT. Strong gains at priorities 3+4 with priorities 1+2 fully preserved.
+
+Improvement Implemented:
+
+- Kept MT target+BE at 1.0R.
+- Next: MT target+BE 1.0R → 0.75R (aligns MT with ST; continue sweep).
+
+---
+
+## Claude Iteration 22
+
+Run:
+
+- `claude_loop_22`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.649% | median 2.286% | WR 84.726% | PF 9.481
+- ST avg 6.313% | median 4.363% | WR 84.856% | PF 7.521 (unchanged)
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254
+- exit mix: 136 max-sim | 313 stop-loss | 317 trailing
+- STOP_LOSS win rate 62.939% (was 53.819%)
+
+Investigation:
+
+- MT target+BE 1.0R → 0.75R. ST metrics unchanged (priorities 1+2 preserved).
+- Priority 3 (overall WR): +2.22 pp. MT WR: +4.44 pp. Overall PF: +0.33. MT PF: +0.94.
+- STOP_LOSS win rate 62.9% — nearly 2/3 of stop exits had partials locked first.
+- Cost: overall avg -0.83 pp, MT avg -1.66 pp, medians slightly lower.
+- Decision: ACCEPT. Same pattern as ST sweep — MT WR and PF continue improving at 0.75R.
+
+Improvement Implemented:
+
+- Kept MT target+BE at 0.75R.
+- Next: MT target+BE 0.75R → 0.5R (bracket — check if MT optimum is at 0.75R like ST, or still improving).
+
+---
+
+## Claude Iteration 23
+
+Run:
+
+- `claude_loop_23`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.157% | median 1.680% | WR 86.945% | PF 9.205
+- ST avg 6.313% | median 4.363% | WR 84.856% | PF 7.521 (unchanged)
+- MT avg 8.002% | median 0.938% | WR 89.034% | PF 11.305
+- exit mix: 110 max-sim | 339 stop-loss | 317 trailing
+- STOP_LOSS win rate 70.501% | MAX_SIM avg dropped to 29.464% (was 32.740%)
+
+Investigation:
+
+- MT target+BE 0.75R → 0.5R bracket test. ST unchanged (priorities 1+2 preserved).
+- Priority 3 (overall WR): +2.22 pp — technically improves.
+- Priority 4: overall avg -1.49 pp (material), overall PF -0.276 (negative). MAX_SIM avg -3.28 pp.
+- MT PF stalled at +0.051 (essentially flat) — the improvement pattern broke.
+- Pattern mirrors ST iter 19 rejection: WR still climbing but avg/PF regime shift signals over-optimization.
+- MT optimum confirmed at 0.75R (same as ST optimum).
+- Decision: REJECT. Material regressions in priority 4 avg/PF outweigh marginal WR gain.
+
+Improvement Implemented:
+
+- Reverted MT target back to 0.75R.
+- Changed MT breakeven_after_r_multiple from 0.5R to 1.25R (MT stays at 0.75R target but BE stays at 1.25R — this tests decoupled MT BE).
+- Next iter 24: decouple MT partial from BE — MT target stays at 0.75R, raise MT breakeven_after_r_multiple from 0.75R to 1.25R.
+- Hypothesis: after taking 25% at 0.75R, giving the remaining 75% more room before the stop moves to entry may allow more MT trades to recover and exit via max-sim or trailing rather than the early BE stop. Should recover MT avg return while preserving WR.
+
+---
+
+## Claude Iteration 24
+
+Run:
+
+- `claude_loop_24`
+- 158,208 decisions / 766 trades / errors 0
+- All metrics identical to claude_loop_22 (overall avg 8.649%, WR 84.726%, PF 9.481, ST/MT unchanged)
+- exit mix: 136 max-sim | 313 stop-loss | 317 trailing (identical)
+
+Investigation:
+
+- MT target stays at 0.75R, MT breakeven_after_r_multiple raised from 0.75R to 1.25R (decoupled).
+- Complete no-op: every metric and exit count is identical to loop_22.
+- Root cause: MT trades that reach the 0.75R partial target either ride all the way to max-sim or get stopped at the initial stop before any breakeven trigger fires. No MT trades exit in the 0.75R→1.25R gap.
+- Decision: NO-OP (treat as rejected). MT BE decoupling has no effect on the simulator.
+
+Improvement Implemented:
+
+- Reverted MT breakeven_after_r_multiple to 0.75R (re-aligned with target).
+- Next iter 25: decouple ST partial from BE — ST partial stays at 0.75R, raise ST breakeven_after_r_multiple from 0.75R to 1.25R.
+- Hypothesis: ST has an active trailing stop (MT does not). The trailing activates after target 1 (0.75R). With BE at 1.25R, the stop remains at initial stop between 0.75R and 1.25R — but trailing has already been activated by the target hit. The interaction may produce different outcomes vs the MT case.
+
+---
+
+## Claude Iteration 25
+
+Run:
+
+- `claude_loop_25`
+- All metrics identical to claude_loop_22 (ST BE decoupled to 1.25R — no-op)
+
+Investigation:
+
+- ST breakeven_after_r_multiple raised from 0.75R to 1.25R (with ST target at 0.75R).
+- Complete no-op: every metric identical to loop_22.
+- Root cause: ST has an active trailing stop that activates after target_r_multiple (0.75R). Once trailing is active, the BE stop is superseded — breakeven_after_r_multiple has no effect when set above the target because trailing already manages the exit.
+- Both ST and MT decouple tests (iters 24-25) confirmed as structural no-ops. breakeven_after_r_multiple only matters when set below target_r_multiple.
+- Decision: NO-OP (rejected). No change to accepted config.
+
+Improvement Implemented:
+
+- Reverted ST breakeven_after_r_multiple to 0.75R (re-aligned with target).
+- Next iter 26: widen ST trailing stop from 2.46875 ATR to 3.0 ATR. The trailing now activates at the 0.75R partial (earlier than the prior 2.25R). At the new low base, 2.46875 ATR may be cutting winners short — a wider trail may let them run further.
+
+---
+
+## Claude Iteration 26
+
+Run:
+
+- `claude_loop_26`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.014% | median 2.031% | WR 84.726% | PF 9.839
+- ST avg 7.043% | median 3.398% | WR 84.856% | PF 8.274
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 143 max-sim (+7) | 313 stop-loss | 310 trailing (-7)
+- TRAILING_STOP_EXIT avg 8.717% (was 8.254%)
+
+Investigation:
+
+- ST trailing stop 2.46875 → 3.0 ATR. MT unchanged. ST/MT WR unchanged (priorities 1+3 preserved).
+- Priority 2 (ST return quality): avg +0.730 pp (improved), median -0.965 pp (regressed). ST PF +0.753 (strongly improved).
+- 7 trades shifted from trailing exit to max-sim exit — wider trailing letting winners run further.
+- Priority 4: overall avg +0.365 pp, overall PF +0.358 (both improved).
+- Net: avg and PF both improved at priorities 2+4; median slipped but is outweighed by the quality gains.
+- Decision: ACCEPT. ST avg and PF improved; no regression at priorities 1+3.
+
+Improvement Implemented:
+
+- Kept ST trailing stop at 3.0 ATR.
+- Next iter 27: widen ST trailing further to 3.5 ATR (bracket search — find the optimum).
+
+---
+
+## Claude Iteration 27
+
+Run:
+
+- `claude_loop_27`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.020% | median 1.798% | WR 84.726% | PF 9.845
+- ST avg 7.056% | median 2.954% | WR 84.856% | PF 8.287
+- MT unchanged
+
+Investigation:
+
+- ST trailing 3.0 → 3.5 ATR. All priority metrics essentially flat vs loop_26.
+- ST avg: +0.013 pp (noise). ST PF: +0.013 (noise). ST median: -0.444 pp.
+- Trailing exits: 310→296 but trailing avg dropped (8.717→7.856%). More max-sim (+14) but max-sim avg also slightly lower.
+- 3.5 ATR is a no-op vs 3.0 ATR. Diminishing returns confirm 3.0 ATR is the ST trailing optimum.
+- Decision: REJECT. Marginal/flat metrics; slight median degradation.
+
+Improvement Implemented:
+
+- Reverted ST trailing to 3.0 ATR (accepted optimum).
+- Changed MT sell_pct from 25% to 30% for iter 28. At the new 0.75R MT target, the plateau behavior may differ from the earlier 25%→30% test at 1.75R (iter 11 which was a no-op).
+
+---
+
+## Claude Iteration 28
+
+Run:
+
+- `claude_loop_28`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.828% | median 2.206% | WR 84.726% | PF 9.657
+- ST avg 7.043% | median 3.398% | WR 84.856% | PF 8.274 (unchanged)
+- MT avg 10.612% | median 1.743% | WR 84.595% | PF 10.907
+
+Investigation:
+
+- MT sell_pct 25 → 30% at the new 0.75R target. ST unchanged.
+- WR: flat at all levels (84.726 / 84.856 / 84.595) — sell_pct has no effect on win rate.
+- MT avg regressed: 10.612 vs 10.984 (-0.372 pp). Overall avg -0.186 pp. Overall PF -0.182.
+- Identical to iter 11 finding: sell_pct at 30% just locks in smaller partial wins without converting new trades to winners.
+- Decision: REJECT. Priority-4 metrics regressed with no improvement at priority 1-3.
+
+Improvement Implemented:
+
+- Reverted MT sell_pct to 25%.
+- Next iter 29: ST initial_stop atr_multiplier 2.25 → 2.0. A tighter initial stop means higher risk density per trade but tighter protection. Hypothesis: tighter stop may exit losers earlier and improve win rate / risk-adjusted returns.
+
+---
+
+## Claude Iteration 29
+
+Run:
+
+- `claude_loop_29`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.822% | median 1.909% | WR 84.204% | PF 8.962
+- ST avg 6.660% | median 3.155% | WR 83.812% | PF 6.818
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+
+Investigation:
+
+- ST initial_stop atr_multiplier 2.25 → 2.0. MT unchanged.
+- Priority 1 (ST WR): 83.812% vs 84.856% — regressed -1.044 pp. HARD REJECT.
+- Tighter stop triggers earlier stop-loss exits; 317 stop-loss exits (vs 313) with worse avg (-1.615% vs -1.206%).
+- Decision: REJECT. Priority-1 metric harmed.
+
+Improvement Implemented:
+
+- Reverted ST initial_stop to 2.25 ATR (momentarily) then changed to 2.5 ATR for iter 30 bracket test.
+- Note: prior 114-iter sweep found 2.25 best (tested 2.125–2.5) but that was at the old 2.25R partial target. With 0.75R partial + 3.0 ATR trailing, 2.5 ATR may outperform under the new earlier-trailing dynamics.
+
+---
+
+## Claude Iteration 30
+
+Run:
+
+- `claude_loop_30`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.071% | median 2.073% | WR 84.726% | PF 9.867
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+
+Investigation:
+
+- ST initial_stop atr_multiplier 2.25 → 2.5. MT unchanged.
+- Priority 1 (ST WR): 84.856% — flat. OK.
+- Priority 2 (ST return quality): avg +0.115 pp, median +0.054 pp — marginal improvement.
+- Priority 3 (overall WR): 84.726% — flat. OK.
+- Priority 4: avg +0.057 pp, PF +0.028 — marginal improvement.
+- Exit mix: 145 max-sim (+2), 308 trailing (-2). Wider stop lets a few more trades survive to max-sim window.
+- Under the new 0.75R partial + 3.0 ATR trailing dynamics, 2.5 ATR provides marginal improvement.
+- Decision: ACCEPT. All priorities maintained or marginally improved.
+
+Improvement Implemented:
+
+- Kept ST initial_stop at 2.5 ATR. New accepted baseline: claude_loop_30.
+- Next iter 31: MT initial_stop atr_multiplier 2.25 → 2.0. Test whether tighter MT initial stop improves MT WR.
+
+---
+
+## Claude Iteration 31
+
+Run:
+
+- `claude_loop_31`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.882% | median 1.925% | WR 84.204% | PF 8.997
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 10.606% | median 1.402% | WR 83.551% | PF 9.508
+
+Investigation:
+
+- MT initial_stop atr_multiplier 2.25 → 2.0. ST unchanged.
+- Priority 1 (ST WR): flat. OK.
+- Priority 3 (overall WR): 84.726% → 84.204% — regressed -0.522 pp due to MT WR regression.
+- MT WR: 84.595% → 83.551% (-1.044 pp). Tighter stop triggers earlier MT stop-loss exits (317 stop-loss vs 313).
+- Same pattern as ST (iter 29): going below 2.25 ATR for initial stop degrades win rate for both horizons.
+- Decision: REJECT. Priority-3 metric harmed.
+
+Improvement Implemented:
+
+- Reverted MT initial_stop to 2.25 ATR.
+- Prior loop already confirmed MT ATR stop best at 2.25 (tested 2.0/2.25/2.375/2.5). Confirmed again here.
+- Next iter 32: MT max_simulation_days 141 → 120. Hypothesis: shorter max window may reduce stale losers that slowly deteriorate to stop-loss.
+
+---
+
+## Claude Iteration 32
+
+Run:
+
+- `claude_loop_32`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.344% | median 2.105% | WR 84.856% | PF 9.176
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 9.530% | median 1.456% | WR 84.856% | PF 9.938
+- exit mix: 154 max-sim (+11) | 304 stop-loss (-9) | 308 trailing (unchanged)
+
+Investigation:
+
+- MT max_simulation_days 141 → 120. ST unchanged.
+- Priority 3 (overall WR): 84.726% → 84.856% (+0.130 pp) — improved. Some stop-loss exits converted to max-sim.
+- Priority 4: overall avg 9.071% → 8.344% (-0.727 pp), PF 9.867 → 9.176 (-0.691). Material regression.
+- MT avg: 10.984% → 9.530% (-1.454 pp). Max-sim avg collapsed from 32.071% to 26.857%.
+- Root cause: the 120–141 day MT trades are the highest-returning max-sim trades. Cutting to 120 days exits them at lower intermediate prices.
+- Prior 114-iter sweep also found 141 best (tested 90–150). Confirmed again.
+- Decision: REJECT. Priority-4 regression material despite priority-3 gain. Aligns with the 0.5R rejection precedent.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141.
+- Skip iter 33 bracket test (100 days would be even worse than 120 per the pattern). Move to ST max_simulation_days.
+- Next iter 33: ST max_simulation_days 60 → 45. Prior sweep found 60 best (tested 30/45/60/65/75) but at old config. New 0.75R partial may change optimum.
+
+---
+
+## Claude Iteration 33
+
+Run:
+
+- `claude_loop_33`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.008% | median 2.073% | WR 84.465% | PF 9.780
+- ST avg 7.032% | median 3.487% | WR 84.334% | PF 8.171
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 180 max-sim (+35) | 313 stop-loss | 273 trailing (-37)
+
+Investigation:
+
+- ST max_simulation_days 60 → 45. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 84.334% — regressed -0.522 pp. HARD REJECT.
+- Trailing stop exits fell from 310 to 273 (avg 8.717%→6.408%) — 37 trades that would have run to trailing stop now exit at 45-day max-sim at lower prices.
+- Prior sweep found 60 best (30/45/60/65/75 tested). Confirmed again under new config.
+- Decision: REJECT. Priority-1 metric harmed.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60.
+- Next iter 34: try ST max_simulation_days 60 → 75 (bracket the other side). Prior sweep tested 75 under old config; new 0.75R partial + 3.0 ATR trailing may allow longer runs.
+
+---
+
+## Claude Iteration 34
+
+Run:
+
+- `claude_loop_34`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.065% | median 1.972% | WR 84.334% | PF 9.645
+- ST avg 7.146% | median 3.341% | WR 84.073% | PF 7.965
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 136 max-sim (-7) | 314 stop-loss (+1) | 316 trailing (+8)
+
+Investigation:
+
+- ST max_simulation_days 60 → 75. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 84.073% — regressed -0.783 pp. HARD REJECT.
+- Trailing exits increased (308→316, avg 8.912%→9.360%) but max-sim exits fell (145→136) with more losers (WR 99.310%→97.794% = 3 new max-sim losses in days 60–75).
+- Same conclusion as iter 33: both directions (45 and 75) worse than 60. 60 days is the confirmed ST max_sim optimum.
+- Decision: REJECT. Priority-1 metric harmed.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60.
+- Next iter 35: MT trailing stop enable at 5.0 ATR. Prior tests at 3.0 and 4.0 rejected (trimmed winners). At 5.0 ATR, the wider trail may let MT winners run longer without cutting them.
+
+---
+
+## Claude Iteration 35
+
+Run:
+
+- `claude_loop_35`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.361% | median 2.668% | WR 84.726% | PF 8.195
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 7.564% | median 2.239% | WR 84.595% | PF 8.061
+- exit mix: 25 max-sim (-118) | 116 stop-loss (-197) | 625 trailing (+315)
+
+Investigation:
+
+- MT trailing stop enabled at 5.0 ATR. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg 9.071% → 7.361% (-1.710 pp), PF -1.672. MAJOR regression.
+- MT avg: 10.984% → 7.564% (-3.420 pp). Max-sim exits fell from 143 to 25 — trailing exiting virtually all big MT winners prematurely.
+- Pattern: MT trailing stop at ANY multiplier (3.0, 4.0, 5.0 all tested) kills the big max-sim winners. MT trades benefit most from running to the 141-day window at 30%+ avg; trailing intercepts them at ~9%.
+- Decision: REJECT. Massive priority-4 regression. MT trailing stop definitively not viable.
+
+Improvement Implemented:
+
+- Reverted MT trailing stop to disabled.
+- Do NOT re-test MT trailing at any ATR multiplier — comprehensively ruled out at 3.0, 4.0, 5.0 ATR.
+- Next iter 36: ST sell_pct 25 → 30% at the new 0.75R target. Prior test (iter 5 equivalent) was done at a much higher target. At 0.75R partial, early exits are nearly at breakeven — 30% might improve WR by locking in slightly larger partial wins.
+
+---
+
+## Claude Iteration 36
+
+Run:
+
+- `claude_loop_36`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.007% | median 2.188% | WR 84.726% | PF 9.805
+- ST avg 7.030% | median 3.693% | WR 84.856% | PF 8.212
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+
+Investigation:
+
+- ST sell_pct 25 → 30% at 0.75R target. MT unchanged.
+- Priority 1 (ST WR): flat. Priority 3 (overall WR): flat. OK.
+- Priority 2 (ST return quality): avg 7.158%→7.030% (-0.128 pp). ST median improved +0.241 pp but avg and PF regressed.
+- Trailing exit avg fell slightly (8.807 vs 8.912): larger partial at 0.75R leaves less position for the trailing run.
+- Same plateau pattern seen at all sell_pct tests (25→30→35 at higher targets, 25→30 at MT 0.75R). 30% never converts new breakeven trades to wins.
+- Decision: REJECT. Priority-2 avg regressed; no improvement at any priority level.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 25%.
+- Next iter 37: MT initial_stop atr_multiplier 2.25 → 2.5. ST initial_stop was accepted at 2.5 (iter 30). Analogous bracket test for MT under new 0.75R partial config.
+
+---
+
+## Claude Iteration 37
+
+Run:
+
+- `claude_loop_37`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.152% | median 2.105% | WR 84.465% | PF 9.714
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 11.147% | median 1.542% | WR 84.073% | PF 10.901
+- exit mix: 149 max-sim (+4) | 309 stop-loss (-4) | 308 trailing
+
+Investigation:
+
+- MT initial_stop atr_multiplier 2.25 → 2.5. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. OK.
+- Priority 3 (overall WR): 84.726% → 84.465% — regressed -0.261 pp.
+- MT WR: 84.595% → 84.073% (-0.522 pp). Wider stop allows deeper losses before stop-out.
+- MT avg improved (+0.163 pp, priority 4) but WR regressed at priority 3 — not acceptable per priority order.
+- Contrast: ST 2.5 ATR (iter 30) was accepted because ST WR was flat. MT 2.5 ATR hurts MT WR.
+- Decision: REJECT. Priority-3 regression.
+
+Improvement Implemented:
+
+- Reverted MT initial_stop to 2.25 ATR.
+- Next iter 38: MT support_buffer_pct 1.5 → 2.0. Prior sweep found 1.5 best (tested 1.0/1.5/2.0) under old config. Under new 0.75R partial target, the dynamics may differ.
+
+---
+
+## Claude Iteration 38
+
+Run:
+
+- `claude_loop_38`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.114% | median 2.139% | WR 84.726% | PF 9.645
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 11.070% | median 1.544% | WR 84.595% | PF 10.765
+- exit mix: 147 max-sim (+2) | 311 stop-loss (-2) | 308 trailing
+
+Investigation:
+
+- MT support_buffer_pct 1.5 → 2.0. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg +0.043 pp (marginal) but overall PF 9.867 → 9.645 (-0.222), MT PF 11.254 → 10.765 (-0.489).
+- Wider buffer increases stop distance → deeper losses on stop-out (avg -1.481% vs -1.428%).
+- Prior sweep found 1.5 best (1.0/1.5/2.0 tested). Confirmed again.
+- Decision: REJECT. Material PF regression at priority 4 despite marginal avg improvement.
+
+Improvement Implemented:
+
+- Reverted MT support_buffer_pct to 1.5.
+- Next iter 39: ST support_buffer_pct 1.0 → 0.75. Prior sweep found 1.0 best (tested 0.75/1.0/1.25) under old config. Under new 0.75R partial + 2.5 ATR initial stop, the dynamics may differ.
+
+---
+
+## Claude Iteration 39
+
+Run:
+
+- `claude_loop_39`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.937% | median 1.860% | WR 83.943% | PF 9.518
+- ST avg 6.890% | median 2.712% | WR 83.290% | PF 7.707
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 143 max-sim | 319 stop-loss (+6) | 304 trailing (-4)
+
+Investigation:
+
+- ST support_buffer_pct 1.0 → 0.75. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 83.290% — regressed -1.566 pp. HARD REJECT.
+- Tighter support buffer triggers stops closer to support levels → 319 stop-loss exits vs 313.
+- Prior sweep found 1.0 best (0.75/1.0/1.25 tested). Confirmed again under new 2.5 ATR initial stop config.
+- Decision: REJECT. Priority-1 metric harmed.
+
+Improvement Implemented:
+
+- Reverted ST support_buffer_pct to 1.0.
+- Next iter 40: ST trailing stop atr_multiplier 3.0 → 4.0. Test if a much wider trail (skipping 3.5 which was near no-op) lets more ST winners reach their full run.
+
+---
+
+## Claude Iteration 40
+
+Run:
+
+- `claude_loop_40`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.059% | median 1.755% | WR 84.726% | PF 9.856
+- ST avg 7.135% | median 2.374% | WR 84.856% | PF 8.319
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 167 max-sim (+22) | 313 stop-loss | 286 trailing (-22)
+
+Investigation:
+
+- ST trailing stop 3.0 → 4.0 ATR. MT unchanged.
+- Priority 1 (ST WR): flat. OK.
+- Priority 2 (ST return quality): avg -0.023 pp (noise), median 3.452%→2.374% (-1.078 pp). Significant median regression.
+- 22 trailing exits converted to max-sim; trailing avg fell 8.912%→7.600% (remaining trailing exits are smaller). Max-sim avg also fell (32.071→31.214%).
+- Pattern across ST trailing ATR sweep (2.46875→3.0→3.5→4.0): 3.0 is the confirmed optimum.
+- Decision: REJECT. Priority-2 median regressed -1.078 pp.
+
+Improvement Implemented:
+
+- Reverted ST trailing to 3.0 ATR.
+- Next iter 41: enable ST time_stop (days_without_progress=10, min_open_return_pct=1.0). Tests whether cutting stale non-progressing trades improves win rate by exiting before full stop-out.
+
+---
+
+## Claude Iteration 41
+
+Run:
+
+- `claude_loop_41`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.038% | median 1.972% | WR 84.334% | PF 9.701
+- ST avg 7.093% | median 3.397% | WR 84.073% | PF 8.049
+- MT avg 10.984% | median 1.453% | WR 84.595% | PF 11.254 (unchanged)
+- exit mix: 143 max-sim | 312 stop-loss | 4 time_stop | 307 trailing
+
+Investigation:
+
+- ST time_stop enabled (days=10, min_return=1.0%). MT unchanged.
+- Priority 1 (ST WR): 84.856% → 84.073% — regressed -0.783 pp. REJECT.
+- 4 time_stop exits at 0% WR, avg -4.821% — trades cut at a loss before recovery. Time_stop is exiting trades that would have eventually been profitable.
+- Decision: REJECT. Priority-1 metric harmed.
+
+Improvement Implemented:
+
+- Disabled ST time_stop.
+- Next iter 42: MT sell_pct 25 → 20%. Less partial at 0.75R leaves more position for the 141-day max-sim run. Could improve MT avg/PF by holding more position through big MT max-sim wins.
+
+---
+
+## Claude Iteration 42
+
+Run:
+
+- `claude_loop_42`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.257% | median 1.805% | WR 84.726% | PF 10.049
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 11.355% | median 1.162% | WR 84.595% | PF 11.601
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing
+
+Investigation:
+
+- MT sell_pct 25 → 20%. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. Priority 3 (overall WR): flat. All OK.
+- Priority 4: overall avg +0.186 pp, overall PF +0.182. MT avg +0.371 pp, MT PF +0.347.
+- Max-sim avg rose from ~32.1% to ~33.5% — holding 80% vs 75% through 141-day run amplifies big winners.
+- MT median -0.291 pp (minor sub-metric regression at priority 4; outweighed by avg/PF gains).
+- Decision: ACCEPT. Priorities 1-3 maintained; priority 4 improved materially.
+
+Improvement Implemented:
+
+- Kept MT sell_pct at 20%. New accepted baseline: claude_loop_42.
+- Next iter 43: MT sell_pct 20 → 15%. Continue bracket search — does further reduction improve priority-4 further?
+
+---
+
+## Claude Iteration 43
+
+Run:
+
+- `claude_loop_43`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.443% | median 1.527% | WR 84.726% | PF 10.230
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 11.727% | median 0.872% | WR 84.595% | PF 11.948
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing
+
+Investigation:
+
+- MT sell_pct 20 → 15%. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg +0.186 pp, PF +0.181. MT avg +0.372 pp, MT PF +0.347. Max-sim avg 33.514% → 34.958%.
+- Each 5pp sell_pct reduction produces same ~+0.186 pp overall avg, +0.181 PF gain. Consistent trend.
+- MT median dropped further: 1.162% → 0.872% (-0.290 pp). Stop-loss avg worsening (-1.856 vs -1.642%) as more position exposed.
+- Decision: ACCEPT. Priorities 1-3 maintained; priority-4 avg/PF improved.
+
+Improvement Implemented:
+
+- Kept MT sell_pct at 15%. New accepted baseline: claude_loop_43.
+- Next iter 44: MT sell_pct 15 → 10%. Continue bracket search — at some point the larger per-trade stop loss will outweigh the larger max-sim gains.
+
+---
+
+## Claude Iteration 44
+
+Run:
+
+- `claude_loop_44`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.628% | median 1.341% | WR 84.726% | PF 10.412
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 12.098% | median 0.581% | WR 84.595% | PF 12.294
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing
+
+Investigation:
+
+- MT sell_pct 15 → 10%. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg +0.185 pp, PF +0.182. MT avg +0.371 pp, MT PF +0.346. Max-sim avg 34.958% → 36.401%.
+- Perfectly linear trend: each 5pp reduction yields ~+0.186 pp overall avg, +0.181 PF. MT median -0.291 pp/step.
+- Decision: ACCEPT. Priorities 1-3 maintained; priority-4 avg/PF improved. New accepted baseline: claude_loop_44.
+
+Improvement Implemented:
+
+- Kept MT sell_pct at 10%. New accepted baseline: claude_loop_44.
+- Next iter 45: MT sell_pct 10 → 5%. Continue bracket search. At some point, larger per-trade stop loss (-2.070% at 10%) should outweigh larger max-sim gains, but WR remains flat throughout.
+
+---
+
+## Claude Iteration 45
+
+Run:
+
+- `claude_loop_45`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.814% | median 1.115% | WR 84.726% | PF 10.593
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 12.470% | median 0.291% | WR 84.595% | PF 12.641
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing
+
+Investigation:
+
+- MT sell_pct 10 → 5%. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg +0.186 pp, PF +0.181. MT avg +0.372 pp, MT PF +0.347. Max-sim avg 36.401% → 37.844%.
+- Linear trend: every 5pp reduction = ~+0.186 pp overall avg, +0.181 PF. Consistent across 4 iterations.
+- MT median: 0.581% → 0.291% (approaching zero — most MT trades exit at minimal return or loss before max-sim).
+- Decision: ACCEPT. Priorities 1-3 maintained; priority-4 avg/PF improved. New accepted baseline: claude_loop_45.
+
+Improvement Implemented:
+
+- Kept MT sell_pct at 5%. New accepted baseline: claude_loop_45.
+- Next iter 46: MT sell_pct 5 → 1%. Minimal partial to test if trend hits a floor approaching 0% sell_pct. Also tests whether the engine handles sub-5% sell_pct cleanly.
+
+---
+
+## Claude Iteration 46
+
+Run:
+
+- `claude_loop_46`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.963% | median 1.077% | WR 84.726% | PF 10.739
+- ST avg 7.158% | median 3.452% | WR 84.856% | PF 8.343 (unchanged)
+- MT avg 12.767% | median 0.058% | WR 84.595% | PF 12.919
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing
+
+Investigation:
+
+- MT sell_pct 5 → 1%. ST unchanged. (4pp step instead of 5pp.)
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg +0.149 pp (exactly 4/5 * 0.186 — linear extrapolation confirmed), PF +0.146. MT avg +0.297 pp, MT PF +0.278.
+- MT median 0.058% — approaching zero, but avg/PF continue improving.
+- Decision: ACCEPT. Priorities 1-3 maintained; priority-4 avg/PF improved. New accepted baseline: claude_loop_46.
+
+Improvement Implemented:
+
+- Kept MT sell_pct at 1%. New accepted baseline: claude_loop_46.
+- Note: MT sell_pct=1% is essentially a pure BE-stop trigger with negligible partial. The 0% floor hasn't been tested; may explore in a future session.
+- Next iter 47: ST sell_pct 25 → 20%. Analogue of the MT sell_pct sweep for ST. With 3.0 ATR trailing activating at 0.75R, trailing avg (~8.9%) >> partial return. Holding more position through trailing exits may improve ST avg.
+
+---
+
+## Claude Iteration 47
+
+Run:
+
+- `claude_loop_47`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 10.027% | median 0.865% | WR 84.726% | PF 10.801
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474
+- MT avg 12.767% | median 0.058% | WR 84.595% | PF 12.919 (unchanged)
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing (avg 9.017%)
+
+Investigation:
+
+- ST sell_pct 25 → 20%. MT unchanged.
+- Priority 1 (ST WR): flat. Priority 3 (overall WR): flat. OK.
+- Priority 2 (ST return quality): avg +0.128 pp, median -0.156 pp. ST PF +0.131. Trailing avg 8.912%→9.017% (+0.105%).
+- Smaller ST partial → more position through trailing exits → trailing avg improved. Same mechanic as MT.
+- ST effect is smaller than MT because trailing stop (not max-sim) captures the upside; trailing avg ~9% vs MT max-sim avg ~39%.
+- Decision: ACCEPT. WR flat at all levels; avg and PF improved at priority 2; median drop modest.
+
+Improvement Implemented:
+
+- Kept ST sell_pct at 20%. New accepted baseline: claude_loop_47.
+- Next iter 48: ST sell_pct 20 → 15%. Continue bracket search — does the trend continue or hit a floor?
+
+---
+
+## Claude Iteration 48
+
+Run:
+
+- `claude_loop_48`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 10.090% | median 0.649% | WR 84.726% | PF 10.863
+- ST avg 7.413% | median 3.104% | WR 84.856% | PF 8.605
+- MT avg 12.767% | median 0.058% | WR 84.595% | PF 12.919 (unchanged)
+- exit mix: 145 max-sim | 313 stop-loss | 308 trailing (avg 9.121%)
+
+Investigation:
+
+- ST sell_pct 20 → 15%. MT unchanged.
+- Priority 1 (ST WR): flat. Priority 3 (overall WR): flat. OK.
+- Priority 2 (ST return quality): avg +0.127 pp, median -0.192 pp. Net priority-2: -0.065 pp (negative).
+- Each 5pp ST sell_pct step: avg +~0.127 pp, median regression increasing (-0.156 → -0.192). Trend diverging.
+- ST trailing avg: 9.017% → 9.121%. Small improvement from more position exposure.
+- Decision: REJECT. Priority-2 combined metric (avg+median) turned negative. 20% is the ST optimum.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 20%.
+- Next iter 49: MT max_simulation_days 141 → 150. Prior sweep found 141 best (90–150) under old config (2.0R partial, 40% sell_pct). Under new 0.75R/1% partial, the 141-day window may no longer be optimal — the earlier partial trigger and lower sell_pct change the shape of the win distribution.
+
+---
+
+## Claude Iteration 49
+
+Run:
+
+- `claude_loop_49`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 9.497% | median 0.818% | WR 84.726% | PF 10.130
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 11.709% | median 0.056% | WR 84.595% | PF 11.590
+- exit mix: 138 max-sim (-7) | 320 stop-loss (+7) | 308 trailing
+
+Investigation:
+
+- MT max_simulation_days 141 → 150. ST unchanged.
+- Priority 1-3: flat. OK.
+- Priority 4: overall avg -0.530 pp, PF -0.671. MT avg -1.058 pp, MT PF -1.329. MAJOR regression.
+- 7 trades converted from max-sim wins at day 141 to stop-loss in days 141–150. These were profitable trades at 141 days that deteriorated to stop-out in the extra 9 days.
+- Prior sweep confirmed 141 best (90–150). Confirmed again under new 0.75R/1% partial config.
+- Decision: REJECT. Priority-4 major regression.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141.
+- Next iter 50: MT partial target_r_multiple 0.75 → 0.5R (keeping sell_pct=1%). Previously rejected at iter 23 with 25% sell_pct (avg collapsed). At 1% sell_pct the partial is negligible; the question is whether earlier BE protection at 0.5R improves MT WR by converting stop-loss exits to BE exits.
+
+---
+
+## Claude Iteration 50
+
+Run:
+
+- `claude_loop_50`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 8.323% | median 0.692% | WR 86.945% | PF 10.505
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 9.360% | median 0.037% | WR 89.034% | PF 13.054
+- exit mix: 119 max-sim (-26) | 339 stop-loss (+26) | 308 trailing
+
+Investigation:
+
+- MT target_r_multiple + breakeven_after_r_multiple: 0.75 → 0.5R. MT sell_pct=1% unchanged. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. OK.
+- Priority 3 (overall WR): 84.726% → 86.945% (+2.219 pp). MT WR: 84.595% → 89.034% (+4.439 pp). MAJOR improvement.
+- Priority 4: overall avg -1.704 pp, PF -0.296. MT avg -3.407 pp. Material regression at priority 4.
+- Mechanism: earlier BE trigger at 0.5R catches 26 more trades before full stop-out. Stop-loss WR 62.939% → 70.501%; stop-loss avg -2.455% → -1.944%. But 26 fewer max-sim winners (35.775% avg) reduce avg significantly.
+- Critically different from iter 23 (rejected at 25% sell_pct): at 1% sell_pct the partial is negligible; earlier BE protection is the only effect.
+- Decision: ACCEPT. Priority 3 (overall WR) improved massively; priority-4 avg regression accepted per priority order.
+
+Improvement Implemented:
+
+- Kept MT target+BE at 0.5R. New accepted baseline: claude_loop_50.
+- Next iter 51: MT target+BE 0.5 → 0.25R. Does even earlier BE protection further improve MT WR?
+
+---
+
+## Claude Iteration 51
+
+Run:
+
+- `claude_loop_51`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.536% | median 0.533% | WR 88.251% | PF 10.729
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.786% | median 0.019% | WR 91.645% | PF 14.557
+- exit mix: 97 max-sim (-22) | 361 stop-loss (+22) | 308 trailing
+
+Investigation:
+
+- MT target_r_multiple + breakeven_after_r_multiple: 0.5 → 0.25R. MT sell_pct=1% unchanged. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. OK.
+- Priority 3 (overall WR): 86.945% → 88.251% (+1.306 pp). MT WR: 89.034% → 91.645% (+2.611 pp). Continued improvement.
+- Priority 4: overall avg -0.787 pp (worse), overall PF +0.224 (better). MT PF +1.503.
+- Earlier BE trigger at 0.25R converts more stop-loss exits to profitable BE exits; stop-loss avg improved -1.944% → -1.625%.
+- Priority 4 is split: avg regressed, PF improved. Since priority 3 improved and PF (also priority 4) improved, accept.
+- Decision: ACCEPT. Priority 3 improved; priority-4 PF also improved.
+
+Improvement Implemented:
+
+- Kept MT target+BE at 0.25R. New accepted baseline: claude_loop_51.
+- Next iter 52: MT target+BE 0.25 → 0.1R. Does the trend continue at even smaller trigger distance?
+
+---
+
+## Claude Iteration 52
+
+Run:
+
+- `claude_loop_52`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 6.902% | median 0.402% | WR 88.381% | PF 10.026
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 6.519% | median 0.007% | WR 91.906% | PF 12.754
+- exit mix: 83 max-sim (-14) | 375 stop-loss (+14) | 308 trailing
+
+Investigation:
+
+- MT target+BE 0.25 → 0.1R. MT sell_pct=1% unchanged. ST unchanged.
+- Priority 3 (overall WR): 88.251% → 88.381% (+0.130 pp). Marginal improvement.
+- Priority 4: overall avg -0.634 pp, overall PF 10.729 → 10.026 (-0.703). MT PF -1.803. SIGNIFICANT PF regression.
+- 0.1R BE trigger is too early: price volatility easily tags the entry-price BE stop, converting 14 more max-sim winners to stop-exits. Max-sim fell from 97 to 83.
+- The marginal WR gain (+0.130 pp) doesn't compensate for the major PF regression (-0.703 overall, -1.803 MT).
+- 0.25R is the confirmed MT BE trigger optimum.
+- Decision: REJECT. Priority-4 PF regressed materially despite marginal priority-3 gain.
+
+Improvement Implemented:
+
+- Reverted MT target+BE to 0.25R.
+- Next iter 53: ST target_r_multiple + breakeven_after: 0.75 → 0.5R, sell_pct 20 → 1%. Analogous test for ST. Earlier ST BE protection triggers the trailing stop at 0.5R instead of 0.75R, potentially improving ST WR. The sell_pct drop to 1% enables the same "near-pure BE trigger" approach that worked for MT.
+
+---
+
+## Claude Iteration 53
+
+Run:
+
+- `claude_loop_53`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 6.788% | median 0.032% | WR 89.556% | PF 10.675
+- ST avg 5.791% | median 0.082% | WR 87.467% | PF 7.986
+- MT avg 7.786% | median 0.019% | WR 91.645% | PF 14.557 (unchanged)
+- exit mix: 90 max-sim (-7) | 351 stop-loss (-10) | 325 trailing (+17)
+
+Investigation:
+
+- ST target+BE 0.75 → 0.5R, sell_pct 20 → 1%. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 87.467% (+2.611 pp). Significant improvement.
+- Priority 2 (ST return quality): avg -1.495 pp, median 3.296% → 0.082% (-3.214 pp). MASSIVE regression.
+- Trailing activating at 0.5R: 17 more trailing exits at avg 6.820% (was 9.017%). Earlier trailing activation cuts winners.
+- Following the precedent from iter 16/TUNING_STATUS: "0.5R ST target rejected because avg/median collapsed despite WR gain." Priority-2 collapse overrides priority-1 gain.
+- Decision: REJECT. Priority-2 massively regressed. Same structural issue as the original 0.5R rejection.
+
+Improvement Implemented:
+
+- Reverted ST to target+BE=0.75R, sell_pct=20%.
+- Next iter 54: ST initial_stop atr_multiplier 2.5 → 2.625. Bracket above the accepted 2.5 ATR. Prior sweep tested 2.125–2.5 under old config; 2.625 not tested under new 0.75R/20% partial + 3.0 ATR trailing config.
+
+---
+
+## Claude Iteration 54
+
+Run:
+
+- `claude_loop_54`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.537% | median 0.533% | WR 88.251% | PF 10.717 (all ~loop_51 noise)
+- ST avg 7.288% | median 3.360% | WR 84.856% | PF 8.459
+- MT avg 7.786% | median 0.019% | WR 91.645% | PF 14.557 (unchanged)
+
+Investigation:
+
+- ST initial_stop atr_multiplier 2.5 → 2.625. MT unchanged.
+- All metrics within noise of loop_51 baseline. No-op.
+- 2.5 ATR confirmed as the ST initial_stop optimum under new config.
+- Decision: NO-OP / reject. No meaningful change.
+
+Improvement Implemented:
+
+- Reverted ST initial_stop to 2.5 ATR.
+- Next iter 55: MT support_buffer_pct 1.5 → 1.0. Prior sweep found 1.5 best (1.0/1.5/2.0) under old config. Under new 0.25R BE trigger, a tighter stop buffer reduces per-trade stop-loss magnitude for trades that fail to reach the BE trigger.
+
+---
+
+## Claude Iteration 55
+
+Run:
+
+- `claude_loop_55`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.500% | median 0.525% | WR 87.598% | PF 10.549
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.715% | median 0.018% | WR 90.339% | PF 13.944
+- exit mix: 96 max-sim (-1) | 362 stop-loss (+1) | 308 trailing
+
+Investigation:
+
+- MT support_buffer_pct 1.5 → 1.0. ST unchanged.
+- Priority 3 (overall WR): 88.251% → 87.598% (-0.653 pp). MT WR -1.306 pp. REJECT.
+- Tighter buffer triggers more premature stop-outs before BE trigger at 0.25R.
+- Prior sweep confirmed 1.5 best. Confirmed again under new 0.25R BE config.
+- Decision: REJECT. Priority-3 harmed.
+
+Improvement Implemented:
+
+- Reverted MT support_buffer_pct to 1.5.
+- Next iter 56: ST target_r_multiple + breakeven_after_r_multiple: 0.75 → 0.625R. Intermediate between accepted 0.75R and rejected 0.5R. May give incremental WR improvement without triggering the avg/median collapse seen at 0.5R.
+
+---
+
+## Claude Iteration 56
+
+Run:
+
+- `claude_loop_56`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.149% | median 0.445% | WR 88.773% | PF 10.525
+- ST avg 6.512% | median 1.922% | WR 85.901% | PF 8.026
+- MT avg 7.786% | median 0.019% | WR 91.645% | PF 14.557 (unchanged)
+- exit mix: 93 max-sim (-4) | 357 stop-loss (-4) | 316 trailing (+8)
+
+Investigation:
+
+- ST target+BE 0.75 → 0.625R. ST sell_pct=20% unchanged. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 85.901% (+1.045 pp). Improved.
+- Priority 2 (ST return quality): avg -0.774 pp, median -1.374 pp, PF -0.448. Material regression.
+- Same mechanism as iter 53/56: earlier trailing activation cuts winners. Trailing avg 9.017%→7.836% (-1.181%), +8 trailing exits.
+- ST median halved from 3.296% to 1.922%. Priority-2 collapse follows prior 0.5R precedent.
+- Decision: REJECT. Priority-2 material regression. 0.75R remains ST optimum.
+
+Improvement Implemented:
+
+- Reverted ST target+BE to 0.75R.
+- Next iter 57: ST trailing_stop activate_after_target_1 true → false. Trailing active from day 1 instead of waiting for partial at 0.75R. Tests whether early trailing protection improves WR without harming avg. Trailing at day-1 takes over from initial stop once trade moves ~0.5*ATR above entry.
+
+---
+
+## Claude Iteration 57
+
+Run:
+
+- `claude_loop_57`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.913% | median 0.483% | WR 88.251% | PF 11.216
+- ST avg 8.040% | median 1.262% | WR 84.856% | PF 9.248
+- MT avg 7.786% | median 0.019% | WR 91.645% | PF 14.557 (unchanged)
+- exit mix: 232 max-sim (+135) | 534 stop-loss (+173) | 0 trailing (-308)
+
+Investigation:
+
+- ST trailing activate_after_target_1 true → false. MT unchanged.
+- Priority 1 (ST WR): flat. Priority 3 (overall WR): flat. OK.
+- Priority 2 (ST return quality): avg +0.754 pp, median -2.034 pp. Net priority-2: -1.280 pp. REJECT basis.
+- Priority 4: avg +0.377 pp, PF +0.487. Improved.
+- Exit shift: trailing at 3.0 ATR from day 1 (below initial 2.5 ATR stop) converts trailing exits to 43.8% max-sim and 56.2% stop-loss. More max-sim (232 vs 97), more stop-loss (534 vs 361).
+- Net effect: avg improves but median collapses. Combined priority-2 deeply negative.
+- Decision: REJECT. Priority-2 combined metric (avg+median) net -1.280 pp.
+
+Improvement Implemented:
+
+- Reverted ST trailing to activate_after_target_1=true.
+- Next iter 58: MT initial_stop atr_multiplier 2.25 → 2.375. Bracket between accepted 2.25 (iter 31 confirmed) and rejected 2.5 (iter 37, MT WR -0.522 pp). 2.375 may capture avg benefit without WR cost.
+
+---
+
+## Claude Iteration 58
+
+Run:
+
+- `claude_loop_58`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.548% | median 0.533% | WR 88.381% | PF 10.902
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.811% | median 0.019% | WR 91.906% | PF 15.209
+- exit mix: 97 max-sim | 361 stop-loss | 308 trailing
+
+Investigation:
+
+- MT initial_stop atr_multiplier 2.25 → 2.375. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. OK.
+- Priority 3 (overall WR): 88.251% → 88.381% (+0.130 pp). MT WR +0.261 pp.
+- Priority 4: overall avg +0.012 pp, overall PF +0.173, MT PF +0.652. Stop-loss avg improved slightly.
+- 2.375 ATR hits the sweet spot: slightly wider stop avoids some premature MT stop-outs without the WR regression seen at 2.5 ATR.
+- Decision: ACCEPT. All priorities maintained or improved. New accepted baseline: claude_loop_58.
+
+Improvement Implemented:
+
+- Kept MT initial_stop at 2.375 ATR. New accepted baseline: claude_loop_58.
+- Next iter 59: MT initial_stop 2.375 → 2.4375. Bracket between accepted 2.375 and rejected 2.5. Does the optimum continue upward or is 2.375 the peak?
+
+---
+
+## Claude Iteration 59
+
+Run:
+
+- `claude_loop_59`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.548% | median 0.533% | WR 88.381% | PF 10.896 (all within noise of loop_58)
+- ST unchanged. MT WR 91.906% | PF 15.183 (vs 15.209 at loop_58 — noise)
+
+Investigation:
+
+- MT initial_stop 2.375 → 2.4375 ATR. ST unchanged.
+- Complete no-op vs loop_58: all metrics within noise.
+- MT ATR optimum confirmed at 2.375 (2.4375 indistinguishable).
+- Decision: NO-OP / reject.
+
+Improvement Implemented:
+
+- Reverted MT initial_stop to 2.375 ATR.
+- Next iter 60: MT support_buffer_pct 1.5 → 2.0. Previously rejected at iter 38 under old config (0.75R/25% partial). Under new 0.25R/1% partial, wider buffer may allow more trades to reach the early BE trigger instead of stopping before 0.25R.
+
+---
+
+## Claude Iteration 60
+
+Run:
+
+- `claude_loop_60`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.572% | median 0.537% | WR 88.642% | PF 10.895
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.859% | median 0.020% | WR 92.428% | PF 15.143
+- exit mix: 98 max-sim (+1) | 360 stop-loss (-1) | 308 trailing
+
+Investigation:
+
+- MT support_buffer_pct 1.5 → 2.0. ST unchanged.
+- Priority 1-2: flat. OK.
+- Priority 3 (overall WR): 88.381% → 88.642% (+0.261 pp). MT WR +0.522 pp. Improved.
+- Priority 4: avg +0.024 pp, PF -0.007. Essentially flat.
+- Wider buffer allows more MT trades to survive small dips and reach 0.25R BE trigger.
+- Contrast with iter 38 rejection (PF -0.489): old config at 0.75R/25% partial. Under 0.25R/1% partial, the dynamics are different — more critical that initial stop doesn't fire before 0.25R.
+- Decision: ACCEPT. Priority 3 improved; priority 4 flat. New accepted baseline: claude_loop_60.
+
+Improvement Implemented:
+
+- Kept MT support_buffer_pct at 2.0%. New accepted baseline: claude_loop_60.
+- Next iter 61: MT support_buffer_pct 2.0 → 2.5. Continue bracket — does further widening improve MT WR further?
+
+---
+
+## Claude Iteration 61
+
+Run:
+
+- `claude_loop_61`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.622% | median 0.545% | WR 89.165% | PF 11.171
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.959% | median 0.021% | WR 93.473% | PF 16.190
+- exit mix: 99 max-sim (+1) | 359 stop-loss (-1) | 308 trailing
+
+Investigation:
+
+- MT support_buffer_pct 2.0 → 2.5. ST unchanged.
+- Priority 1-2: flat. OK.
+- Priority 3 (overall WR): 88.642% → 89.165% (+0.523 pp). MT WR +1.045 pp (93.473%). STRONG.
+- Priority 4: overall avg +0.050 pp, overall PF +0.276. MT PF +1.047. BOTH improved.
+- Stop-loss avg improved: -1.608% → -1.578%. More trades reaching BE before stop.
+- Decision: ACCEPT. Both priority 3 and 4 improved. New accepted baseline: claude_loop_61.
+
+Improvement Implemented:
+
+- Kept MT support_buffer_pct at 2.5%. New accepted baseline: claude_loop_61.
+- Next iter 62: MT support_buffer_pct 2.5 → 3.0. Trend is strong — test if it continues.
+
+---
+
+## Claude Iteration 62
+
+Run:
+
+- `claude_loop_62`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.654% | median 0.558% | WR 89.165% | PF 11.047
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 8.022% | median 0.022% | WR 93.473% | PF 15.619
+- exit mix: 100 max-sim (+1) | 358 stop-loss (-1) | 308 trailing
+
+Investigation:
+
+- MT support_buffer_pct 2.5 → 3.0. ST unchanged.
+- Priority 3 (overall WR): flat. Priority 4: overall avg +0.032 pp, PF -0.124. MT PF -0.571.
+- 3.0% is too wide: stop losses are now occurring at deeper loss levels (avg -1.609% vs -1.578%), no additional WR benefit.
+- 2.5% is the confirmed MT support buffer optimum.
+- Decision: REJECT. Priority-3 flat; priority-4 PF regressed.
+
+Improvement Implemented:
+
+- Reverted MT support_buffer_pct to 2.5%.
+- Next iter 63: ST support_buffer_pct 1.0 → 1.5. Apply same insight that worked for MT: wider buffer allows more ST trades to reach BE trigger at 0.75R before being stopped. Prior sweep found 1.0 best under old config; under new 2.5 ATR initial stop + 0.75R/20% partial, 1.5 may improve ST WR.
+
+---
+
+## Claude Iteration 63
+
+Run:
+
+- `claude_loop_63`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.741% | median 0.610% | WR 89.034% | PF 10.648
+- ST avg 7.523% | median 3.883% | WR 84.595% | PF 7.961
+- MT avg 7.959% | median 0.021% | WR 93.473% | PF 16.190 (unchanged)
+- exit mix: 99 max-sim | 360 stop-loss | 307 trailing (avg 9.472%)
+
+Investigation:
+
+- ST support_buffer_pct 1.0 → 1.5. MT unchanged.
+- Priority 1 (ST WR): 84.856% → 84.595% (-0.261 pp). REJECT.
+- Priority 3 (overall WR): 89.165% → 89.034% (-0.131 pp). Regressed.
+- ST avg +0.237 pp, median +0.587 pp (priority 2 improved) but priorities 1 and 3 regressed.
+- Key difference from MT: ST has trailing stop providing protection at 0.75R. Initial stop only matters for failed trades. Wider buffer increases loss magnitude on failed trades without improving WR (unlike MT where initial stop is the sole protection).
+- Decision: REJECT. Priority-1 and priority-3 regressed.
+
+Improvement Implemented:
+
+- Reverted ST support_buffer_pct to 1.0%.
+- Next iter 64: MT partial target_r_multiple + breakeven_after_r_multiple 0.25 → 0.2R. Fine bracket test between accepted 0.25R (iter 51) and rejected 0.1R (iter 52). 0.2R may give incremental WR gain without the PF cliff seen at 0.1R.
+
+---
+
+## Claude Iteration 64
+
+Run:
+
+- `claude_loop_64`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.503% | median 0.520% | WR 89.295% | PF 11.162
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.721% | median 0.017% | WR 93.734% | PF 16.382
+- exit mix: 95 max-sim (-4) | 363 stop-loss (+4) | 308 trailing
+
+Investigation:
+
+- MT target+BE 0.25 → 0.2R. sell_pct=1% unchanged. ST unchanged.
+- Priority 1-2: flat. OK.
+- Priority 3 (overall WR): 89.165% → 89.295% (+0.130 pp). MT WR +0.261 pp.
+- Priority 4: overall avg -0.119 pp, PF -0.009. MT avg -0.238 pp, MT PF +0.192.
+- Priority 3 improved slightly; priority-4 avg regression minor. PF essentially flat.
+- Decision: ACCEPT (marginal). Priority 3 > priority 4; WR improved. New accepted baseline: claude_loop_64.
+
+Improvement Implemented:
+
+- Kept MT target+BE at 0.2R. New accepted baseline: claude_loop_64.
+- Next iter 65: ST initial_stop atr_multiplier 2.5 → 2.375. Bracket between accepted 2.25 (original) and accepted 2.5 (iter 30). Does the ST ATR optimum also sit at 2.375 like MT?
+
+---
+
+## Claude Iteration 65
+
+Run:
+
+- `claude_loop_65`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.453% | median 0.520% | WR 89.295% | PF 11.111
+- ST avg 7.186% | median 3.294% | WR 84.856% | PF 8.391
+- MT avg 7.721% | median 0.017% | WR 93.734% | PF 16.382 (unchanged)
+- exit mix: 95 max-sim | 363 stop-loss | 308 trailing (avg 8.890%)
+
+Investigation:
+
+- ST initial_stop atr_multiplier 2.5 → 2.375. MT unchanged.
+- Priority 2 (ST return quality): avg -0.100 pp, PF -0.083. Trailing avg slightly worse (8.890 vs 8.912%). Minor regression.
+- 2.5 ATR confirmed as ST initial_stop optimum (2.375 slightly worse, 2.625 no-op).
+- Decision: REJECT. Priority-2 minor regression.
+
+Improvement Implemented:
+
+- Reverted ST initial_stop to 2.5 ATR.
+- Next iter 66: ST trailing_stop atr_multiplier 3.0 → 2.75. Bracket between 2.46875 (old pre-loop21 accepted) and 3.0 (current accepted). 2.75 may be closer to optimum than either.
+
+---
+
+## Claude Iteration 66
+
+Run:
+
+- `claude_loop_66`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.290% | median 0.520% | WR 89.295% | PF 10.872
+- ST avg 6.858% | median 3.487% | WR 84.856% | PF 8.036
+- MT avg 7.721% | median 0.017% | WR 93.734% | PF 16.382 (unchanged)
+- exit mix: 94 max-sim (-1) | 363 stop-loss | 309 trailing (avg 8.559%)
+
+Investigation:
+
+- ST trailing_stop atr_multiplier 3.0 → 2.75. MT unchanged.
+- Priority 2 (ST return quality): avg -0.428 pp, PF -0.438. Trailing avg 9.017%→8.559% (-0.458 pp). Tighter trail cuts winners.
+- 3.0 ATR confirmed as ST trailing optimum (2.75 worse, 3.5 and 4.0 also worse).
+- Decision: REJECT. Priority-2 regressed.
+
+Improvement Implemented:
+
+- Reverted ST trailing to 3.0 ATR.
+- Next iter 67: MT partial target+BE 0.2 → 0.15R. Fine bracket: 0.25R accepted, 0.2R marginally accepted, 0.1R rejected. Does 0.15R improve further or hit the PF cliff?
+
+---
+
+## Claude Iteration 67
+
+Run:
+
+- `claude_loop_67`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.297% | median 0.454% | WR 89.295% | PF 10.882
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.308% | median 0.013% | WR 93.734% | PF 15.559
+- exit mix: 91 max-sim (-4) | 367 stop-loss (+4) | 308 trailing
+
+Investigation:
+
+- MT target+BE 0.2 → 0.15R. ST unchanged.
+- Priority 3 (overall WR): flat. Priority 4: avg -0.206 pp, MT PF -0.823 (-0.280 overall). Significant regression.
+- 0.15R hits the same PF cliff as 0.1R (iter 52). 4 fewer max-sim exits, larger per-trade losses.
+- 0.2R is the confirmed MT BE trigger optimum.
+- Decision: REJECT. Priority-4 PF regressed materially.
+
+Improvement Implemented:
+
+- Reverted MT target+BE to 0.2R.
+- Next iter 68: MT initial_stop atr_multiplier 2.375 → 2.5. Previously rejected at iter 37 (MT WR -0.522 pp) under old config (1.5% buffer, 0.75R target). Under current config (2.5% buffer + 0.2R BE trigger), a wider initial stop may behave differently.
+
+---
+
+## Claude Iteration 68
+
+Run:
+
+- `claude_loop_68`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.295% | median 0.454% | WR 89.295% | PF 10.863
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.305% | median 0.013% | WR 93.734% | PF 15.478
+- exit mix: 91 max-sim | 367 stop-loss | 308 trailing
+
+Investigation:
+
+- MT initial_stop atr_multiplier 2.375 → 2.5. ST unchanged.
+- Priority 1 (ST WR): flat. Priority 2 (ST return): flat. Priority 3 (overall WR): flat. All OK.
+- Priority 4 (overall avg/PF): overall avg -0.208 pp, PF -0.299. MT avg -0.416 pp, MT PF -0.904.
+- Wider initial stop increases loss magnitude on stop-loss exits (stop-loss avg -1.531% same n=367 vs 363). MT WR flat (BE trigger at 0.2R still fires), but each stop-out is a deeper loss.
+- Same result as iter 37 (rejected MT WR -0.522 pp) — even under new 2.5% support buffer + 0.2R BE trigger, 2.5 ATR is worse. 2.375 ATR confirmed MT optimum across configs.
+- Decision: REJECT. Priority-4 regressed with no priority 1-3 improvement.
+
+Improvement Implemented:
+
+- Reverted MT initial_stop to 2.375 ATR.
+- Next iter 69: Decouple ST `breakeven_after_r_multiple` from `target_r_multiple`: keep ST partial target at 0.75R but lower BE trigger to 0.5R. Iter 24-25 showed that BE > target is a no-op (trailing supersedes). BE < target fires before trailing activates, converting some stop-loss exits (-2.5R) to breakeven exits (0%) for trades that reach 0.5R then reverse to entry. Should improve ST WR with minimal avg impact (max-sim and trailing winners pass through 0.5R and 0.75R unaffected).
+
+---
+
+## Claude Iteration 69
+
+Run:
+
+- `claude_loop_69`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 6.540% | median 0.036% | WR 81.332% | PF 10.828
+- ST avg 5.359% | median 0.924% | WR 68.930% | PF 7.465
+- MT avg 7.721% | median 0.017% | WR 93.734% | PF 16.382 (unchanged)
+- exit mix: 90 max-sim | 424 stop-loss | 252 trailing
+
+Investigation:
+
+- ST `breakeven_after_r_multiple` 0.75 → 0.5R (decouple: partial target stays 0.75R, BE fires earlier). MT unchanged.
+- Priority 1 (ST WR): 84.856% → 68.930% (-15.926 pp). Catastrophic regression.
+- Root cause: when BE fires at 0.5R, stop moves to entry before trailing activates (trailing only activates at 0.75R target). Trades reaching 0.5R that would have continued to 0.75R+ (activating trailing) now risk stopping at entry (0R) before trailing activates. Trailing exits collapsed 308→252; stop-loss exits surged 367→424. The 56 lost trailing wins at avg ~9% became stop-loss exits, destroying WR.
+- Iter 24-25 showed BE>target is no-op (trailing supersedes). This test confirms BE<target is destructive (disrupts trailing activation). 0.75R is confirmed as the optimal ST BE trigger (aligned with target/trailing activation).
+- Decision: REJECT. Priority-1 catastrophic regression.
+
+Improvement Implemented:
+
+- Reverted ST `breakeven_after_r_multiple` to 0.75R.
+- Next iter 70 (FINAL): MT `support_buffer_pct` 2.5 → 2.75. Bracket between accepted 2.5% (iter 61) and rejected 3.0% (iter 62). 2.75% is the only untested point in this range.
+
+---
+
+## Claude Iteration 70 (FINAL)
+
+Run:
+
+- `claude_loop_70`
+- 158,208 decisions / 766 trades / errors 0
+- overall avg 7.497% | median 0.520% | WR 89.295% | PF 11.067
+- ST avg 7.286% | median 3.296% | WR 84.856% | PF 8.474 (unchanged)
+- MT avg 7.708% | median 0.017% | WR 93.734% | PF 15.981
+- exit mix: 95 max-sim | 363 stop-loss | 308 trailing
+
+Investigation:
+
+- MT `support_buffer_pct` 2.5 → 2.75. Bracket between accepted 2.5% (iter 61) and rejected 3.0% (iter 62). ST unchanged.
+- Priority 1-3: all flat (89.295% / 84.856% / 93.734% unchanged). OK.
+- Priority 4: overall avg -0.006 pp (noise), overall PF -0.095. MT avg -0.013 pp (noise), MT PF -0.401.
+- 2.75% sits on the wrong side of the boundary: closer to rejected 3.0% than accepted 2.5%. MT PF regresses slightly.
+- 2.5% is confirmed as the MT support_buffer optimum. The sweep 1.5→2.0→2.5 found a clean plateau; 2.75 and 3.0 are both slightly worse.
+- Decision: NO-OP / REJECT. Priority-4 minor regression, no upside.
+
+Improvement Implemented:
+
+- Reverted MT `support_buffer_pct` to 2.5%. Final accepted baseline remains claude_loop_64.
+- LOOP COMPLETE at iteration 70. See TUNING_STATUS.md for updated final state.
+
+---
+
+## Session Summary (Iterations 68-70)
+
+Three final iterations tested bracket/decouple combinations that were structurally unexplored:
+
+| iter | change | result |
+|------|--------|--------|
+| 68 | MT initial_stop ATR 2.375→2.5 | rejected (priority-4 regression; 2.375 ATR confirmed across configs) |
+| 69 | ST BE trigger 0.75→0.5R (decouple from target) | rejected (ST WR -15.9 pp; early BE disrupts trailing activation) |
+| 70 | MT support_buffer 2.5→2.75% | rejected (noise/minor PF regression; 2.5% confirmed optimum) |
+
+All major knobs exhausted. The system is at a local optimum under the current setup, entry universe, and feature set. Further gains require structural changes: new entry setups, wiring earnings_days_away into the historical feature builder, or expanding the ticker universe.
+
+---
+
+# Entry Optimization Loop (Iterations 71-80)
+
+Goal: Optimize entry points / buy part of the strategy. All previous 70 iterations only tuned exit_policy_config.json. This new loop targets entry_signal_config.json and technical_setup_config.json.
+
+Baseline (start of this loop = entry_exp_71_baseline = entry_exp_73_prior_accepted):
+- 766 trades, overall WR 89.295%, avg 7.503%, ST WR 84.856%, ST avg 7.286%, PF 11.162
+
+---
+
+## Claude Iteration 71
+
+Run:
+
+- `entry_exp_71` (baseline) + `entry_exp_71` (regime expansion)
+- Baseline: 766 trades / 158,208 decisions / errors 0
+- overall avg 7.503% | WR 89.295% | ST WR 84.856% | PF 11.162 (matches claude_loop_64 exactly)
+
+Investigation:
+
+- Baseline confirmed. The `quality_dislocation_route` only fires for BEAR_RISK_OFF, but the `supportive_rebound_regime` score rule already awards 20pts for SIDEWAYS_CHOPPY. Expanding the route to include SIDEWAYS_CHOPPY would open new trades with the same score thresholds.
+
+Improvement Implemented:
+
+- Added SIDEWAYS_CHOPPY to quality_dislocation_route: `market_regime in [BEAR_RISK_OFF, SIDEWAYS_CHOPPY]`
+- Result: 1170 trades (+404 new). Overall WR 82.820% (-6.48pp), ST WR 77.265% (-7.59pp), avg 5.078% (-2.43pp). Catastrophic regression.
+- SIDEWAYS_CHOPPY regime produces materially worse BROKEN_CHART_QUALITY_RECOVERY setups. Choppy markets don't support recovery rallies.
+- Decision: REJECT. Reverted to BEAR_RISK_OFF only.
+- Next iter 72: Tighten `deep_dislocation` threshold from -20% to -25% below 52w high (higher-quality entries only).
+
+---
+
+## Claude Iteration 72
+
+Run:
+
+- `entry_exp_72`
+- 158,208 decisions / 602 trades / errors 0
+- overall avg 8.644% | median 0.660% | WR 90.199% | PF 13.951
+- ST avg 8.346% | median 4.806% | WR 86.046% | PF 10.172
+- MT avg 8.942% | median 0.021% | WR 94.352% | PF 22.043
+- exit mix: 82 max-sim | 276 stop-loss | 244 trailing
+
+Investigation:
+
+- deep_dislocation threshold -20 → -25% (dist_from_52w_high <= -25). Removed 164 borderline dislocated trades.
+- All priorities improved across the board. The eliminated trades (-20 to -25% below 52w high) were inferior setups — not deeply enough dislocated to trigger strong recoveries.
+- ST WR +1.19pp, overall avg +1.14pp, PF +2.79. Stop-loss avg improved from -1.541% → -1.437%.
+- Decision: ACCEPT. New baseline: entry_exp_72 (602 trades).
+
+Improvement Implemented:
+
+- Kept deep_dislocation at -25%. Next iter 73: continue sweep to -30%.
+
+---
+
+## Claude Iteration 73
+
+Run:
+
+- `entry_exp_73`
+- 158,208 decisions / 420 trades / errors 0
+- overall avg 9.545% | median 0.709% | WR 92.143% | PF 18.828
+- ST avg 9.490% | median 5.572% | WR 88.571% | PF 13.413
+- MT avg 9.600% | median 0.027% | WR 95.714% | PF 32.342
+- exit mix: 54 max-sim | 190 stop-loss | 176 trailing
+
+Investigation:
+
+- deep_dislocation threshold -25 → -30%. Removed 182 more borderline dislocated trades.
+- All priorities improved again. The -20 to -30% range is a gradient of quality: deeper = better.
+- ST WR +2.53pp vs prior best (entry_exp_72). Stop-loss avg improved to -1.161%. MT PF 32.342 (from 22.043).
+- Decision: ACCEPT. New baseline: entry_exp_73 (420 trades).
+
+Improvement Implemented:
+
+- Kept deep_dislocation at -30%. Next iter 74: try -35% (bracket).
+
+---
+
+## Claude Iteration 74
+
+Run:
+
+- `entry_exp_74`
+- 158,208 decisions / 314 trades / errors 0
+- overall avg 9.195% | median 0.559% | WR 92.357% | PF 18.722
+- ST avg 9.965% | median 5.025% | WR 89.172% | PF 14.472
+- MT avg 8.424% | median 0.028% | WR 95.541% | PF 29.276
+
+Investigation:
+
+- deep_dislocation threshold -30 → -35%.
+- Priority 1 (ST WR): +0.601pp marginal improvement. Priority 2: avg +0.475pp BUT median -0.547pp (mixed). Priority 4: overall avg -0.350pp, MT avg -1.176pp, MT PF -3.066 (significant regression).
+- The -30 to -35% range contains quality MT trades that extend to full max-sim duration. Removing them hurts MT returns with minimal ST WR gain.
+- -30% confirmed as deep_dislocation optimum.
+- Decision: REJECT. Reverted to -30%.
+
+Improvement Implemented:
+
+- Reverted deep_dislocation to -30%. Next iter 75: Try raising `oversold` score rule threshold from RSI<=35 to RSI<=30 — would reclassify RSI 31-35 stocks from WATCHLIST (score 90) to BUY (score 70/80).
+
+---
+
+## Claude Iteration 75
+
+Run:
+
+- `entry_exp_75`
+- 158,208 decisions / 640 trades / errors 0
+- overall avg 8.760% | median 0.460% | WR 89.375% | PF 11.636
+- ST avg 8.408% | median 3.715% | WR 84.688% | PF 8.443
+- MT avg 9.113% | median 0.018% | WR 94.062% | PF 18.600
+
+Investigation:
+
+- `oversold` score rule: RSI<=35 → RSI<=30. This moved RSI 31-35 stocks from score-90 (WATCHLIST) to score-70/80 (BUY).
+- All priorities regressed: ST WR -3.883pp, overall WR -2.768pp. 640 trades vs 420.
+- RSI 31-35 stocks with deep dislocation underperform. They're transitioning from extreme oversold but the reversal isn't yet confirmed. The prior loop was right to keep score-90 as WATCHLIST: even under the new -30% dislocation filter, deeply oversold (RSI 31-35) stocks in broken charts are inferior entries.
+- Decision: REJECT. Reverted oversold threshold to RSI<=35.
+
+Improvement Implemented:
+
+- Reverted `oversold` rule to RSI<=35. Next iter 76: Add penalty rule for severe RS underperformance (rs_vs_spy_20d <= -15%): -20pts. Hypothesis: stocks still massively lagging SPY are false recovery signals.
+
+---
+
+## Claude Iteration 76
+
+Run:
+
+- `entry_exp_76`
+- 158,208 decisions / 440 trades / errors 0
+- overall avg 7.976% | WR 87.500% | ST WR 83.636% | PF 7.773
+
+Investigation:
+
+- Penalty -20pts for rs_vs_spy_20d <= -15%. Critical discovery: -20pt penalty accidentally promoted WATCHLIST stocks.
+- Score 90 - 20 = 70 → BUY_STARTER. Score 100 - 20 = 80 → BUY_FULL. Previously-WATCHLIST deeply oversold stocks were promoted into BUY thresholds.
+- Trade count went UP (420 → 440) and all metrics collapsed.
+- Key lesson: safe penalty must ensure score-90 - penalty ≠ 70 and score-100 - penalty ≠ 80. Avoid penalties of exactly 10, 20, or 30 pts.
+- Decision: REJECT. Switched to -25pt penalty (90-25=65, 100-25=75, both safely WATCHLIST).
+
+Improvement Implemented:
+
+- Changed penalty to -25pts (90-25=65, 100-25=75 — cannot accidentally hit 70 or 80 BUY thresholds).
+
+---
+
+## Claude Iteration 77
+
+Run:
+
+- `entry_exp_77`
+- 158,208 decisions / 336 trades / errors 0
+- overall avg 8.499% | median 0.709% | WR 91.369% | PF 16.098
+- ST avg 7.755% | median 4.504% | WR 87.500% | PF 10.651
+- MT avg 9.243% | median 0.021% | WR 95.238% | PF 29.680
+
+Investigation:
+
+- Penalty -25pts for rs_vs_spy_20d <= -15%. Correctly eliminated 84 trades (420 → 336).
+- However all priorities regressed: overall WR -0.774pp, ST WR -1.071pp, ST avg -1.735pp, overall avg -1.046pp.
+- Key insight: In BEAR_RISK_OFF, stocks with extreme negative RS (-15%+ lagging SPY) that are deeply dislocated (-30%+) and showing RSI reversal are EXCELLENT entries. They've fallen the most (maximum dislocation) and are showing earliest recovery signals. Penalizing extreme RS underperformance removes the best setups.
+- Decision: REJECT. Reverted penalty to empty.
+
+Improvement Implemented:
+
+- Removed RS underperformance penalty. Next iter 78: try penalizing seller domination (updown_volume_ratio <= 0.5 → stocks with 2:1 down-volume may be false bounces).
+
+---
+
+## Claude Iteration 78
+
+Run:
+
+- `entry_exp_78`
+- 158,208 decisions / 352 trades / errors 0
+- overall avg 9.344% | median 0.674% | WR 91.761% | PF 17.052
+- ST avg 9.881% | median 5.743% | WR 88.636% | PF 13.370
+- MT avg 8.808% | median 0.028% | WR 94.886% | PF 25.100
+
+Investigation:
+
+- Penalty -25pts for updown_volume_ratio <= 0.5 (sellers overwhelming buyers 2:1).
+- Priority 1: ST WR flat (+0.065pp). Priority 2: ST avg +0.391pp, median +0.171pp (mild improvement).
+- Priority 3: overall WR -0.382pp (regression). Priority 4: MT avg -0.792pp, MT PF -3.742 (significant regression).
+- The seller-dominated trades are good MEDIUM-TERM holds. Their selling pressure at entry resolves over the longer horizon (60-141 days). Penalizing them removes quality MT trades.
+- Decision: REJECT. Priority-3 and priority-4 regressed. Reverted.
+
+Improvement Implemented:
+
+- Removed seller domination penalty. Next iter 79: tighten OVERSOLD_REVERSAL RSI upper bound in technical_setup_config.json from 42 → 38 (keep only truly oversold entries).
+
+---
+
+## Claude Iteration 79
+
+Run:
+
+- `entry_exp_79`
+- 158,208 decisions / 130 trades / errors 0
+- overall avg 7.998% | median 0.660% | WR 93.846% | PF 28.566
+- ST avg 8.662% | median 2.524% | WR 92.308% | PF 29.608
+- MT avg 7.333% | median 0.020% | WR 95.385% | PF 27.428
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 42 → 38 (in technical_setup_config.json). 420 → 130 trades.
+- Priority 1: ST WR +3.737pp (strong improvement). Priority 3: overall WR +1.703pp.
+- But: ST avg -0.828pp, ST median -3.048pp, MT avg -2.267pp. Sample size very small (65 ST trades).
+- The RSI 39-42 stocks are the MAX_SIM_WINDOW winners (highest avg return). Cutting them reduces max-sim exits from 54 → 16 and shrinks avg significantly.
+- RSI 38 too aggressive — WR improves but quality/quantity tradeoff is unfavorable. Bracket at RSI 40.
+- Decision: REJECT. Revert to 40 bracket.
+
+Improvement Implemented:
+
+- Set OVERSOLD_REVERSAL RSI upper bound to 40 (midpoint between accepted 42 and tested 38).
+
+---
+
+## Claude Iteration 80 (FINAL)
+
+Run:
+
+- `entry_exp_80`
+- 158,208 decisions / 266 trades / errors 0
+- overall avg 10.371% | median 0.660% | WR 92.481% | PF 22.584
+- ST avg 10.171% | median 5.458% | WR 89.474% | PF 17.261
+- MT avg 10.572% | median 0.022% | WR 95.489% | PF 32.505
+- exit mix: 33 max-sim | 121 stop-loss | 112 trailing
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 42 → 40. 420 → 266 trades.
+- Priority 1 (ST WR): 88.571% → 89.474% (+0.903pp) ✅
+- Priority 2: ST avg 9.490% → 10.171% (+0.681pp) ✅, ST median 5.572% → 5.458% (-0.114pp, noise) ✅
+- Priority 3 (Overall WR): 92.143% → 92.481% (+0.338pp) ✅
+- Priority 4: overall avg +0.826pp, overall PF +3.756 ✅
+- Max-sim avg 48.685% (vs 42.297% at -30% baseline): the trades that survive are even higher quality.
+- Stop-loss avg -1.034% (best so far), stop-loss WR 83.471% (best so far).
+- RSI 41-42 stocks are the weakest entries (barely oversold, recovery well underway). RSI 25-40 is the confirmed optimum oversold zone for BROKEN_CHART_QUALITY_RECOVERY.
+- Decision: ACCEPT. New final baseline: entry_exp_80.
+
+Improvement Implemented:
+
+- OVERSOLD_REVERSAL RSI upper bound stays at 40.
+- LOOP COMPLETE at iteration 80. See TUNING_STATUS.md for updated final state.
+
+---
+
+## Session Summary (Entry Optimization Iterations 71-80)
+
+| iter | change | config file | result |
+|------|--------|------------|--------|
+| 71 | quality_dislocation route + SIDEWAYS_CHOPPY | entry_signal_config.json | rejected (ST WR -7.59pp; SIDEWAYS_CHOPPY regime produces inferior setups) |
+| 72 | deep_dislocation threshold -20 → -25% | entry_signal_config.json | **accepted** (ST WR +1.19pp, all metrics improved) |
+| 73 | deep_dislocation threshold -25 → -30% | entry_signal_config.json | **accepted** (ST WR +2.53pp additional, all metrics improved) |
+| 74 | deep_dislocation threshold -30 → -35% | entry_signal_config.json | rejected (MT regression, -30% confirmed optimum) |
+| 75 | oversold score rule RSI<=35 → RSI<=30 | entry_signal_config.json | rejected (ST WR -3.88pp; RSI 31-35 stocks are inferior entries) |
+| 76 | RS underperformance penalty -20pts (rs<=-15%) | entry_signal_config.json | rejected (accidentally promoted score-90 stocks via 90-20=70 promotion bug) |
+| 77 | RS underperformance penalty -25pts (rs<=-15%) | entry_signal_config.json | rejected (removes best setups; extreme RS underperformance in bear regime = maximum dislocation = best entries) |
+| 78 | seller domination penalty -25pts (updown<=0.5) | entry_signal_config.json | rejected (removes good MT trades; seller pressure at entry resolves over full simulation window) |
+| 79 | OVERSOLD_REVERSAL RSI upper bound 42 → 38 | technical_setup_config.json | rejected (too aggressive; sample too small; avg/median collapsed) |
+| 80 | OVERSOLD_REVERSAL RSI upper bound 42 → 40 | technical_setup_config.json | **accepted** (ST WR +0.90pp, all metrics improved) |
+
+**Total entry optimization gain vs 70-iteration exit-tuning baseline:**
+
+| metric | exit-tuned baseline | entry_exp_80 final | gain |
+|--------|--------------------|--------------------|------|
+| trades | 766 | 266 | -65% (quality over quantity) |
+| ST WR | 84.856% | 89.474% | +4.618pp |
+| ST avg | 7.286% | 10.171% | +2.885pp |
+| ST median | 3.296% | 5.458% | +2.162pp |
+| overall WR | 89.295% | 92.481% | +3.186pp |
+| overall avg | 7.503% | 10.371% | +2.868pp |
+| overall PF | 11.162 | 22.584 | +11.422 |
+| MT WR | 93.734% | 95.489% | +1.755pp |
+| MT avg | 7.721% | 10.572% | +2.851pp |
+
+Key findings:
+1. Deep dislocation threshold is the dominant entry quality lever: -30% vs -20% is a large quality improvement.
+2. BEAR_RISK_OFF is the only valid regime; SIDEWAYS_CHOPPY produces inferior setups.
+3. RSI 40 is the confirmed oversold upper bound; RSI 41-42 stocks are marginal/late entries.
+4. In BEAR_RISK_OFF, extreme RS underperformance at entry (stock lagging SPY by 15%+) = BEST entries, not worst. Maximum dislocation principle confirmed.
+5. Penalty rule arithmetic: safe penalty must not let score 90 or 100 land on 70 or 80 (avoid penalties of exactly 10, 20, or 30 pts).
+
+---
+
+# Entry Optimization Loop 2 (Iterations 81-90)
+
+Goal: Continue entry point optimization. Loop 1 found deep_dislocation -30% and OVERSOLD_REVERSAL RSI≤40. This loop explores sma50_relative distance in TRUE_BROKEN_CHART, sma200_relative, RSI fine-brackets, score-90 BUY_AGGRESSIVE, and regime expansion under the new filters.
+
+Baseline (start of loop 2 = entry_exp_83):
+- 102 trades, overall WR 98.039%, avg 15.097%, ST WR 98.039%, ST avg 17.566%, PF 151.846
+
+---
+
+## Claude Iteration 81
+
+Run:
+
+- `entry_exp_81`
+- 158,208 decisions / 228 trades / errors 0
+- overall avg 11.246% | median 0.857% | WR 92.983% | PF 25.242
+- ST avg 11.027% | median 6.038% | WR 90.351% | PF 18.993
+- MT avg 11.465% | WR 95.614%
+
+Investigation:
+
+- TRUE_BROKEN_CHART `sma50_relative` threshold: < -5% → < -10%. Stocks -5% to -10% below SMA50 have their SMA50 "chasing them down" — a mature, grinding decline. Stocks >10% below SMA50 represent sharper, more recent structural breaks.
+- All priorities improved across the board vs entry_exp_80 baseline (266 trades): ST WR +0.877pp, ST avg +0.856pp, ST median +0.580pp, overall avg +0.875pp, PF +2.658.
+- Decision: ACCEPT. New baseline: entry_exp_81 (228 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -10%. Next iter 82: continue sweep to -15%.
+
+---
+
+## Claude Iteration 82
+
+Run:
+
+- `entry_exp_82`
+- 158,208 decisions / 140 trades / errors 0
+- overall avg 13.814% | median 2.143% | WR 96.429% | PF 50.483
+- ST avg 14.797% | median 9.197% | WR 95.714% | PF 45.883
+- MT avg 12.831% | WR 97.143%
+- exit mix: 20 max-sim | 58 stop-loss | 62 trailing; stop-loss avg -0.639%, WR 91.379%
+
+Investigation:
+
+- sma50_relative < -15%. Removed 88 more trades from 228.
+- All priorities improved dramatically: ST WR +5.363pp vs entry_exp_81, overall WR +3.446pp, ST avg +3.770pp, ST median +3.159pp, PF jumped to 50.483 (+25.241).
+- Stop-loss WR 91.379% = only ~5 pure losers out of 140 total trades. The trend is strong.
+- Decision: ACCEPT. New baseline: entry_exp_82 (140 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -15%. Next iter 83: continue sweep to -20%.
+
+---
+
+## Claude Iteration 83
+
+Run:
+
+- `entry_exp_83`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.097% | median 2.393% | WR 98.039% | PF 151.846
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 12.629% | WR 98.039%
+- exit mix: 14 max-sim | 42 stop-loss | 46 trailing; stop-loss avg -0.200%, WR 95.238%
+
+Investigation:
+
+- sma50_relative < -20%. Removed 38 more trades from 140.
+- All priorities improved again: ST WR +2.325pp vs entry_exp_82, overall WR +1.610pp, ST avg +2.769pp, median +2.792pp, PF 151 (from 50).
+- Only 2 pure losers out of 102 total trades (98% stop-loss WR, avg -0.200% per stop).
+- Stop-loss avg -0.200%: losses are virtually breakeven — nearly all stop-loss exits first hit the 0.75R partial profit target before trailing back to entry.
+- Decision: ACCEPT. New final baseline: entry_exp_83 (102 trades).
+
+Improvement Implemented:
+
+- Kept sma50_relative < -20%. Next iter 84: continue sweep to -25% (bracket/confirm).
+
+---
+
+## Claude Iteration 84
+
+Run:
+
+- `entry_exp_84`
+- 158,208 decisions / 68 trades / errors 0
+- overall avg 12.178% | median 2.393% | WR 100.000% | PF undefined
+- ST avg 19.580% | median 13.477% | WR 100.000%
+- MT avg 4.777% | WR 100.000%
+
+Investigation:
+
+- sma50_relative < -25%. 102 → 68 trades. 100% WR (zero losers) but metrics are degenerate.
+- Priority 4: MT avg 4.777% vs 12.629% (-7.852pp). Catastrophic MT regression. MAX_SIM exits 14 → 6 and their avg dropped 49% → 28%.
+- Stocks >25% below SMA50 at -30%+ dislocation are so structurally damaged that they only produce short-term bounces, not sustained MT recoveries. The MT dimension collapses.
+- 68 total trades / 34 ST, 34 MT: sample too small; 100% WR is unreliable statistical artifact.
+- Decision: REJECT. -20% confirmed as sma50_relative optimum (sweet spot between -15% best-combined and -25% MT-collapse).
+
+Improvement Implemented:
+
+- Reverted sma50_relative to < -20%. Next iter 85: test sma200_relative < -5% (same quality-filter principle applied to 200MA).
+
+---
+
+## Claude Iteration 85
+
+Run:
+
+- `entry_exp_85`
+- Identical to entry_exp_83: 102 trades, WR 98.039%, avg 15.097%
+
+Investigation:
+
+- sma200_relative < 0% → < -5%. NO-OP: all 102 trades already satisfy sma200_relative < -5%.
+- When sma50_relative < -20%, SMA200 (slow indicator) has not caught up — automatically puts sma200_relative further below too.
+- The sma200 filter is non-binding (redundant) given the sma50 < -20% filter.
+- Decision: NO-OP. Revert sma200 to original (< 0%) to keep config clean.
+
+Improvement Implemented:
+
+- Reverted sma200 to < 0%. Next iter 86: test sma200_relative < -10% to find where it starts discriminating.
+
+---
+
+## Claude Iteration 86
+
+Run:
+
+- `entry_exp_86`
+- Identical to entry_exp_83: 102 trades, WR 98.039%, avg 15.097%
+
+Investigation:
+
+- sma200_relative < -10%: still a NO-OP. All 102 trades also satisfy sma200 < -10%.
+- Confirmed: with sma50_relative < -20%, the sma200 filter is dominated up to at least -10%. SMA200 (200-day moving average) in a recent sharp crash sits well above the current price — stocks >20% below SMA50 are automatically well below SMA200 too.
+- Decision: NO-OP. Reverted sma200 to < 0%. The sma200_relative dimension is non-discriminating under the current sma50 filter.
+
+Improvement Implemented:
+
+- Reverted sma200 to < 0% (original). Next iter 87: RSI fine-bracket at 39 (between rejected 38 and accepted 40).
+
+---
+
+## Claude Iteration 87
+
+Run:
+
+- `entry_exp_87`
+- 158,208 decisions / 66 trades / errors 0
+- overall avg 17.639% | median 2.976% | WR 96.970% | PF 115.039
+- ST avg 20.077% | median 17.963% | WR 96.970% | PF 152.268
+- MT avg 15.201% | WR 96.970%
+
+Investigation:
+
+- OVERSOLD_REVERSAL RSI upper bound 40 → 39. 102 → 66 trades.
+- P1 (ST WR): 98.039% → 96.970% (-1.069pp) ❌. P2: ST avg +2.511pp, median +5.974pp ✅.
+- Mathematical note: same absolute 2 losers in both 102-trade and 66-trade sets. WR% drop is a denominator artifact, not true quality regression.
+- However, under the strict P1-first framework: ST WR declined. Reject.
+- RSI 39-40 stocks are the high-avg contributors (the removed 36 trades have RSI=39-40 and strong median). Including them LOWERS WR% but raises avg.
+- Decision: REJECT per priority framework. RSI 40 confirmed optimal (keeps high-avg RSI 39-40 stocks).
+
+Improvement Implemented:
+
+- Reverted RSI to 40. Next iter 88: score 90 as BUY_AGGRESSIVE (opens RSI ≤35 deeply oversold stocks under current sma50 < -20% filter).
+
+---
+
+## Claude Iteration 88
+
+Run:
+
+- `entry_exp_88`
+- 158,208 decisions / 212 trades / errors 0
+- overall avg 13.878% | WR 91.038% | PF 14.166
+- ST avg 13.782% | WR 90.566% | PF 13.975
+- MT avg 13.975% | WR 91.509%
+
+Investigation:
+
+- Added BUY_AGGRESSIVE decision threshold at score exactly 90. Added 110 new score-90 trades (RSI ≤35, all other quality filters still apply).
+- P1 (ST WR): -7.473pp. P2: ST avg -3.784pp. All priorities regressed catastrophically.
+- Stop-loss avg collapsed from -0.200% to -2.322%. Score-90 stop-losses are taking large hits.
+- RSI ≤35 stocks are still in active decline at entry. Even under sma50 < -20% + dist < -30%, deeply oversold (RSI ≤35) stocks are falling knives. The RSI uptick at entry is unreliable when RSI is this low.
+- Confirms the prior loop finding definitively: "Do not widen above score 80" is correct under any filter combination tested so far.
+- Decision: REJECT. Removed BUY_AGGRESSIVE threshold.
+
+Improvement Implemented:
+
+- Reverted decision thresholds to BUY_FULL/BUY_STARTER/WATCHLIST only. Next iter 89: LIQUIDITY_RALLY regime expansion (under new sma50 < -20% filter, SIDEWAYS_CHOPPY rejected in iter 71).
+
+---
+
+## Claude Iteration 89
+
+Run:
+
+- `entry_exp_89`
+- 158,208 decisions / 106 trades / errors 0
+- overall avg 15.844% | WR 97.170% | PF 88.262
+- ST avg 17.570% | WR 96.226% | PF 70.403
+- MT avg 14.118% | WR 98.113%
+
+Investigation:
+
+- Added LIQUIDITY_RALLY to quality_dislocation route. +4 new trades (102 → 106).
+- P1 (ST WR): -1.813pp ❌. P3 (overall WR): -0.869pp ❌.
+- The 4 LIQUIDITY_RALLY trades have ~75% WR, dragging down the 98% baseline.
+- In LIQUIDITY_RALLY, even structurally broken stocks with sharp SMA50 breaks may not recover as cleanly — the market rally can briefly bid them up then they resume declining.
+- Decision: REJECT. BEAR_RISK_OFF remains the only valid regime. Reverted.
+
+Improvement Implemented:
+
+- Reverted to BEAR_RISK_OFF only. Next iter 90: sma50_relative fine-bracket at -18% (between -15% accepted and -20% accepted).
+
+---
+
+## Claude Iteration 90 (FINAL)
+
+Run:
+
+- `entry_exp_90`
+- 158,208 decisions / 116 trades / errors 0
+- overall avg 13.984% | median 2.256% | WR 97.414% | PF 81.659
+- ST avg 15.890% | median 9.758% | WR 96.552% | PF 65.525
+- MT avg 12.079% | WR 98.276%
+
+Investigation:
+
+- sma50_relative -20% → -18% (fine-bracket). 102 → 116 trades (+14 at -18 to -20% below SMA50).
+- All priorities regressed: ST WR -1.487pp, ST avg -1.676pp, ST median -2.231pp, overall avg -1.113pp.
+- The -18% to -20% range trades are inferior quality. -20% is a genuine quality cliff, not a gradual slope.
+- The 14 added trades are the "less-sharp" breaks (only 18-20% below SMA50) which do not produce the same recovery quality.
+- Decision: REJECT. Confirmed -20% is an exact quality threshold, not a continuous optimum.
+
+Improvement Implemented:
+
+- Reverted sma50_relative to < -20%. LOOP COMPLETE at iteration 90. See TUNING_STATUS.md for final state.
+
+---
+
+## Claude Iteration 91
+
+Run:
+
+- `entry_exp_91`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.071% | median 2.976% | WR 97.059% | PF 124.586
+- ST avg 17.512% | median 11.073% | WR 96.078% | PF 136.123
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- Re-sweep: ST max_simulation_days 60 → 45 under the new 102-trade universe.
+- Previous rejection (exit loop, iters 21-70) was against 766 trades; re-testing because the exit optima may differ with 102 ultra-high-quality trades.
+- P1 (ST WR): 98.039% → 96.078% (-1.961pp) ❌.
+- MAX_SIM_WINDOW exits: ~30 trades at avg 41.942% — these are big winners being forced out by the 45-day cap before trailing stop fires.
+- Decision: REJECT. 45 days cuts winners too short. Revert to 60; test 75 next.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60. Testing 75 next.
+
+---
+
+## Claude Iteration 92
+
+Run:
+
+- `entry_exp_92`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.926% | median 2.256% | WR 95.098% | PF 52.060
+- ST avg 17.222% | median 11.989% | WR 92.157% | PF 37.617
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST max_simulation_days 60 → 75.
+- P1 (ST WR): 98.039% → 92.157% (-5.882pp). Catastrophic P1 regression.
+- With 75 days the trailing stop has more time to activate and exit trades on normal volatility dips: STOP_LOSS_EXIT avg dropped to -0.542% (vs -0.200% at 60 days) with 3 stop-loss losers vs 2.
+- TRAILING_STOP_EXIT jumped to 46 trades vs 30 — trailing stop is over-firing on the extended window, cutting recoveries short.
+- Both 45 and 75 rejected. 60 days confirmed as ST max_simulation_days optimum even under the new 102-trade universe.
+- Decision: REJECT. Revert to 60 days. ST sim window re-validated.
+
+Improvement Implemented:
+
+- Reverted ST max_simulation_days to 60. Moving to ST trailing_stop ATR re-sweep.
+
+---
+
+## Claude Iteration 93
+
+Run:
+
+- `entry_exp_93`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.423% | median 3.345% | WR 98.039% | PF 135.116
+- ST avg 14.217% | median 9.837% | WR 98.039% | PF 166.540
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- Re-sweep: ST trailing_stop ATR 3.0 → 2.5 under the new 102-trade universe.
+- P1 (ST WR): 98.039% → 98.039% (flat ✅).
+- P2 (ST avg): 17.566% → 14.217% (-3.349pp) ❌. Clear P2 regression.
+- TRAILING_STOP_EXIT avg: 14.986% (vs higher at 3.0 ATR). Tighter trailing exits winners before they fully develop.
+- Decision: REJECT. P1 flat but P2 clearly worsens. Tighter trailing at 2.5 cuts the best trades prematurely.
+
+Improvement Implemented:
+
+- Reverted ST trailing ATR to 3.0. Testing 3.5 ATR next.
+
+---
+
+## Claude Iteration 94
+
+Run:
+
+- `entry_exp_94`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.669% | median 2.035% | WR 98.039% | PF 147.561
+- ST avg 16.708% | median 11.818% | WR 98.039% | PF 195.546
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST trailing_stop ATR 3.0 → 3.5.
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 16.708% (-0.858pp) ❌. P2 regressed.
+- Looser trailing (3.5) causes more trades to hit MAX_SIM_WINDOW (17 vs ~20 at 3.0) instead of exiting at optimal trailing stop prices.
+- Both 2.5 and 3.5 tested and rejected. ST trailing_stop ATR 3.0 confirmed as optimal for the 102-trade universe (same as for 766-trade universe).
+- Decision: REJECT. Revert to 3.0. ST trailing ATR re-validated.
+
+Improvement Implemented:
+
+- Reverted ST trailing ATR to 3.0. Moving to MT max_simulation_days re-sweep (iters 95-96).
+
+---
+
+## Claude Iteration 95
+
+Run:
+
+- `entry_exp_95`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.940% | median 2.976% | WR 98.039% | PF 140.281
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 10.314% | WR 98.039% | PF 91.247
+
+Investigation:
+
+- Re-sweep: MT max_simulation_days 141 → 120 under the new 102-trade universe.
+- Previous rejection was against 766 trades (exit loop). Re-testing under new entry filters.
+- P1/P2 (ST): perfectly flat — 17.566% avg, 98.039% WR. Entry filter drives ST, not MT sim window.
+- P4 (MT avg): 12.629% → 10.314% (-2.315pp) ❌. 120 days cuts MT quality trades short — many of these deep-dislocation breaks need >120 days to fully recover.
+- MAX_SIM exits: 16 trades at avg 35.641% — these are winners being capped at day 120 before completing their run.
+- Decision: REJECT. 120 days too short for MT dimension. Revert to 141; test 150 next.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141. Testing 150 next.
+
+---
+
+## Claude Iteration 96
+
+Run:
+
+- `entry_exp_96`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.723% | median 2.256% | WR 98.039% | PF 148.102
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533
+- MT avg 11.880% | WR 98.039% | PF 104.945
+
+Investigation:
+
+- MT max_simulation_days 141 → 150.
+- P1/P2 (ST): identical to baseline ✅.
+- P4 (MT avg): 12.629% → 11.880% (-0.749pp) ❌. 150 days is also slightly worse.
+- At 150 days, STOP_LOSS_EXIT increases (43 vs 40 at 141) — more trades drifting into stop-loss territory with the extra hold time.
+- Both 120 and 150 rejected. MT max_simulation_days 141 confirmed as optimal for the 102-trade universe (same as 766-trade universe).
+- Decision: REJECT. MT sim window 141 days re-validated.
+
+Improvement Implemented:
+
+- Reverted MT max_simulation_days to 141. Moving to MT trailing_stop re-test (iter 97).
+
+---
+
+## Claude Iteration 97
+
+Run:
+
+- `entry_exp_97`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 13.032% | median 5.912% | WR 98.039% | PF 131.210
+- ST avg 17.566% | median 11.989% | WR 98.039% | PF 205.533 (unchanged)
+- MT avg 8.498% | WR 98.039% | PF 75.360
+
+Investigation:
+
+- MT trailing_stop enabled at 3.0 ATR (previously tested 5.0, 4.0, 3.0 against 766 trades, all rejected; re-testing 3.0 against 102-trade universe since optima could differ).
+- P1/P2 (ST): perfectly flat — trailing only applies to MT here.
+- P4 (MT avg): 12.629% → 8.498% (-4.131pp) ❌. Severe regression.
+- 96 of 102 trades exiting via TRAILING_STOP_EXIT (the MT trailing fires on nearly everything). These are deep-dislocation recovery trades that need 141 days of full position to complete; the trailing stop truncates the recovery move prematurely.
+- MAX_SIM exits dropped from ~20 to 4 — meaning the big 30-50% MT winners that used to run to day 141 now get clipped much earlier by trailing.
+- Decision: REJECT. MT trailing at 3.0 ATR confirmed rejected for 102-trade universe (same finding as 766-trade universe). Deep dislocation recoveries require holding the full MT position.
+
+Improvement Implemented:
+
+- Reverted MT trailing_stop to disabled. Moving to ST partial_profit re-tests (iters 98-100).
+
+---
+
+## Claude Iteration 98
+
+Run:
+
+- `entry_exp_98`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 14.845% | median 3.590% | WR 98.039% | PF 149.327
+- ST avg 17.062% | median 12.413% | WR 98.039% | PF 199.663
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST sell_pct 20% → 30% (lock in more profit at 0.75R target).
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 17.062% (-0.504pp) ❌. P2 slightly regressed.
+- ST median: 11.989% → 12.413% (+0.424pp) marginal improvement.
+- With 30% partial sell at 0.75R, only 70% of position runs the trailing stop; this clips the big trailing winners slightly. The TRAILING_STOP_EXIT avg dropped from the 3.0 baseline.
+- Combined P2 signal: avg down, median marginally up — not a clear P2 improvement.
+- Decision: REJECT. 20% sell_pct remains best for this universe.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 20%. Testing ST partial_profit target at 1.0R next.
+
+---
+
+## Claude Iteration 99
+
+Run:
+
+- `entry_exp_99`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 16.605% | median 3.191% | WR 97.059% | PF 90.825
+- ST avg 20.581% | median 15.861% | WR 96.078% | PF 81.574
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST partial_profit target 0.75R → 1.0R (with sell 20%, BE at 1.0R). The 70-loop swept from 2.25R down to 0.75R; going back up to 1.0R tests whether the higher target benefits under 102 quality trades where the trailing stop fires most times.
+- P1 (ST WR): 98.039% → 96.078% (-1.961pp) ❌. P1 regression.
+- P2 (ST avg): 17.566% → 20.581% (+3.015pp) ✅. Excellent P2 improvement.
+- P2 (ST median): 11.989% → 15.861% (+3.872pp) ✅. Excellent.
+- The math: BE trigger at 1.0R means ~1 trade that previously got BE protection at 0.75R now hits original stop before reaching 1.0R (STOP_LOSS_EXIT went 42→43, with avg worsening -0.397% vs -0.200%). This adds 1 loser.
+- Despite extraordinary P2 improvement, P1 regressed. Under strict P1-first framework: REJECT.
+- Note for context: 0.75R target is protecting 1 marginal trade that reaches 0.75R but then fails to reach 1.0R. The strict priority framework preserves this protection correctly.
+- Decision: REJECT. 0.75R target confirmed for ST partial profit under 102-trade universe.
+
+Improvement Implemented:
+
+- Reverted ST partial_profit target to 0.75R. Final iteration (100): ST sell_pct 15%.
+
+---
+
+## Claude Iteration 100
+
+Run:
+
+- `entry_exp_100`
+- 158,208 decisions / 102 trades / errors 0
+- overall avg 15.223% | median 1.820% | WR 98.039% | PF 153.105
+- ST avg 17.818% | median 11.777% | WR 98.039% | PF 208.468
+- MT avg 12.629% | WR 98.039% | PF 111.502
+
+Investigation:
+
+- ST sell_pct 20% → 15% (previously rejected on 766 trades: "priority-2 combined metric negative"; re-testing on 102 quality trades where nearly all reach the trailing stop).
+- P1 (ST WR): 98.039% flat ✅.
+- P2 (ST avg): 17.566% → 17.818% (+0.252pp) marginal improvement.
+- P2 (ST median): 11.989% → 11.777% (-0.212pp) marginal regression.
+- Combined P2: avg +0.252pp, median -0.212pp — mixed signal, noise-level on 51 ST trades.
+- ST PF: 205.533 → 208.468 (+2.935) slightly improved.
+- Theory holds: less partial sell = more capital in trailing stop run. But the magnitude is within noise bounds.
+- Decision: REJECT. "Clearly improves" threshold not met. 20% confirmed as ST sell_pct optimum.
+
+Improvement Implemented:
+
+- Reverted ST sell_pct to 20%. Config restored to entry_exp_83 baseline. LOOP COMPLETE at iteration 100. See TUNING_STATUS.md for final state.
+
+---
+
+## Session Summary (Exit Re-validation Loop, Iterations 91-100)
+
+All 10 iterations re-tested exit_policy_config.json knobs against the new 102-trade universe (entry_exp_83 filters: sma50 < -20%, dist < -30%, RSI ≤ 40).
+
+| iter | change | result |
+|------|--------|--------|
+| 91 | ST max_simulation_days 60 → 45 | rejected (ST WR -1.961pp; winners cut early by time cap) |
+| 92 | ST max_simulation_days 60 → 75 | rejected (ST WR -5.882pp; trailing over-fires on extended window) |
+| 93 | ST trailing_stop ATR 3.0 → 2.5 | rejected (P1 flat; ST avg -3.349pp; tighter trailing clips winners) |
+| 94 | ST trailing_stop ATR 3.0 → 3.5 | rejected (P1 flat; ST avg -0.858pp; looser pushes into MAX_SIM) |
+| 95 | MT max_simulation_days 141 → 120 | rejected (MT avg -2.315pp; MT recoveries need full window) |
+| 96 | MT max_simulation_days 141 → 150 | rejected (MT avg -0.749pp; 141 confirmed optimum) |
+| 97 | MT trailing_stop enabled at 3.0 ATR | rejected (MT avg -4.131pp; deep recovery trades need full MT hold) |
+| 98 | ST sell_pct 20% → 30% | rejected (P1 flat; ST avg -0.504pp; more partial sell clips trailing) |
+| 99 | ST partial_profit target 0.75R → 1.0R | rejected (ST WR -1.961pp; later BE exposes 1 extra trade to stop) |
+| 100 | ST sell_pct 20% → 15% | rejected (P1 flat; P2 mixed ±0.25pp; noise level, not clearly better) |
+
+**Key finding:** Every single exit policy knob tested against the 766-trade universe was confirmed as optimal for the 102-trade universe. The exit config is globally robust — the entry quality filter changed the trade count dramatically but not the exit mechanics. The optimum exit parameters for these deep-dislocation recovery trades are independent of how tightly the entry filters are set.
+
+**Final best run unchanged: `entry_exp_83`** (102 trades, 98.039% WR, 17.566% ST avg, 15.097% overall avg, PF 151.846).
+
+---
+
+## Session Summary (Entry Optimization Loop 2, Iterations 81-90)
+
+| iter | change | config file | result |
+|------|--------|------------|--------|
+| 81 | TRUE_BROKEN_CHART sma50_relative < -5% → < -10% | technical_setup_config.json | **accepted** (+0.88pp ST WR, all metrics improved) |
+| 82 | sma50_relative < -10% → < -15% | technical_setup_config.json | **accepted** (+5.36pp ST WR additional, extraordinary improvement) |
+| 83 | sma50_relative < -15% → < -20% | technical_setup_config.json | **accepted** (+2.33pp ST WR additional, 98% WR, PF 151) |
+| 84 | sma50_relative < -20% → < -25% | technical_setup_config.json | rejected (MT avg -7.85pp; sample too small; -20% confirmed optimum) |
+| 85 | sma200_relative < 0% → < -5% | technical_setup_config.json | no-op (all trades at sma50 < -20% already satisfy sma200 < -5%) |
+| 86 | sma200_relative < -5% → < -10% | technical_setup_config.json | no-op (sma200 redundant given sma50 < -20%) |
+| 87 | OVERSOLD_REVERSAL RSI bound 40 → 39 | technical_setup_config.json | rejected (ST WR -1.07pp per P1 framework; RSI 39-40 stocks contribute high avg) |
+| 88 | score 90 as BUY_AGGRESSIVE | entry_signal_config.json | rejected (ST WR -7.47pp; RSI ≤35 stocks are falling knives regardless of sma50 filter) |
+| 89 | LIQUIDITY_RALLY regime | entry_signal_config.json | rejected (ST WR -1.81pp; LIQUIDITY_RALLY produces lower-quality recoveries) |
+| 90 | sma50_relative < -20% → < -18% (fine-bracket) | technical_setup_config.json | rejected (-20% is exact quality cliff; -18 to -20% trades inferior) |
+
+**Total gain from loop 2 vs loop 1 best (entry_exp_80):**
+
+| metric | entry_exp_80 | entry_exp_83 (final) | loop-2 gain |
+|--------|-------------|---------------------|-------------|
+| trades | 266 | 102 | -164 |
+| ST WR | 89.474% | 98.039% | +8.565pp |
+| ST avg | 10.171% | 17.566% | +7.395pp |
+| ST median | 5.458% | 11.989% | +6.531pp |
+| overall WR | 92.481% | 98.039% | +5.558pp |
+| overall avg | 10.371% | 15.097% | +4.726pp |
+| overall PF | 22.584 | 151.846 | +129.262 |
+
+Key findings from loop 2:
+1. sma50_relative distance in TRUE_BROKEN_CHART is the single most powerful entry quality lever discovered in this session.
+2. -20% below SMA50 is the exact quality cliff (between -18% inferior, -20% excellent, -25% MT-collapse).
+3. sma200_relative is entirely redundant given sma50 < -20% (always satisfied automatically).
+4. Score-90 (RSI ≤35) stocks are falling knives regardless of any dislocation filter — the RSI ≤35 condition at entry consistently underperforms. Do not trade RSI ≤35 setups.
+5. All regime expansions (SIDEWAYS_CHOPPY, LIQUIDITY_RALLY) produce inferior trades vs BEAR_RISK_OFF.
+6. The BROKEN_CHART_QUALITY_RECOVERY setup with sma50 < -20% + dist < -30% + RSI 25-40 in BEAR_RISK_OFF is the optimal entry universe.

@@ -331,6 +331,50 @@ Bad signs:
 - HTML report is basic.
 - Optimizers are not wired yet.
 
+## Daily Usage (Live Signals)
+
+Run this each morning before market open to get today's signals for your watchlist:
+
+```bash
+PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id today_watchlist
+```
+
+This fetches fresh yfinance data for the tickers in `watchlist_config.json`, runs them through the full entry engine, and writes results to `codex-backed/results/today_watchlist/`.
+
+### Reading the output
+
+Open `entry_decisions.csv` and filter by `is_actionable = true`. Key columns:
+
+| Column | What to check |
+|--------|---------------|
+| `ticker` | Which stock |
+| `entry_label` | `BUY_STARTER`, `BUY_FULL`, or `BUY_AGGRESSIVE` — conviction level |
+| `entry_score` | Higher = stronger signal |
+| `selected_setup` | Technical pattern that fired |
+| `entry_strategy` | Entry family (e.g. `bull_leadership`, `oversold_reversal`) |
+| `reasons` | Scoring rules that fired — sanity-check the signal here |
+| `horizon` | `short_term` (≤60 days) or `medium_term` (≤90 days) |
+
+Priority order: `BUY_AGGRESSIVE` > `BUY_FULL` > `BUY_STARTER`. `WATCHLIST` = monitor, no entry yet. `NO_TRADE` = skip.
+
+### Exit discipline
+
+Use the optimized exit levels from the current best config:
+
+- **Short-term:** initial stop → 2.375R target → move stop to breakeven → 2.5 ATR trailing → 60-day max
+- **Medium-term:** initial stop → 2.0R target (take 40% off) → 1.25R breakeven → 3.0 ATR trailing → 90-day max
+
+### Managing your watchlist
+
+Edit `codex-backed/configs/watchlist_config.json` to add or remove tickers. No cache prep needed — `analyze` always fetches fresh data and does not use `prices.pkl` or `features.pkl`.
+
+### Alternately: HTML report
+
+`codex-backed/results/today_watchlist/report.html` has the same data in a readable table.
+
 ## Recommended Backtest Workflow
 
 1. Start small with `--tickers AAPL,MSFT --workers 1`.

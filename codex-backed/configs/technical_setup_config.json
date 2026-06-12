@@ -43,7 +43,7 @@
       "description": "Confirmed downtrend: below both SMAs, trend = downtrend, weak RS",
       "all": [
         { "field": "trend_label", "operator": "==", "value": "downtrend" },
-        { "field": "sma50_relative", "operator": "<", "value": -5 },
+        { "field": "sma50_relative", "operator": "<", "value": -20 },
         { "field": "sma200_relative", "operator": "<", "value": 0 }
       ]
     },
@@ -56,10 +56,10 @@
       ]
     },
     "OVERSOLD_REVERSAL": {
-      "description": "RSI in oversold zone (25-42) and starting to turn up",
+      "description": "RSI in oversold zone (25-40) and starting to turn up",
       "all": [
         { "field": "rsi14", "operator": ">=", "value": 25 },
-        { "field": "rsi14", "operator": "<=", "value": 42 },
+        { "field": "rsi14", "operator": "<=", "value": 40 },
         { "field": "rsi_slope", "operator": ">", "value": 0 }
       ]
     },
