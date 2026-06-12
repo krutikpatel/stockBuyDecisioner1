@@ -1,0 +1,12 @@
+refer claude.md, codex-backed/TUNING_STATUS.md and then:
+  task:
+  now do following steps in loop for 10 times:
+  -run backtests (using 8 workers)
+  -iinvestigate the result and suggest improvements. But refer to codex-backed/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md to see what has been tried sofar so that you dont repeat yourself. then suggest optimal improvements.
+  -log the improvements in same md file
+  -then imeplement those improvements
+
+  pause for 1 minute between each iteration.
+  keep in mind that our main working directory for code read/write is codex-backed
+
+
