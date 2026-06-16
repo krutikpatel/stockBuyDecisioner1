@@ -55,3 +55,91 @@ Read codex-backed/TUNING_STATUS.md and the tail of ITERATIVE_IMPROVEMENTS_50_LOO
   - Do NOT use penalty values of exactly 10, 20, or 30 pts (score-90 promotion bug)
 
 
+----
+Prompt for story based implementation:
+
+  We're starting implementation of the data provider refactor in this repo.
+  Working dir is the repo root; code lives under codex-backed/.
+
+  READ FIRST (in order, before any code change):
+  1. codex-backed/CLAUDE.md            — project conventions and the don't-touch list
+  2. codex-backed/DATA_PROVIDER_REFACTOR_PLAN.md    — full design reference
+  3. codex-backed/DATA_PROVIDER_REFACTOR_STORIES.md — execution checklist
+  4. codex-backed/src/codex_backed/data/                  — current data layer
+  5. codex-backed/src/codex_backed/features/snapshot.py   — target fundamentals schema
+  6. codex-backed/src/codex_backed/backtest/runner.py     — what we'll rewire later
+  7. codex-backed/tests/                                  — existing test patterns
+
+  WORKING CONTRACT (non-negotiable):
+  - Implement ONE story per turn. Do not start the next story until the
+    current one's checkbox is flipped to [x] in DATA_PROVIDER_REFACTOR_STORIES.md.
+  - A story is DONE only when every test listed under its "Tests" block
+    exists, runs, and passes. No partial credit, no TODOs left behind.
+  - Run the full existing test suite after each story; it must stay green.
+    Command:
+      backend/.venv/bin/python -m pytest codex-backed/tests -q
+  - Run validate-config after touching any config:
+      PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli \
+        validate-config --config-dir codex-backed/configs
+  - DO NOT change configs/data_provider_config.json's active_mode until S4.3.
+    Through Phases 1-3, the mode stays "legacy_yfinance". S2.7 explicitly
+    asserts this.
+  - DO NOT modify ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md or any file under
+    backend/, claude-backend/, legacy/, frontend/.
+  - DO NOT introduce new dependencies without flagging in chat first.
+  - When a story creates a fixture (recorded HTTP response, baseline metrics,
+    small pickle), the fixture file goes under codex-backed/tests/fixtures/
+    and is committed.
+  - Each story = one logical PR-sized diff. Summarize what changed and which
+    tests now pass at the end of every turn.
+
+  START HERE:
+  - Story S1.1 — Provider protocols + capabilities + snapshot dataclass.
+  - Read its full spec in DATA_PROVIDER_REFACTOR_STORIES.md.
+  - Create the files listed under "Files".
+  - Create codex-backed/tests/test_provider_protocols.py with every test
+    in the "Tests" block.
+  - Run only the new test file first; then run the full suite.
+  - When all tests pass, flip S1.1's [ ] to [x] and stop. Summarize for me.
+
+  Open questions you may ask before coding (only if blocked):
+  - Where should ProviderCapabilities.history_start_date type live —
+    Optional[str] (ISO date) or Optional[date]?
+  - For FundamentalsSnapshot, are there any FeatureSnapshot fields I should
+    treat as "not fundamentals" (e.g., sector/industry — debatable)?
+
+  Anything else, make a sensible decision and note it in the PR summary.
+
+  ---
+
+  create a prompt for next session to resume work
+
+⏺ Here's a prompt you can paste at the start of the next session:
+
+  ---
+  Resume: stockBuyDecisioner1 — FMP Data Provider Refactor
+
+  The data provider refactor (claudeDataSourceRefactor branch) is complete except for S4.3 which is blocked on a real FMP API key.
+
+  Current state:
+  - All stories S1.1–S5.2 are done and green (185 pass, 9 skipped, 2 pre-existing failures in test_entry_engine.py)
+  - .env at repo root holds FMP_API_KEY=your_key_here — I've filled in the real key
+  - active_mode in codex-backed/configs/data_provider_config.json is still "legacy_yfinance" — do NOT change it yet
+
+  What S4.3 requires (do this in order):
+  1. Run the gate tests with the real key:
+  source .env && codex-backed/.venv/bin/python -m pytest codex-backed/tests/test_activation_gates.py codex-backed/tests/test_fmp_baseline_capture.py -v
+  2. Evaluate all 6 gates in codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md — fill in PASS/FAIL for each
+  3. If all 6 gates pass: flip active_mode to "fmp_primary_yfinance_fallback" in data_provider_config.json, run full test suite to confirm green, mark S4.3 [x] in DATA_PROVIDER_REFACTOR_STORIES.md and REFACTOR_PROGRESS.md
+  4. If any gate fails: document it in the log and leave active_mode as legacy_yfinance
+
+  Reference files:
+  - codex-backed/REFACTOR_PROGRESS.md — story-by-story status
+  - codex-backed/DATA_PROVIDER_REFACTOR_STORIES.md — full story specs
+  - codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md — gate audit log (all 6 rows currently PENDING)
+
+  ---
+  Copy that into the next session's first message after you've put your real API key in .env.
+
+  ----
+  

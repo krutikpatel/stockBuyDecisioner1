@@ -6,17 +6,45 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
+ENTRY_DECISIONS_COLUMNS: tuple[str, ...] = (
+    "ticker", "date", "horizon", "entry_label", "entry_score", "confidence",
+    "selected_setup", "entry_strategy", "is_actionable", "reasons", "missing_data",
+    "matched_signals", "optional_signals", "market_regime", "archetype", "price",
+    "source_decision", "source_strategy", "source_setup",
+)
 
-def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+TRADES_COLUMNS: tuple[str, ...] = (
+    "ticker", "signal_date", "horizon", "entry_label", "entry_strategy",
+    "selected_setup", "entry_date", "entry_index", "entry_price", "entry_method",
+    "entry_wait_days", "position_size_multiplier", "applied_size_caps",
+    "initial_stop", "target_1", "target_1_hit", "partial_exit_pct",
+    "exit_date", "exit_index", "exit_price", "exit_reason", "days_held",
+    "realized_return_pct", "mae_pct", "mfe_pct", "mfe_capture_pct",
+    "event_count", "market_regime", "archetype", "source_decision",
+)
+
+
+def write_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    columns: tuple[str, ...] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
         path.write_text("")
         return
-    fieldnames = sorted({key for row in rows for key in row})
-    with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    if columns is not None:
+        fieldnames = list(columns)
+        with path.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore", restval="")
+            writer.writeheader()
+            writer.writerows(rows)
+    else:
+        fieldnames = sorted({key for row in rows for key in row})
+        with path.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:

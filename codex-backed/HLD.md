@@ -251,7 +251,17 @@ Testability:
 - Backtest runner integration test with synthetic fixtures.
 - Analyze runner tests with fake live-data fetcher fixtures.
 
-## 13. Known Limitations
+## 13. Data Provider Protocol Layer
+
+Price and fundamentals data are fetched through a typed protocol layer:
+
+- `PriceProvider` protocol: `fetch_history_batch`, `fetch_live_batch`, `name`, `capabilities`
+- `FundamentalsProvider` protocol: `prefetch_batch`, `get_snapshot`, `name`, `capabilities`
+- `ProviderCapabilities` declares what each tier supports (`fundamentals_fields`, `history_start_date`, etc.)
+- `CompositePriceProvider` and `CompositeFundamentalsProvider` implement fallback routing transparently
+- Active mode is set in `configs/data_provider_config.json` via `active_mode`; the registry builds concrete providers at runtime
+
+## 14. Known Limitations
 
 - The HTML report is basic and should be expanded.
 - Optimizer commands are scaffolded but not implemented.

@@ -79,7 +79,10 @@ Use `--workers 1` for deterministic debugging. Use more workers for faster runs 
 --force-refresh           rebuild native feature cache
 --rebuild-feature-cache   rebuild native feature cache
 --no-report               skip HTML report
+--data-mode               override active_mode from data_provider_config.json
 ```
+
+`--data-mode` accepts any mode key defined in `configs/data_provider_config.json` (e.g. `legacy_yfinance`, `fmp_primary_yfinance_fallback`). Omit to use the committed `active_mode` value.
 
 ## Example Smoke Test
 
@@ -330,6 +333,52 @@ Bad signs:
 - Some raw features are proxied from signal cards.
 - HTML report is basic.
 - Optimizers are not wired yet.
+
+## FMP Mode Commands (Requires API Key)
+
+Store your key in `.env` at the repo root:
+
+```text
+FMP_API_KEY=sk-your-key-here
+```
+
+Always prefix FMP commands with `source .env &&` so the key is in scope:
+
+```bash
+# Full backtest with FMP prices + fundamentals
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id fmp_run_<id> \
+  --data-mode fmp_primary_yfinance_fallback \
+  --rebuild-feature-cache \
+  --workers 1
+
+# Smoke test with FMP data (two tickers)
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id fmp_smoke_aapl_msft \
+  --tickers AAPL,MSFT \
+  --data-mode fmp_primary_yfinance_fallback \
+  --rebuild-feature-cache \
+  --workers 1
+
+# Daily analysis with FMP fundamentals
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id today_watchlist_fmp \
+  --data-mode fmp_primary_yfinance_fallback
+
+# Run S4.3 activation gates (must all pass before flipping active_mode in data_provider_config.json)
+source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_activation_gates.py -v
+
+# Run FMP baseline capture tests (S4.2)
+source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_fmp_baseline_capture.py -v
+```
+
+Without `source .env`, any of these commands will skip or silently fall back — the key must be in the environment.
 
 ## Daily Usage (Live Signals)
 

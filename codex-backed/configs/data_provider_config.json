@@ -1,0 +1,88 @@
+{
+  "active_mode": "legacy_yfinance",
+  "modes": {
+    "legacy_yfinance": {
+      "description": "Preserves current behaviour: prices.pkl for backtest, yfinance for analyze, no fundamentals populated.",
+      "price_provider_backtest": { "type": "pickle",   "config_ref": "pickle"   },
+      "price_provider_live":     { "type": "yfinance", "config_ref": "yfinance" },
+      "fundamentals_provider":   { "type": "null" }
+    },
+    "fmp_primary_yfinance_fallback": {
+      "description": "DORMANT — FMP as primary price source with yfinance/pickle fallback. active_mode must stay legacy_yfinance until S4.3.",
+      "price_provider_backtest": {
+        "type": "composite",
+        "primary":  { "type": "fmp",    "config_ref": "fmp"    },
+        "fallback": { "type": "pickle", "config_ref": "pickle" }
+      },
+      "price_provider_live": {
+        "type": "composite",
+        "primary":  { "type": "fmp",      "config_ref": "fmp"      },
+        "fallback": { "type": "yfinance", "config_ref": "yfinance" }
+      },
+      "fundamentals_provider": {
+        "type": "composite",
+        "primary":  { "type": "fmp",      "config_ref": "fmp"      },
+        "fallback": { "type": "yfinance", "config_ref": "yfinance" },
+        "field_overrides": ["insider_ownership", "institutional_ownership", "short_float"]
+      }
+    }
+  },
+  "providers": {
+    "pickle": {
+      "prices_cache_path": "codex-backed/cache/prices.pkl",
+      "tier_capabilities": {
+        "supports_prices": true,
+        "supports_fundamentals": false,
+        "fundamentals_fields": [],
+        "history_start_date": null,
+        "price_realtime": false,
+        "rate_limit_per_minute": 0
+      }
+    },
+    "yfinance": {
+      "auto_adjust": false,
+      "tier_capabilities": {
+        "supports_prices": true,
+        "supports_fundamentals": true,
+        "fundamentals_fields": [
+          "insider_ownership", "institutional_ownership", "short_float",
+          "trailing_pe", "forward_pe", "peg_ratio", "price_to_sales",
+          "dividend_yield", "market_cap", "beta", "sector", "industry",
+          "analyst_recommendation", "analyst_target_price"
+        ],
+        "history_start_date": null,
+        "price_realtime": false,
+        "rate_limit_per_minute": 60
+      }
+    },
+    "fmp": {
+      "api_key_env": "FMP_API_KEY",
+      "cache_dir": "codex-backed/cache/fmp",
+      "cache_schema_version": 1,
+      "cache_ttl_days": 1,
+      "budget_path": "codex-backed/cache/fmp_budget.json",
+      "budget_limit": 1000,
+      "budget_on_exceed": "warn",
+      "tier_capabilities": {
+        "supports_prices": true,
+        "supports_fundamentals": true,
+        "fundamentals_fields": [
+          "sales_growth_yoy", "eps_growth_yoy", "eps_growth_next_year",
+          "eps_growth_3y", "eps_growth_5y",
+          "gross_margin", "operating_margin", "net_margin",
+          "free_cash_flow", "roic", "roe", "roa",
+          "debt_to_equity", "current_ratio",
+          "trailing_pe", "peg_ratio", "price_to_sales",
+          "ev_to_ebitda", "price_to_fcf",
+          "earnings_days_away", "earnings_within_30_days",
+          "avg_eps_surprise_pct", "beat_rate",
+          "market_cap", "beta", "sector", "industry",
+          "analyst_recommendation", "analyst_target_price"
+        ],
+        "history_start_date": "2000-01-01",
+        "price_realtime": true,
+        "rate_limit_per_minute": 300
+      }
+    }
+  }
+}

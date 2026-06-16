@@ -662,7 +662,25 @@ Run:
 codex-backed/.venv/bin/python -m pytest codex-backed/tests -q
 ```
 
-## 12. Known Technical Debt
+## 12. Data Provider Module (`data/providers/`)
+
+### CompositeFundamentalsProvider
+
+`CompositeFundamentalsProvider(primary, fallback, field_overrides)` routes each snapshot field:
+
+1. If field is in `field_overrides` → always use fallback value
+2. If field not in `primary.capabilities.fundamentals_fields` → use fallback
+3. If `as_of_date` before `primary.capabilities.history_start_date` → use fallback
+4. If primary value is `None` → use fallback
+5. Otherwise use primary value
+
+`field_overrides` is a `frozenset[str]` declared in `data_provider_config.json` under the composite fundamentals mode entry. The FMP/yfinance composite sets `field_overrides=["insider_ownership", "institutional_ownership", "short_float"]` because FMP Starter tier does not carry ownership/float data.
+
+### Provider Registry
+
+`registry.build_providers(config, mode)` constructs the full `ProviderSet` from JSON config. Adding a new provider requires one new file in `data/providers/` and one entry in `providers` block of `data_provider_config.json`.
+
+## 13. Known Technical Debt
 
 - Native historical feature builder is not implemented.
 - Native feature cache is not implemented.

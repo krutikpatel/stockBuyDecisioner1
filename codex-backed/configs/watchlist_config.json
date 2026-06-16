@@ -13,10 +13,5 @@
     "AVGO"
   ],
   "horizons": ["short_term", "medium_term"],
-  "benchmark_tickers": ["SPY", "QQQ"],
-  "yfinance": {
-    "period": "2y",
-    "interval": "1d",
-    "auto_adjust": false
-  }
+  "benchmark_tickers": ["SPY", "QQQ"]
 }

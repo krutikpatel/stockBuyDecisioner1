@@ -42,6 +42,44 @@ PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze
 
 Use `--workers 1` by default — multiprocessing has sandbox friction; single-worker is the known reliable path.
 
+### FMP mode commands (requires API key)
+
+Put your key in `.env` at the repo root (`FMP_API_KEY=sk-...`). Source it before any FMP command:
+
+```bash
+# Full backtest using FMP data (prices + fundamentals)
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id fmp_run_<id> \
+  --data-mode fmp_primary_yfinance_fallback \
+  --rebuild-feature-cache \
+  --workers 1
+
+# Smoke test with FMP data (two tickers)
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id fmp_smoke_aapl_msft \
+  --tickers AAPL,MSFT \
+  --data-mode fmp_primary_yfinance_fallback \
+  --rebuild-feature-cache \
+  --workers 1
+
+# Daily watchlist analysis with FMP fundamentals
+source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id today_watchlist_fmp \
+  --data-mode fmp_primary_yfinance_fallback
+
+# Run FMP baseline capture tests (S4.2)
+source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_fmp_baseline_capture.py -v
+
+# Run S4.3 activation gate tests (all 6 gates — required before flipping active_mode)
+source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_activation_gates.py -v
+```
+
 If `--tickers` is omitted, backtests use `codex-backed/configs/backtest_ticker_universe_config.json`. Pass `--tickers` only for smoke tests or temporary overrides.
 
 ## Architecture
@@ -88,6 +126,7 @@ All strategy intelligence lives in `codex-backed/configs/`. Keep them pure JSON 
 | `exit_policy_config.json` | Stop, partial profit, breakeven, trailing stop, time stop |
 | `backtest_ticker_universe_config.json` | Default broad ticker universe |
 | `watchlist_config.json` | Default daily analysis tickers |
+| `data_provider_config.json` | Active data mode, provider tier caps, FMP/yfinance settings |
 
 ### Feature Source
 

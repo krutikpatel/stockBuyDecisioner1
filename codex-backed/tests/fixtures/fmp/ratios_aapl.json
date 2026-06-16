@@ -1,0 +1,17 @@
+[
+  {
+    "date": "2023-09-30",
+    "symbol": "AAPL",
+    "grossProfitMargin": 0.4431,
+    "netProfitMargin": 0.2531,
+    "operatingProfitMargin": 0.2967,
+    "returnOnEquity": 1.608,
+    "returnOnAssets": 0.2789,
+    "debtEquityRatio": 1.9707,
+    "currentRatio": 0.9882,
+    "priceEarningsRatio": 29.54,
+    "priceEarningsToGrowthRatio": 2.46,
+    "priceToSalesRatio": 7.48,
+    "priceToFreeCashFlowsRatio": 27.9
+  }
+]

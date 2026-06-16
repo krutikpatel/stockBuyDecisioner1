@@ -1,0 +1,6 @@
+[
+  {"date": "2024-02-01", "symbol": "AAPL", "eps": 2.18, "epsEstimated": 2.11, "time": "amc"},
+  {"date": "2023-11-02", "symbol": "AAPL", "eps": 1.46, "epsEstimated": 1.39, "time": "amc"},
+  {"date": "2023-08-03", "symbol": "AAPL", "eps": 1.26, "epsEstimated": 1.19, "time": "amc"},
+  {"date": "2023-05-04", "symbol": "AAPL", "eps": 1.52, "epsEstimated": 1.43, "time": "amc"}
+]

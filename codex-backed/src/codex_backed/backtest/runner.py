@@ -8,6 +8,8 @@ from typing import Any
 
 from codex_backed.backtest.worker import process_ticker, worker_init
 from codex_backed.backtest.writer import (
+    ENTRY_DECISIONS_COLUMNS,
+    TRADES_COLUMNS,
     build_input_quality_metrics,
     build_record_metrics,
     build_sliced_metrics,
@@ -16,7 +18,10 @@ from codex_backed.backtest.writer import (
     write_lifecycle_report,
 )
 from codex_backed.config.loader import ConfigBundle
-from codex_backed.data.loader import group_feature_rows_by_ticker, load_feature_rows, load_price_bars
+from codex_backed.data.fundamentals_snapshot import FUNDAMENTALS_SNAPSHOT_SCHEMA_VERSION
+from codex_backed.data.loader import group_feature_rows_by_ticker, load_feature_rows
+from codex_backed.data.providers import registry
+from codex_backed.data.providers.observability import StatsCollector
 from codex_backed.features.feature_cache import load_or_build_feature_rows
 from codex_backed.features.historical_builder import HistoricalFeatureOptions, build_historical_feature_rows
 from codex_backed.results import RunPaths
@@ -32,6 +37,7 @@ class BacktestOptions:
     force_refresh: bool = False
     rebuild_feature_cache: bool = False
     no_report: bool = False
+    data_mode: str | None = None
 
 
 def run_lifecycle_backtest(bundle: ConfigBundle, paths: RunPaths, options: BacktestOptions) -> dict[str, Any]:
@@ -48,7 +54,24 @@ def run_lifecycle_backtest(bundle: ConfigBundle, paths: RunPaths, options: Backt
     prices_path = _resolve_path(data_sources["prices_cache_path"])
     source_config = backtest_cfg.get("feature_generation", {})
     feature_source = options.feature_source or source_config.get("source") or data_sources.get("feature_source") or "native"
-    bars_by_ticker = load_price_bars(prices_path, tickers=tickers)
+
+    provider_cfg = bundle.data.get("data_provider", {})
+    active_mode = options.data_mode or provider_cfg.get("active_mode", "legacy_yfinance")
+    provider_set = registry.build_providers(
+        provider_cfg,
+        mode=active_mode,
+        pickle_path_override=str(prices_path),
+    )
+    from datetime import date as _date
+    bars_by_ticker = provider_set.price_backtest.fetch_history_batch(
+        tickers,
+        start=_date.fromisoformat(start),
+        end=_date.fromisoformat(end),
+    )
+    provider_set.fundamentals.prefetch_batch(
+        tickers,
+        (_date.fromisoformat(start), _date.fromisoformat(end)),
+    )
     feature_rows, feature_diagnostics = _load_or_build_features(
         bundle=bundle,
         backtest_cfg=backtest_cfg,
@@ -59,6 +82,8 @@ def run_lifecycle_backtest(bundle: ConfigBundle, paths: RunPaths, options: Backt
         horizons=horizons,
         feature_source=feature_source,
         rebuild_feature_cache=options.rebuild_feature_cache or options.force_refresh,
+        data_mode=active_mode,
+        fundamentals_provider=provider_set.fundamentals,
     )
     grouped_rows = group_feature_rows_by_ticker(feature_rows)
     if not grouped_rows:
@@ -122,6 +147,11 @@ def run_lifecycle_backtest(bundle: ConfigBundle, paths: RunPaths, options: Backt
             **feature_diagnostics,
         },
     )
+
+    stats = StatsCollector()
+    stats.record_cache_hit("backtest") if feature_diagnostics.get("feature_cache_status") == "hit" else stats.record_cache_miss("backtest")
+    stats.write_summary(paths.run_dir)
+
     return {
         "run_id": paths.run_id,
         "tickers": len(work_items),
@@ -146,6 +176,8 @@ def _load_or_build_features(
     horizons: set[str],
     feature_source: str,
     rebuild_feature_cache: bool,
+    data_mode: str = "legacy_yfinance",
+    fundamentals_provider: Any = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if feature_source == "parent_csv":
         features_path = _resolve_path(backtest_cfg["data_sources"]["feature_csv_path"])
@@ -168,6 +200,7 @@ def _load_or_build_features(
     cache_path = _resolve_path(source_config.get("cache_path", "codex-backed/cache/features.pkl"))
     signal_frequency = source_config.get("signal_frequency", "weekly")
     requested_tickers = tickers or sorted(ticker for ticker in bars_by_ticker if ticker not in {"SPY", "QQQ"})
+    provider_sig = getattr(fundamentals_provider, "signature", lambda: "null")()
     metadata = {
         "source": "native",
         "tickers": requested_tickers,
@@ -177,6 +210,9 @@ def _load_or_build_features(
         "signal_frequency": signal_frequency,
         "technical_setup_config": bundle.get("technical_setup"),
         "entry_config": bundle.get("entry"),
+        "data_mode": data_mode,
+        "fundamentals_provider_signature": provider_sig,
+        "fundamentals_snapshot_schema_version": FUNDAMENTALS_SNAPSHOT_SCHEMA_VERSION,
     }
 
     cache_result = load_or_build_feature_rows(
@@ -192,6 +228,7 @@ def _load_or_build_features(
                 horizons=horizons,
                 signal_frequency=signal_frequency,
             ),
+            fundamentals=fundamentals_provider,
         ),
     )
     return cache_result.rows, {
@@ -221,8 +258,8 @@ def _write_outputs(
     no_report: bool,
     diagnostics: dict[str, Any],
 ) -> None:
-    write_csv(paths.entry_decisions_path, entry_decisions)
-    write_csv(paths.trades_path, trades)
+    write_csv(paths.entry_decisions_path, entry_decisions, columns=ENTRY_DECISIONS_COLUMNS)
+    write_csv(paths.trades_path, trades, columns=TRADES_COLUMNS)
     if errors:
         write_csv(paths.run_dir / "errors.csv", errors)
 
