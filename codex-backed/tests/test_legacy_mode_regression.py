@@ -57,6 +57,7 @@ def _run_backtest(tmp_path: Path) -> tuple[dict, dict]:
             workers=1,
             no_report=True,
             rebuild_feature_cache=True,
+            data_mode="legacy_yfinance",
         ),
     )
     metrics = json.loads(paths.metrics_path.read_text())

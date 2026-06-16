@@ -50,6 +50,28 @@ def test_get_does_not_retry_on_4xx():
     assert session.get.call_count == 1
 
 
+def test_get_retries_on_429_with_backoff():
+    """429 is rate-limited, not a permanent error — must retry like 5xx."""
+    session = MagicMock(spec=requests.Session)
+    session.get.side_effect = [
+        _mock_response(429, text="rate limit"),
+        _mock_response(200, json_data={"ok": True}),
+    ]
+    client = HttpClient(session=session, max_retries=1, backoff_seconds=0, rate_limit_backoff_seconds=0)
+    result = client.get("https://api.example.com/data")
+    assert result == {"ok": True}
+    assert session.get.call_count == 2
+
+
+def test_get_raises_after_all_429_retries_exhausted():
+    session = MagicMock(spec=requests.Session)
+    session.get.return_value = _mock_response(429, text="rate limit")
+    client = HttpClient(session=session, max_retries=2, backoff_seconds=0, rate_limit_backoff_seconds=0)
+    with pytest.raises(ProviderError, match="Max retries"):
+        client.get("https://api.example.com/data")
+    assert session.get.call_count == 3
+
+
 def test_get_raises_after_max_retries():
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _mock_response(503)

@@ -79,6 +79,7 @@ def test_prefetch_called_before_process_pool_constructed(tmp_path):
                 workers=2,
                 no_report=True,
                 rebuild_feature_cache=True,
+                data_mode="legacy_yfinance",
             ),
         )
 
@@ -114,6 +115,7 @@ def test_prefetch_called_exactly_once_per_run(tmp_path):
                 workers=1,
                 no_report=True,
                 rebuild_feature_cache=True,
+                data_mode="legacy_yfinance",
             ),
         )
 

@@ -15,7 +15,7 @@ from codex_backed.data.providers.http_client import HttpClient
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://financialmodelingprep.com/api/v3"
+_BASE_URL = "https://financialmodelingprep.com/stable"
 _PERIOD_TO_DAYS = {"1y": 365, "2y": 730, "3y": 1095, "5y": 1825}
 
 
@@ -26,9 +26,9 @@ def _period_days(period: str) -> int:
 class FMPPriceProvider:
     """PriceProvider backed by the Financial Modeling Prep REST API (prices only).
 
-    fetch_history_batch: uses /historical-price-full/{ticker}?from=&to=
-    fetch_live_batch:    uses /historical-price-full/{ticker,ticker,...}?from=&to=
-                         computing the date range from the period string.
+    fetch_history_batch: uses /stable/historical-price-eod/full?symbol=&from=&to=
+    fetch_live_batch:    uses the same stable endpoint, computing the date
+                         range from the period string.
 
     Results are cached per (ticker, date-range) key.  A 4xx error never
     overwrites a valid cache entry.  Each successful network call is counted
@@ -76,28 +76,11 @@ class FMPPriceProvider:
     ) -> dict[str, list[dict[str, Any]]]:
         end_date = date.today()
         start_date = end_date - timedelta(days=_period_days(period))
-        # Use the batch historical endpoint (comma-separated tickers)
-        batch_key = f"live/{','.join(sorted(t.upper() for t in tickers))}/{start_date}/{end_date}"
-        cached = self._cache.get(batch_key)
-        if cached is not None:
-            return cached
-
-        ticker_str = ",".join(t.upper() for t in tickers)
-        url = f"{_BASE_URL}/historical-price-full/{ticker_str}"
-        self._budget.check()
-        try:
-            data = self._http.get(url, params={
-                "from": start_date.isoformat(),
-                "to": end_date.isoformat(),
-                "apikey": self._api_key,
-            })
-        except ProviderError:
-            logger.warning("FMP live batch failed for %s", ticker_str)
-            return {}
-        self._budget.increment()
-
-        result = _parse_batch_response(data)
-        self._cache.set(batch_key, result)
+        result: dict[str, list[dict[str, Any]]] = {}
+        for ticker in tickers:
+            bars = self._fetch_history(ticker.upper(), start_date.isoformat(), end_date.isoformat())
+            if bars:
+                result[ticker.upper()] = bars
         return result
 
     def signature(self) -> str:
@@ -115,16 +98,24 @@ class FMPPriceProvider:
         if cached is not None:
             return cached
 
-        url = f"{_BASE_URL}/historical-price-full/{ticker}"
+        url = f"{_BASE_URL}/historical-price-eod/full"
         self._budget.check()
         try:
-            data = self._http.get(url, params={"from": start, "to": end, "apikey": self._api_key})
+            data = self._http.get(
+                url,
+                params={
+                    "symbol": ticker,
+                    "from": start,
+                    "to": end,
+                    "apikey": self._api_key,
+                },
+            )
         except ProviderError as exc:
             logger.warning("FMP history failed for %s: %s", ticker, exc)
             return []
         self._budget.increment()
 
-        bars = _parse_single_response(data, start, end)
+        bars = _parse_history_response(data, start, end)
         self._cache.set(cache_key, bars)
         return bars
 
@@ -132,7 +123,7 @@ class FMPPriceProvider:
 class FMPFundamentalsProvider:
     """FundamentalsProvider backed by FMP REST API.
 
-    prefetch_batch: fetches key-metrics, profile, and earning_calendar for each
+    prefetch_batch: fetches key-metrics, ratios, growth, profile, and earnings for each
     ticker and stores results in an in-memory dict.  get_snapshot reads
     exclusively from that dict — performs no I/O.
     """
@@ -176,8 +167,10 @@ class FMPFundamentalsProvider:
                 continue
 
             merged: dict[str, Any] = {}
-            merged.update(self._fetch_endpoint(f"/key-metrics/{t}", ticker_param=t) or {})
-            merged.update(self._fetch_endpoint(f"/profile/{t}", ticker_param=t) or {})
+            merged.update(self._fetch_endpoint("/key-metrics", ticker=t) or {})
+            merged.update(self._fetch_endpoint("/ratios", ticker=t) or {})
+            merged.update(self._fetch_endpoint("/financial-growth", ticker=t) or {})
+            merged.update(self._fetch_endpoint("/profile", ticker=t) or {})
             calendar = self._fetch_earnings_calendar(t)
             merged["_earnings_calendar"] = calendar
 
@@ -241,11 +234,11 @@ class FMPFundamentalsProvider:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _fetch_endpoint(self, path: str, ticker_param: str) -> dict[str, Any] | None:
+    def _fetch_endpoint(self, path: str, ticker: str) -> dict[str, Any] | None:
         url = f"{_BASE_URL}{path}"
         self._budget.check()
         try:
-            data = self._http.get(url, params={"apikey": self._api_key})
+            data = self._http.get(url, params={"symbol": ticker, "apikey": self._api_key})
         except ProviderError as exc:
             logger.warning("FMP fundamentals fetch failed for %s: %s", path, exc)
             return None
@@ -258,10 +251,10 @@ class FMPFundamentalsProvider:
         return None
 
     def _fetch_earnings_calendar(self, ticker: str) -> list[dict[str, Any]]:
-        url = f"{_BASE_URL}/historical/earning_calendar/{ticker}"
+        url = f"{_BASE_URL}/earnings"
         self._budget.check()
         try:
-            data = self._http.get(url, params={"apikey": self._api_key})
+            data = self._http.get(url, params={"symbol": ticker, "apikey": self._api_key})
         except ProviderError as exc:
             logger.warning("FMP earnings calendar failed for %s: %s", ticker, exc)
             return []
@@ -305,40 +298,18 @@ def _compute_earnings_days_away(
 # Response parsers
 # ------------------------------------------------------------------
 
-def _parse_single_response(
+def _parse_history_response(
     data: Any, start: str | None = None, end: str | None = None
 ) -> list[dict[str, Any]]:
-    """Parse /historical-price-full/{ticker} response."""
-    if not isinstance(data, dict):
-        return []
-    historical = data.get("historical")
+    """Parse stable historical EOD responses, with legacy fixture compatibility."""
+    historical: list[dict[str, Any]] | None = None
+    if isinstance(data, dict):
+        historical = data.get("historical")
+    elif isinstance(data, list):
+        historical = data
     if not isinstance(historical, list):
         return []
     return _filter_and_normalize(historical, start, end)
-
-
-def _parse_batch_response(
-    data: Any, start: str | None = None, end: str | None = None
-) -> dict[str, list[dict[str, Any]]]:
-    """Parse /historical-price-full/{ticker1,ticker2} response.
-
-    FMP returns either a single dict (1 ticker) or a list of dicts (multi-ticker).
-    """
-    result: dict[str, list[dict[str, Any]]] = {}
-    if isinstance(data, dict):
-        symbol = data.get("symbol", "")
-        bars = _parse_single_response(data, start, end)
-        if symbol and bars:
-            result[symbol.upper()] = bars
-    elif isinstance(data, list):
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            symbol = item.get("symbol", "")
-            bars = _parse_single_response(item, start, end)
-            if symbol and bars:
-                result[symbol.upper()] = bars
-    return result
 
 
 def _filter_and_normalize(

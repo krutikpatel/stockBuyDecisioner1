@@ -1,4 +1,4 @@
-# Next Improvements Plan
+# Next Improvements Plan - OUTDATED
 
 This plan implements the seven changes proposed from `codex-backed/results/my_run_02`.
 
@@ -51,7 +51,7 @@ Primary success metrics for the next run:
 
 - `configs/entry_signal_config.json`
 - `configs/technical_setup_config.json`
-- `PROGRESS.md`
+- `docs/baseProject/PROGRESS.md`
 - `BACKTEST_README.md`
 
 ## Validation

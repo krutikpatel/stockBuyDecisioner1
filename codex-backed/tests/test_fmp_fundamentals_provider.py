@@ -53,8 +53,8 @@ def _provider(tmp_path: Path, http_responses: list | None = None) -> tuple[FMPFu
 
 
 def _normal_responses():
-    """Three responses: key_metrics, profile, earning_calendar."""
-    return [_KEY_METRICS, _PROFILE, _CALENDAR]
+    """Five responses: key_metrics, ratios, financial_growth, profile, earnings."""
+    return [_KEY_METRICS, _KEY_METRICS, _KEY_METRICS, _PROFILE, _CALENDAR]
 
 
 def test_prefetch_batch_makes_no_call_for_empty_tickers(tmp_path):
@@ -66,8 +66,24 @@ def test_prefetch_batch_makes_no_call_for_empty_tickers(tmp_path):
 def test_prefetch_batch_calls_each_endpoint_once_per_ticker(tmp_path):
     provider, http = _provider(tmp_path, http_responses=_normal_responses())
     provider.prefetch_batch(["AAPL"], (date(2023, 1, 1), date(2023, 12, 31)))
-    # 3 endpoints: key-metrics, profile, earning_calendar
-    assert http.get.call_count == 3
+    # 5 endpoints: key-metrics, ratios, financial-growth, profile, earnings
+    assert http.get.call_count == 5
+
+
+def test_prefetch_batch_uses_stable_fundamentals_endpoints(tmp_path):
+    provider, http = _provider(tmp_path, http_responses=_normal_responses())
+    provider.prefetch_batch(["AAPL"], (date(2023, 1, 1), date(2023, 12, 31)))
+    calls = http.get.call_args_list
+    urls = [c.args[0] for c in calls]
+    assert urls == [
+        "https://financialmodelingprep.com/stable/key-metrics",
+        "https://financialmodelingprep.com/stable/ratios",
+        "https://financialmodelingprep.com/stable/financial-growth",
+        "https://financialmodelingprep.com/stable/profile",
+        "https://financialmodelingprep.com/stable/earnings",
+    ]
+    assert all(c.kwargs["params"]["symbol"] == "AAPL" for c in calls)
+    assert all("/api/v3/" not in url for url in urls)
 
 
 def test_get_snapshot_performs_no_io_after_prefetch(tmp_path):
@@ -119,9 +135,9 @@ def test_earnings_days_away_computed_correctly_from_calendar(tmp_path):
 
 def test_prefetch_uses_cache_on_second_call(tmp_path):
     provider, http = _provider(tmp_path, http_responses=_normal_responses() * 2)
-    # First prefetch: 3 HTTP calls
+    # First prefetch: 5 HTTP calls
     provider.prefetch_batch(["AAPL"], (date(2023, 1, 1), date(2023, 12, 31)))
-    assert http.get.call_count == 3
+    assert http.get.call_count == 5
 
     # New provider instance pointing at same cache
     provider2, http2 = _provider(tmp_path)

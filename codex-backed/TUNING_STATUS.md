@@ -1,6 +1,6 @@
 # Tuning Status (Handoff)
 
-Quick-start doc for the next Claude session to resume iterative fine-tuning without re-deriving context. For deep history see `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`. For per-iteration token-saving conventions (compact metrics helper, silenced status JSON, `Edit` vs `Write` for log appends) see `TOKEN_SAVING_NOTES.md`.
+Quick-start doc for the next Claude session to resume iterative fine-tuning without re-deriving context. For deep history see `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`. For per-iteration token-saving conventions (compact metrics helper, silenced status JSON, `Edit` vs `Write` for log appends) see `TOKEN_SAVING_NOTES.md`.
 
 ## Scope: What Has Been Tuned So Far
 
@@ -28,11 +28,11 @@ We are iteratively fine-tuning the codex-backed trade lifecycle engine to improv
 2. **Investigate the result**:
    - Read `metrics.json`: overall, by_horizon, by_exit_reason
    - Compare to the prior accepted baseline and the iter 1 baseline of this loop
-   - Cross-check `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` to confirm the change you are about to suggest has not already been tried and rejected
+   - Cross-check `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` to confirm the change you are about to suggest has not already been tried and rejected
 3. **Decide and log**:
    - Accept the run if higher-priority metrics improved (or stayed flat) and lower-priority metrics did not regress materially
    - Reject if any higher-priority metric regressed
-   - Append a `### Claude Iteration N` block to `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` with the Run / Investigation / Improvement Implemented sections
+   - Append a `### Claude Iteration N` block to `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` with the Run / Investigation / Improvement Implemented sections
 4. **Implement the next change**:
    - Edit the relevant JSON config (typically `exit_policy_config.json`)
    - Run `validate-config` to confirm the edit parses cleanly
@@ -225,7 +225,7 @@ claude-backend/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed
 
 ### From `claude_loop_01` to `claude_loop_10` (prior loop) — see prior TUNING_STATUS.md
 
-### From prior 114-iteration loop — see `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`
+### From prior 114-iteration loop — see `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`
 
 ## What's Worth Testing Next
 
@@ -256,7 +256,7 @@ All major config knobs for exit AND entry are now exhausted across 100 iteration
 
 All exit and entry optimization loops are complete (100 total iterations). Every JSON config knob has been exhausted — both for exit (70 iters) and entry (20 iters) and exit re-validation (10 iters). If the user wants to continue, only structural changes (see "What's Worth Testing Next") can yield further improvement.
 
-1. Read this file and the tail of `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`.
+1. Read this file and the tail of `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`.
 2. Run `validate-config` to confirm config is still valid.
 3. Run a baseline backtest (should match entry_exp_83 metrics: 102 trades, 98% WR, 17.566% ST avg).
 

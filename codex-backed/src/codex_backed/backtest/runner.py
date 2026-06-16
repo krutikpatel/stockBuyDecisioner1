@@ -63,8 +63,14 @@ def run_lifecycle_backtest(bundle: ConfigBundle, paths: RunPaths, options: Backt
         pickle_path_override=str(prices_path),
     )
     from datetime import date as _date
+    # Always fetch SPY and QQQ so the regime detector has benchmark data,
+    # regardless of which price provider is active or what ticker list was
+    # requested.  The feature builder already excludes them from the trading
+    # universe (requested_tickers filters out "SPY" and "QQQ").
+    _BENCHMARKS = ["SPY", "QQQ"]
+    fetch_tickers = tickers + [t for t in _BENCHMARKS if t not in tickers] if tickers else tickers
     bars_by_ticker = provider_set.price_backtest.fetch_history_batch(
-        tickers,
+        fetch_tickers,
         start=_date.fromisoformat(start),
         end=_date.fromisoformat(end),
     )

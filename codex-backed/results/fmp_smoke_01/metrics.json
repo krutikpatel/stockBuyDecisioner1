@@ -1,0 +1,77 @@
+{
+  "overall": {
+    "count": 0,
+    "avg_return_pct": null,
+    "median_return_pct": null,
+    "win_rate_pct": null,
+    "profit_factor": null
+  },
+  "entry_decisions": {
+    "count": 1612,
+    "actionable_count": 0
+  },
+  "by_entry_label": [],
+  "by_entry_strategy": [],
+  "by_entry_setup": [],
+  "by_horizon": [],
+  "by_market_regime": [],
+  "by_exit_reason": [],
+  "by_ticker": [],
+  "input_quality": {
+    "feature_source": "native",
+    "feature_cache_status": "rebuilt",
+    "feature_cache_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/cache/features.pkl",
+    "feature_cache_key": "8c96e5be665ebd38",
+    "feature_rows": 1612,
+    "missing_field_counts": {
+      "rs_vs_spy_20d": 1608,
+      "sma200_relative": 98,
+      "sma50_relative": 40,
+      "breakout_volume_multiple": 16,
+      "sma20_relative": 16,
+      "volume_dryup_ratio": 16,
+      "rsi14": 12,
+      "perf_1w": 4,
+      "sma50_slope": 4
+    },
+    "decision_setup_distribution": {
+      "None": 1550,
+      "DOWNTREND_REBOUND_CANDIDATE": 36,
+      "BREAKOUT_MOMENTUM": 22,
+      "TRUE_BROKEN_CHART_AVOID": 4
+    },
+    "trade_setup_distribution": {},
+    "actionable_by_setup": [
+      {
+        "selected_setup": "BREAKOUT_MOMENTUM",
+        "total": 22,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "DOWNTREND_REBOUND_CANDIDATE",
+        "total": 36,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "None",
+        "total": 1550,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "TRUE_BROKEN_CHART_AVOID",
+        "total": 4,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      }
+    ],
+    "entry_label_distribution": {
+      "NO_TRADE": 1612
+    },
+    "skipped_entry_reasons": {
+      "NO_TRADE": 1612
+    }
+  }
+}

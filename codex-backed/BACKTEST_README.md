@@ -10,112 +10,152 @@ The old backtest measured fixed returns at exact horizons such as 20 trading day
 
 ```text
 entry signal
-  -> simulated entry
-  -> initial stop
-  -> target 1
-  -> partial profit
+  -> simulated entry (NEXT_OPEN)
+  -> initial stop (ATR-based)
+  -> target 1 (R multiple)
+  -> partial profit (optional)
   -> breakeven stop
   -> trailing stop
   -> time stop or max simulation window
 ```
 
-Short-term and medium-term horizons are maximum windows, not forced sell dates.
+Short-term and medium-term horizons are **maximum windows**, not forced sell dates. The exit policy closes the trade as soon as stop, profit, or time logic fires.
 
-## Current Data Sources
+## Active Data Source
 
-Default mode uses:
+The default mode is `fmp_primary_yfinance_fallback`:
 
-- Price bars: `codex-backed/cache/prices.pkl`
-- Native generated features: `codex-backed/cache/features.pkl`
+| Data | Source |
+|------|--------|
+| Historical prices (backtest) | FMP `/stable/historical-price-eod/full` → `prices.pkl` fallback |
+| Live prices (analyze) | FMP `/stable/historical-price-eod/full` → yfinance fallback |
+| Fundamentals | FMP `/stable/key-metrics`, `/stable/ratios`, `/stable/financial-growth`, `/stable/profile`, `/stable/earnings` → yfinance fallback |
+| Market regime | SPY SMA50/SMA200 (from price provider above) |
 
-Configured in:
+FMP data is disk-cached at `codex-backed/cache/fmp/`. A cold run fetches ~600 API calls across 200 tickers; all subsequent runs are served from the cache instantly.
 
-```text
-codex-backed/configs/backtest_config.json
-codex-backed/configs/backtest_ticker_universe_config.json
-```
+FMP history confirmed available back to **2000-01-03**. Current backtest starts 2018 — extending to 2010 is a one-line config change and would cover the 2008 crash.
 
-Native mode computes setup-critical fields directly from OHLCV history: SMA relatives/slopes, RSI and RSI slope, ATR%, weekly/monthly performance, distance from highs/lows, volume dry-up, breakout volume multiple, up/down volume ratio, trend label, SPY-relative strength, and SPY-derived market regime.
+### Without FMP key
 
-The old parent signal CSV remains available as an explicit debug fallback with `--feature-source parent_csv`. It no longer fabricates raw fields from signal-card scores.
-
-## Default Ticker Universe
-
-If `--tickers` is omitted, backtests use the default universe in:
-
-```text
-codex-backed/configs/backtest_ticker_universe_config.json
-```
-
-Use `--tickers AAPL,MSFT` only for a temporary override or smoke test. Edit `backtest_ticker_universe_config.json` when the default broad backtest universe should change.
-
-## Basic Command
-
-Run from repository root:
+Force the legacy pickle-only mode for an offline run:
 
 ```bash
-codex-backed/.venv/bin/codex-backed backtest \
+--data-mode legacy_yfinance
+```
+
+Prices come from `prices.pkl`, fundamentals are not populated.
+
+## Running a Backtest
+
+All commands run from the repo root. Export your FMP key before every command:
+
+```bash
+set -a; source .env; set +a
+```
+
+### Full backtest (all tickers, full date range)
+
+```bash
+set -a; source .env; set +a
+PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli backtest \
   --config-dir codex-backed/configs \
   --output-dir codex-backed/results \
-  --run-id my_run \
-  --start 2022-01-01 \
-  --end 2024-12-31 \
+  --run-id my_run_01 \
+  --rebuild-feature-cache \
   --workers 1
 ```
 
-Use `--workers 1` for deterministic debugging. Use more workers for faster runs when the environment allows multiprocessing.
+### Smoke test (2 tickers, fast)
 
-## CLI Options
+```bash
+set -a; source .env; set +a
+PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id smoke_01 \
+  --tickers AAPL,MSFT \
+  --rebuild-feature-cache \
+  --workers 1
+```
+
+Note: AAPL and MSFT rarely trigger the `quality_dislocation` entry. Use a broader set like `AIG,CCL,MU,XOM` if you want to see trades in a smoke test.
+
+### Custom date range
+
+```bash
+set -a; source .env; set +a
+PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli backtest \
+  --config-dir codex-backed/configs \
+  --output-dir codex-backed/results \
+  --run-id bear_2020 \
+  --start 2020-01-01 \
+  --end 2020-12-31 \
+  --rebuild-feature-cache \
+  --workers 1
+```
+
+## CLI Reference
 
 ```text
 --config-dir              JSON config directory
 --output-dir              result output directory
 --run-id                  explicit result run id
---tickers                 comma-separated tickers
---start                   start date, YYYY-MM-DD
---end                     end date, YYYY-MM-DD
---workers                 process count
---feature-source          native or parent_csv
---force-refresh           rebuild native feature cache
---rebuild-feature-cache   rebuild native feature cache
---no-report               skip HTML report
+--tickers                 comma-separated tickers (omit for full universe)
+--start                   start date, YYYY-MM-DD (default: from backtest_config.json)
+--end                     end date, YYYY-MM-DD (default: from backtest_config.json)
+--workers                 process count (default: 1)
+--feature-source          native (default) or parent_csv (debug fallback)
+--force-refresh           alias for --rebuild-feature-cache
+--rebuild-feature-cache   force feature rebuild even if cache is valid
+--no-report               skip HTML report generation
 --data-mode               override active_mode from data_provider_config.json
 ```
 
-`--data-mode` accepts any mode key defined in `configs/data_provider_config.json` (e.g. `legacy_yfinance`, `fmp_primary_yfinance_fallback`). Omit to use the committed `active_mode` value.
+Use `--workers 1` for deterministic debugging. Increase only if the environment supports multiprocessing without sandbox restrictions.
 
-## Example Smoke Test
+## Daily Analysis (Live Signals)
+
+Run each morning before market open:
 
 ```bash
-codex-backed/.venv/bin/codex-backed backtest \
+set -a; source .env; set +a
+PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli analyze \
   --config-dir codex-backed/configs \
   --output-dir codex-backed/results \
-  --run-id smoke_real_report \
-  --tickers AAPL,MSFT \
-  --start 2022-01-01 \
-  --end 2022-03-31 \
-  --workers 1
+  --run-id today_watchlist
 ```
 
-Expected output shape:
+This fetches fresh FMP prices and fundamentals for tickers in `watchlist_config.json`, runs the full entry engine, and writes results to `codex-backed/results/today_watchlist/`.
 
-```text
-status: ok
-entry_decisions: non-zero
-trades: zero or more, depending on actionability
-errors: ideally zero
-run_dir: codex-backed/results/<run_id>
-```
+### Reading the output
+
+Open `entry_decisions.csv` and filter `is_actionable = true`:
+
+| Column | What to check |
+|--------|---------------|
+| `ticker` | Which stock |
+| `entry_label` | `BUY_STARTER` / `BUY_FULL` / `BUY_AGGRESSIVE` — conviction level |
+| `entry_score` | Higher = stronger signal |
+| `selected_setup` | Technical pattern that fired |
+| `entry_strategy` | Strategy family (e.g. `quality_dislocation`, `bull_leadership`) |
+| `reasons` | Scoring rules that fired — sanity-check the signal here |
+| `horizon` | `short_term` (≤60 days) or `medium_term` (≤90 days) |
+
+Priority order: `BUY_AGGRESSIVE` > `BUY_FULL` > `BUY_STARTER`. `WATCHLIST` = monitor, no entry yet.
+
+### Exit discipline (current best config)
+
+- **Short-term:** initial stop → 2.375R target → move stop to breakeven → 2.5 ATR trailing → 60-day max
+- **Medium-term:** initial stop → 2.0R target (take 40% off) → 1.25R breakeven → 3.0 ATR trailing → 90-day max
 
 ## Output Files
 
-Each run writes:
-
 ```text
-manifest.json
-entry_decisions.csv
-trades.csv
-metrics.json
+manifest.json                     run metadata, config snapshot, git commit
+entry_decisions.csv               every decision for every ticker/date/horizon
+trades.csv                        simulated trades with full lifecycle detail
+metrics.json                      overall + sliced performance metrics
 by_entry_label.csv
 by_entry_strategy.csv
 by_entry_setup.csv
@@ -123,110 +163,50 @@ by_horizon.csv
 by_market_regime.csv
 by_exit_reason.csv
 by_ticker.csv
-report.html
+report.html                       summary HTML report
+run_metrics_data_layer.json       provider-level stats (cache hits, errors, latency)
+errors.csv                        row-level errors if any occurred
 ```
 
-If row-level errors occur:
+## Understanding `entry_decisions.csv`
 
+Every decision is recorded before trade simulation.
+
+Key columns:
 ```text
-errors.csv
+ticker, date, horizon, entry_label, entry_score, confidence
+selected_setup    — technical pattern (e.g. BROKEN_CHART_QUALITY_RECOVERY)
+entry_strategy    — which scoring engine was used
+is_actionable     — true if BUY_*
+market_regime     — BULL_RISK_ON / BEAR_RISK_OFF / SIDEWAYS_CHOPPY / LIQUIDITY_RALLY
+reasons           — pipe-separated scoring rules that fired
+missing_data      — fields the config wanted but the feature row lacked
 ```
 
-## `entry_decisions.csv`
+`reasons` is your primary debugging tool. If a stock is WATCHLIST and you expected BUY_FULL, compare its `reasons` against the score thresholds in `entry_signal_config.json`.
 
-This file records every entry decision before trade simulation.
+## Understanding `trades.csv`
 
-Important columns:
+Only actionable entries that triggered a valid entry execution appear here.
 
+Key columns:
 ```text
-ticker
-date
-horizon
-entry_label
-entry_score
-confidence
-selected_setup
-entry_strategy
-is_actionable
-market_regime
-archetype
-reasons
-missing_data
-source_decision
-source_setup
-source_strategy
+ticker, signal_date, horizon, entry_label, entry_strategy, selected_setup
+entry_date, entry_price, entry_method
+initial_stop, target_1, target_1_hit, partial_exit_pct
+exit_date, exit_price, exit_reason, days_held
+realized_return_pct   — primary result
+mae_pct               — worst adverse excursion
+mfe_pct               — best favorable excursion
+mfe_capture_pct       — how much available upside the exit policy captured
+market_regime, archetype
 ```
 
-How to read it:
-
-- `BUY_STARTER`, `BUY_FULL`, and `BUY_AGGRESSIVE` are actionable.
-- `WATCHLIST` and `NO_TRADE` are not simulated as trades.
-- `reasons` explains which score rules fired.
-- `missing_data` shows what the config wanted but the current feature row did not provide.
-- In native mode, `source_*` columns are blank. In `parent_csv` mode, they show the parent backtest label/setup/strategy that produced the feature row.
-
-## `trades.csv`
-
-This file records only actionable entries that successfully triggered an entry execution and passed sizing rules.
-
-Important columns:
-
-```text
-ticker
-signal_date
-horizon
-entry_label
-entry_strategy
-selected_setup
-entry_date
-entry_price
-entry_method
-position_size_multiplier
-initial_stop
-target_1
-target_1_hit
-partial_exit_pct
-exit_date
-exit_price
-exit_reason
-days_held
-realized_return_pct
-mae_pct
-mfe_pct
-mfe_capture_pct
-market_regime
-archetype
-```
-
-How to read it:
-
-- `realized_return_pct` is the primary result.
-- `mae_pct` is worst adverse move during the trade.
-- `mfe_pct` is best favorable move during the trade.
-- `mfe_capture_pct` tells how much of available upside the exit policy captured.
-- `exit_reason` explains what ended the trade.
-
-## Exit Reasons
-
-Common exit reasons:
-
-```text
-STOP_LOSS_EXIT
-PARTIAL_PROFIT_TAKEN
-TRAILING_STOP_EXIT
-TIME_STOP_EXIT
-MAX_SIM_WINDOW_EXIT
-```
-
-Note: `PARTIAL_PROFIT_TAKEN` is an event, not necessarily the final exit reason. The final trade row shows the final exit reason.
-
-## `metrics.json`
+## Understanding `metrics.json`
 
 Top-level sections:
-
 ```text
 overall
-entry_decisions
 by_entry_label
 by_entry_strategy
 by_entry_setup
@@ -234,203 +214,104 @@ by_horizon
 by_market_regime
 by_exit_reason
 by_ticker
+entry_decisions
 input_quality
 ```
 
-Primary metric:
-
-```text
-avg_return_pct
-```
-
-Other useful metrics:
-
-```text
-median_return_pct
-win_rate_pct
-profit_factor
-count
-```
+Primary metric: `avg_return_pct`. Also check `median_return_pct`, `win_rate_pct`, `profit_factor`, `count`.
 
 ## Sliced CSVs
 
-Use sliced CSVs to answer targeted questions:
+| File | Question it answers |
+|------|---------------------|
+| `by_entry_label.csv` | Do higher-conviction labels outperform? |
+| `by_entry_strategy.csv` | Which strategy family drives results? |
+| `by_entry_setup.csv` | Which detected technical pattern works? |
+| `by_horizon.csv` | Short-term vs medium-term behavior |
+| `by_market_regime.csv` | Which regimes produce trades? |
+| `by_exit_reason.csv` | What exits dominate? (trailing stop is better than stop loss) |
+| `by_ticker.csv` | Which tickers drive performance? Are results concentrated? |
 
-- `by_entry_label.csv`: which entry labels work?
-- `by_entry_strategy.csv`: which strategy family works?
-- `by_entry_setup.csv`: which detected technical setup works?
-- `by_horizon.csv`: short-term vs medium-term behavior.
-- `by_market_regime.csv`: which regimes support entries?
-- `by_exit_reason.csv`: what exits dominate results?
-- `by_ticker.csv`: which tickers drive performance?
+## Current Baseline
+
+**`fmp_baseline_02`** — 200 tickers, 2018-01-02 → 2025-12-31, `fmp_primary_yfinance_fallback`:
+
+| Metric | Value |
+|--------|-------|
+| Trades | 104 |
+| Avg return | 15.67% |
+| Median return | 2.98% |
+| Win rate | 98.1% |
+| Profit factor | 160.6 |
+
+Key characteristics:
+- All 104 trades use `quality_dislocation` strategy in `BEAR_RISK_OFF` regime
+- 78 of 104 trades (75%) from the 2020 COVID crash
+- Short-term profit factor 226, medium-term 111
+- 46% trailing stop exits, 41% stop loss exits, 13% max-window exits
+- 38 of 200 tickers produced at least one trade
+
+Bull market strategies (`bull_leadership`, `oversold_rebound`, `breakout_entry`) detect setups but never reach the BUY threshold. BULL_RISK_ON accounts for 50% of decision rows but 0% of trades — the primary tuning opportunity.
 
 ## Input Quality Checks
 
-Before interpreting performance, check `metrics.json -> input_quality` or the HTML report:
+Before interpreting performance, verify `metrics.json → input_quality` or the HTML report:
 
-- `feature_source` should be `native` for normal runs.
-- `feature_cache_status` should be `rebuilt` on first run and `hit` on repeated identical runs.
-- `missing_field_counts` should not show globally missing setup-critical fields.
-- `decision_setup_distribution` should include real setup names when the market produces matching setups.
-- `actionable_by_setup` shows whether entries are coming from real setups or broad technical routes.
+- `feature_source` should be `native`.
+- `feature_cache_status` should be `rebuilt` on first run and `hit` on repeated runs with the same config.
+- `missing_field_counts` should not show setup-critical fields missing globally.
+- `decision_setup_distribution` should include real setup names (not all blank).
+- `actionable_by_setup` shows which setups produce BUY decisions.
 
-## Current Entry-Filter Experiment
+In the `run_metrics_data_layer.json`, check `fmp.api_errors_by_status` — a high count of `429` errors means the rate limit was hit repeatedly and some tickers may have missing fundamentals. The FMP cache prevents this on subsequent runs.
 
-The config now applies the first post-`my_run_02` filter pass:
-
-- `BROKEN_CHART_QUALITY_RECOVERY` is promoted only in `BEAR_RISK_OFF` and `SIDEWAYS_CHOPPY`.
-- `GROWTH_LEADER_PULLBACK` requires at least one confirmation signal.
-- `GROWTH_LEADER_PULLBACK` is blocked in `LIQUIDITY_RALLY`.
-- Broad `bull_leadership` can produce only `BUY_STARTER` or `WATCHLIST`.
-- `extended_starter` remains starter-only.
-- Weak tickers from `my_run_02` are routed to `NO_TRADE`.
-
-Do not tune exits again until this filtered entry run is reviewed against `my_run_02`.
-
-## Parallel Runs
-
-Use:
-
-```bash
---workers 4
-```
-
-Current implementation uses one worker task per ticker, matching the good pattern from `backend/backtest`.
-
-If process spawning is blocked by the environment, use:
-
-```bash
---workers 1
-```
-
-## Interpreting Results
-
-Do not evaluate the engine by fixed 20D or 63D return. The lifecycle result is the trade result.
+## Good and Bad Signs
 
 Good signs:
-
-- Positive average realized return.
-- Positive median return.
-- Profit factor above 1.
-- Reasonable MAE.
-- `BUY_FULL` outperforms `BUY_STARTER`.
-- Exit reasons include profitable trailing exits, not only stop losses.
-- Results are not driven by one ticker only.
+- Positive avg and median realized return
+- Profit factor above 2.0
+- `BUY_FULL` outperforms `BUY_STARTER`
+- Trailing stop exits dominate over stop losses
+- Results spread across multiple tickers and years
+- `mfe_capture_pct` above 50% (exit policy captures meaningful upside)
 
 Bad signs:
-
-- High actionable count but poor realized return.
-- `BUY_AGGRESSIVE` underperforms.
-- Stop losses dominate.
-- `selected_setup` is always `None`.
-- Setup-critical fields appear in `missing_field_counts`.
-- MFE is high but realized return is low, meaning exits are poor.
-- One market regime drives all gains.
-
-## Current Known Limitations
-
-- Uses parent feature CSV rather than native feature generation.
-- Some raw features are proxied from signal cards.
-- HTML report is basic.
-- Optimizers are not wired yet.
-
-## FMP Mode Commands (Requires API Key)
-
-Store your key in `.env` at the repo root:
-
-```text
-FMP_API_KEY=sk-your-key-here
-```
-
-Always prefix FMP commands with `source .env &&` so the key is in scope:
-
-```bash
-# Full backtest with FMP prices + fundamentals
-source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
-  --config-dir codex-backed/configs \
-  --output-dir codex-backed/results \
-  --run-id fmp_run_<id> \
-  --data-mode fmp_primary_yfinance_fallback \
-  --rebuild-feature-cache \
-  --workers 1
-
-# Smoke test with FMP data (two tickers)
-source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli backtest \
-  --config-dir codex-backed/configs \
-  --output-dir codex-backed/results \
-  --run-id fmp_smoke_aapl_msft \
-  --tickers AAPL,MSFT \
-  --data-mode fmp_primary_yfinance_fallback \
-  --rebuild-feature-cache \
-  --workers 1
-
-# Daily analysis with FMP fundamentals
-source .env && PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze \
-  --config-dir codex-backed/configs \
-  --output-dir codex-backed/results \
-  --run-id today_watchlist_fmp \
-  --data-mode fmp_primary_yfinance_fallback
-
-# Run S4.3 activation gates (must all pass before flipping active_mode in data_provider_config.json)
-source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_activation_gates.py -v
-
-# Run FMP baseline capture tests (S4.2)
-source .env && backend/.venv/bin/python -m pytest codex-backed/tests/test_fmp_baseline_capture.py -v
-```
-
-Without `source .env`, any of these commands will skip or silently fall back — the key must be in the environment.
-
-## Daily Usage (Live Signals)
-
-Run this each morning before market open to get today's signals for your watchlist:
-
-```bash
-PYTHONPATH=codex-backed/src backend/.venv/bin/python -m codex_backed.cli analyze \
-  --config-dir codex-backed/configs \
-  --output-dir codex-backed/results \
-  --run-id today_watchlist
-```
-
-This fetches fresh yfinance data for the tickers in `watchlist_config.json`, runs them through the full entry engine, and writes results to `codex-backed/results/today_watchlist/`.
-
-### Reading the output
-
-Open `entry_decisions.csv` and filter by `is_actionable = true`. Key columns:
-
-| Column | What to check |
-|--------|---------------|
-| `ticker` | Which stock |
-| `entry_label` | `BUY_STARTER`, `BUY_FULL`, or `BUY_AGGRESSIVE` — conviction level |
-| `entry_score` | Higher = stronger signal |
-| `selected_setup` | Technical pattern that fired |
-| `entry_strategy` | Entry family (e.g. `bull_leadership`, `oversold_reversal`) |
-| `reasons` | Scoring rules that fired — sanity-check the signal here |
-| `horizon` | `short_term` (≤60 days) or `medium_term` (≤90 days) |
-
-Priority order: `BUY_AGGRESSIVE` > `BUY_FULL` > `BUY_STARTER`. `WATCHLIST` = monitor, no entry yet. `NO_TRADE` = skip.
-
-### Exit discipline
-
-Use the optimized exit levels from the current best config:
-
-- **Short-term:** initial stop → 2.375R target → move stop to breakeven → 2.5 ATR trailing → 60-day max
-- **Medium-term:** initial stop → 2.0R target (take 40% off) → 1.25R breakeven → 3.0 ATR trailing → 90-day max
-
-### Managing your watchlist
-
-Edit `codex-backed/configs/watchlist_config.json` to add or remove tickers. No cache prep needed — `analyze` always fetches fresh data and does not use `prices.pkl` or `features.pkl`.
-
-### Alternately: HTML report
-
-`codex-backed/results/today_watchlist/report.html` has the same data in a readable table.
+- High actionable count but poor realized return
+- Stop losses dominate (41% in current baseline — entry timing opportunity)
+- `selected_setup` is always blank (technical setups not detecting)
+- Setup-critical fields in `missing_field_counts`
+- MFE is high but realized return is low (exit policy leaving money on the table)
+- All gains from one market regime or one crash year
 
 ## Recommended Backtest Workflow
 
-1. Start small with `--tickers AAPL,MSFT --workers 1`.
-2. Inspect `entry_decisions.csv` for label quality and missing data.
-3. Inspect `trades.csv` for exit behavior.
-4. Review `metrics.json` and sliced CSVs.
-5. Expand ticker universe.
-6. Increase worker count if available.
-7. Tune JSON configs.
-8. Re-run and compare run directories.
+1. Validate config: `validate-config --config-dir codex-backed/configs`
+2. Run a smoke test on 3–5 tickers that historically produce trades (e.g. `AIG,CCL,MU,XOM,GE`)
+3. Inspect `entry_decisions.csv` — check regime, setup, strategy, and reasons
+4. Inspect `trades.csv` — check exit reasons and MFE capture
+5. Review `metrics.json` and sliced CSVs
+6. Run the full 200-ticker universe
+7. Compare run directories (use different `--run-id` for each experiment)
+8. Log every decision in the relevant audit log before starting the next iteration
+
+## Managing the Ticker Universe
+
+Edit `backtest_ticker_universe_config.json` to add or remove tickers. Always validate after changes.
+
+For new tickers: FMP will fetch their price history on the next cold run. No other prep needed.
+
+SPY and QQQ do not need to be in this file — the runner fetches them automatically for regime detection.
+
+## FMP Cache Management
+
+The FMP disk cache is at `codex-backed/cache/fmp/`. Do not delete it between runs — it saves all API calls on subsequent runs.
+
+The cache TTL is 24 hours. To force a fresh fetch from FMP for fundamentals data:
+```bash
+rm codex-backed/cache/fmp/fundamentals_*.json
+```
+
+To force a fresh price fetch:
+```bash
+rm codex-backed/cache/fmp/history_*.json
+```

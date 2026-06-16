@@ -92,6 +92,18 @@ def test_fetch_history_batch_uses_cache_on_second_call(tmp_path):
     assert http.get.call_count == 1
 
 
+def test_fetch_history_batch_uses_stable_eod_endpoint(tmp_path):
+    data = json.loads((_FIXTURES / "historical_aapl.json").read_text())
+    http = _mock_http(data)
+    provider = _provider(tmp_path, http_client=http)
+    provider.fetch_history_batch(["AAPL"], start=date(2023, 12, 29), end=date(2024, 1, 5))
+    url = http.get.call_args.args[0]
+    params = http.get.call_args.kwargs["params"]
+    assert url == "https://financialmodelingprep.com/stable/historical-price-eod/full"
+    assert params["symbol"] == "AAPL"
+    assert "/api/v3/" not in url
+
+
 def test_fetch_history_batch_skips_tickers_returning_empty(tmp_path):
     http = _mock_http({"symbol": "UNKNOWN", "historical": []})
     provider = _provider(tmp_path, http_client=http)
@@ -101,15 +113,17 @@ def test_fetch_history_batch_skips_tickers_returning_empty(tmp_path):
     assert "UNKNOWN" not in result
 
 
-def test_fetch_live_batch_parses_quote_endpoint(tmp_path):
-    data = json.loads((_FIXTURES / "quote_aapl_msft.json").read_text())
-    http = _mock_http(data)
+def test_fetch_live_batch_parses_stable_history_endpoint(tmp_path):
+    data = json.loads((_FIXTURES / "historical_aapl.json").read_text())
+    http = MagicMock(spec=HttpClient)
+    http.get.side_effect = [data, data]
     provider = _provider(tmp_path, http_client=http)
-    result = provider.fetch_live_batch(["AAPL", "MSFT"], period="2y")
+    result = provider.fetch_live_batch(["AAPL", "MSFT"], period="5y")
     assert "AAPL" in result
     assert "MSFT" in result
-    assert len(result["AAPL"]) == 2
-    assert result["AAPL"][0]["close"] == 184.8
+    assert len(result["AAPL"]) == 4
+    assert result["AAPL"][0]["close"] == 181.5
+    assert http.get.call_count == 2
 
 
 def test_capabilities_match_config_tier_capabilities(tmp_path):

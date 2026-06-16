@@ -41,9 +41,9 @@ def test_fmp_mode_composite_uses_yfinance_fallback(tmp_path):
     assert isinstance(composite._fallback, YFinancePriceProvider)
 
 
-def test_active_mode_unchanged_after_this_story():
-    """Guard: active_mode must stay legacy_yfinance until S4.3."""
+def test_active_mode_is_fmp_primary_after_s4_3():
+    """S4.3 complete: active_mode must be fmp_primary_yfinance_fallback."""
     cfg = _load_config()
-    assert cfg["active_mode"] == "legacy_yfinance", (
-        f"active_mode changed to {cfg['active_mode']!r} — this must not happen before S4.3"
+    assert cfg["active_mode"] == "fmp_primary_yfinance_fallback", (
+        f"active_mode is {cfg['active_mode']!r} — expected fmp_primary_yfinance_fallback after S4.3"
     )

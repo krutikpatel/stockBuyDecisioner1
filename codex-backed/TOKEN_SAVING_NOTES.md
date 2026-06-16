@@ -97,7 +97,7 @@ tail -15 /tmp/...output
 
 ### 4. Pre-extract "what has been tried" once, at loop start
 
-The audit log (`ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`) is 4,400+ lines. Grepping into it multiple times during a loop is expensive and wastes context on duplicated history.
+The audit log (`docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`) is 4,400+ lines. Grepping into it multiple times during a loop is expensive and wastes context on duplicated history.
 
 **Convention**:
 
@@ -151,5 +151,5 @@ This is a rough estimate; real numbers depend on log size and how chatty the ite
 2. Silence successful tool outputs; only surface failures.
 3. Trust task-notifications for completion; do not re-read the runner's stdout.
 4. Update the audit log with `Edit`, never `Write`.
-5. Reference `TUNING_STATUS.md` as the cached prior-work summary; only re-grep `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` when you need detail that the summary lacks.
+5. Reference `TUNING_STATUS.md` as the cached prior-work summary; only re-grep `docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` when you need detail that the summary lacks.
 6. Keep TaskList granular at the loop level, not the iteration level.

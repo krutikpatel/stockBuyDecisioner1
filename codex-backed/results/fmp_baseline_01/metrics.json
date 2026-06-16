@@ -1,0 +1,87 @@
+{
+  "overall": {
+    "count": 0,
+    "avg_return_pct": null,
+    "median_return_pct": null,
+    "win_rate_pct": null,
+    "profit_factor": null
+  },
+  "entry_decisions": {
+    "count": 158950,
+    "actionable_count": 0
+  },
+  "by_entry_label": [],
+  "by_entry_strategy": [],
+  "by_entry_setup": [],
+  "by_horizon": [],
+  "by_market_regime": [],
+  "by_exit_reason": [],
+  "by_ticker": [],
+  "input_quality": {
+    "feature_source": "native",
+    "feature_cache_status": "rebuilt",
+    "feature_cache_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/cache/features.pkl",
+    "feature_cache_key": "f7a9ff3c3a8dcccb",
+    "feature_rows": 158950,
+    "missing_field_counts": {
+      "rs_vs_spy_20d": 157058,
+      "sma200_relative": 6770,
+      "sma50_relative": 4000,
+      "breakout_volume_multiple": 1600,
+      "sma20_relative": 1600,
+      "volume_dryup_ratio": 1600,
+      "rsi14": 1202,
+      "perf_1w": 400,
+      "sma50_slope": 266,
+      "rsi_slope": 28
+    },
+    "decision_setup_distribution": {
+      "None": 149492,
+      "DOWNTREND_REBOUND_CANDIDATE": 6158,
+      "BREAKOUT_MOMENTUM": 1408,
+      "TRUE_BROKEN_CHART_AVOID": 1370,
+      "BROKEN_CHART_QUALITY_RECOVERY": 522
+    },
+    "trade_setup_distribution": {},
+    "actionable_by_setup": [
+      {
+        "selected_setup": "BREAKOUT_MOMENTUM",
+        "total": 1408,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "BROKEN_CHART_QUALITY_RECOVERY",
+        "total": 522,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "DOWNTREND_REBOUND_CANDIDATE",
+        "total": 6158,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "None",
+        "total": 149492,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "TRUE_BROKEN_CHART_AVOID",
+        "total": 1370,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      }
+    ],
+    "entry_label_distribution": {
+      "NO_TRADE": 152836,
+      "WATCHLIST": 6114
+    },
+    "skipped_entry_reasons": {
+      "NO_TRADE": 152836,
+      "WATCHLIST": 6114
+    }
+  }
+}

@@ -9,10 +9,10 @@ The engine is designed for short-term and medium-term trade decisions. It does n
 - [HLD.md](HLD.md) - high-level system architecture and operating model.
 - [LLD.md](LLD.md) - low-level module, class, config, and data-flow design.
 - [BACKTEST_README.md](BACKTEST_README.md) - how to run and interpret lifecycle backtests.
-- [DESIGN.md](DESIGN.md) - original architecture/design notes.
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - story-based implementation plan.
-- [BACKTEST_IMPLEMENTATION_PLAN.md](BACKTEST_IMPLEMENTATION_PLAN.md) - detailed backtest implementation plan.
-- [PROGRESS.md](PROGRESS.md) - current implementation tracker.
+- [DESIGN.md](docs/baseProject/DESIGN.md) - original architecture/design notes.
+- [IMPLEMENTATION_PLAN.md](docs/baseProject/IMPLEMENTATION_PLAN.md) - story-based implementation plan.
+- [BACKTEST_IMPLEMENTATION_PLAN.md](docs/baseProject/BACKTEST_IMPLEMENTATION_PLAN.md) - detailed backtest implementation plan.
+- [PROGRESS.md](docs/baseProject/PROGRESS.md) - original implementation tracker (archived).
 
 ## Current Capabilities
 

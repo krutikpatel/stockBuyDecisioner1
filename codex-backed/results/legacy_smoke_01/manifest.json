@@ -1,0 +1,33 @@
+{
+  "run_id": "legacy_smoke_01",
+  "created_at_utc": "2026-06-16T04:38:35.981793+00:00",
+  "command": "backtest",
+  "cli_args": {
+    "command": "backtest",
+    "config_dir": "codex-backed/configs",
+    "output_dir": "codex-backed/results",
+    "run_id": "legacy_smoke_01",
+    "tickers": "AAPL,MSFT",
+    "start": null,
+    "end": null,
+    "workers": 1,
+    "feature_source": null,
+    "force_refresh": false,
+    "rebuild_feature_cache": true,
+    "no_report": false,
+    "data_mode": "legacy_yfinance",
+    "effective_data_mode": "legacy_yfinance",
+    "mode_override_origin": "cli"
+  },
+  "config_dir": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/configs",
+  "git_commit": "54a01e300036315f03b3bc1b252c68231214215d",
+  "paths": {
+    "run_id": "legacy_smoke_01",
+    "run_dir": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01",
+    "manifest_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01/manifest.json",
+    "trades_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01/trades.csv",
+    "entry_decisions_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01/entry_decisions.csv",
+    "metrics_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01/metrics.json",
+    "report_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/results/legacy_smoke_01/report.html"
+  }
+}

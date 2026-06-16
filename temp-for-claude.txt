@@ -142,4 +142,33 @@ Prompt for story based implementation:
   Copy that into the next session's first message after you've put your real API key in .env.
 
   ----
-  
+
+  Next TODO:
+  Top section — current state and baseline:
+  - fmp_baseline_02 full metrics table vs legacy, broken down by horizon, regime, year, exit reason, and top tickers
+  - Key finding: strategy is a crash-only system — 100% of trades from BEAR_RISK_OFF, 75% from the 2020 COVID crash alone, 0 trades during the 50% of time the market is in BULL_RISK_ON
+
+  6 concrete fine-tuning priorities:
+
+  1. Extend backtest to 2010 (prerequisite — do first)
+  Config change + one rebuild. Everything else is calibrated on 104 trades from 4 stress events. Adding 2008–2009 likely 2–3× the trade count and makes all downstream tuning statistically meaningful. FMP has the data, no new work needed.
+
+  2. Tighten or disable medium-term horizon (quick win, 1 config change)
+  Median return 0.05%, profit factor 111 vs 226 for short-term. Try dropping max_simulation_days from 90→60 and trailing stop from 3.0→2.5 ATR. Single backtest to confirm. High reward-to-effort ratio.
+
+  3. Unlock bull market strategies (biggest opportunity, needs investigation)
+  50% of all decision rows are BULL_RISK_ON, zero trades. bull_leadership, oversold_rebound, breakout_entry each detect hundreds of setups but never cross the BUY threshold. Inspect what score is being reached vs. what's required, then loosen one threshold at a time.
+  This is where most future alpha lives.
+
+  4. Add fundamentals gates to quality_dislocation (quality filter, medium effort)
+  Now that gross_margin, eps_growth_yoy, and earnings_days_away are populated in every feature row, use them to filter the 41% of trades that stop out immediately. A gross_margin > 20% gate or earnings_days_away > 15 guard costs a few excluded trades but likely removes
+  the weakest entries. Directly addresses the stop-loss exit rate.
+
+  5. Refine entry timing to reduce stop-loss exits (harder, depends on #3 and #4)
+  41% stop-loss rate means nearly half of entries fail before the setup materialises. Look at whether requiring a minimum 1–2 green days post-dislocation bottom before entry would reduce false starts. Easier to diagnose once #4 has removed fundamentals-weak trades from
+  the picture.
+
+  6. Refresh the ticker exclusion list (maintenance, do last)
+  The current ~60-ticker exclusion list came from a pickle-based backtest. After #1 (extended FMP history) produces a larger result set, re-derive it from by_ticker.csv on the new run. Doing it earlier would just repeat the work.
+
+  FMP provider reference section with endpoints, cache details, field routing, and the two known infrastructure notes (SPY/QQQ fetch requirement, cache stats gap).

@@ -20,13 +20,17 @@ def _load_json(name: str) -> Any:
 def _route_fmp_response(url: str, params: dict | None = None) -> Any:
     """Return fixture JSON based on URL path."""
     url = str(url)
-    if "/historical/earning_calendar/" in url:
+    if "/stable/earnings" in url or "/historical/earning_calendar/" in url:
         return _load_json("earning_calendar.json")
-    if "/key-metrics/" in url:
+    if "/stable/key-metrics" in url or "/key-metrics/" in url:
         return _load_json("key_metrics_aapl.json")
-    if "/profile/" in url:
+    if "/stable/ratios" in url:
+        return _load_json("key_metrics_aapl.json")
+    if "/stable/financial-growth" in url:
+        return _load_json("key_metrics_aapl.json")
+    if "/stable/profile" in url or "/profile/" in url:
         return _load_json("profile_aapl.json")
-    if "/historical-price-full/" in url:
+    if "/stable/historical-price-eod/full" in url or "/historical-price-full/" in url:
         return _load_json("historical_aapl.json")
     return {}
 

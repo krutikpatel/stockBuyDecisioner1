@@ -1,5 +1,5 @@
 {
-  "active_mode": "legacy_yfinance",
+  "active_mode": "fmp_primary_yfinance_fallback",
   "modes": {
     "legacy_yfinance": {
       "description": "Preserves current behaviour: prices.pkl for backtest, yfinance for analyze, no fundamentals populated.",

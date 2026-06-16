@@ -41,7 +41,7 @@ def _run_fmp_backtest(tmp_path: Path, rebuild: bool = True):
     from codex_backed.results import create_run_paths
 
     config_dir = tmp_path / "configs"
-    shutil.copytree(_CONFIG_SRC, config_dir)
+    shutil.copytree(_CONFIG_SRC, config_dir, dirs_exist_ok=True)
 
     bc = config_dir / "backtest_config.json"
     cfg = json.loads(bc.read_text())
@@ -56,6 +56,9 @@ def _run_fmp_backtest(tmp_path: Path, rebuild: bool = True):
 
     bundle = load_config_bundle(config_dir)
     validate_config_bundle(bundle)
+    run_dir = tmp_path / "results" / "fmp_baseline"
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
     paths = create_run_paths(tmp_path / "results", run_id="fmp_baseline")
 
     result = run_lifecycle_backtest(
