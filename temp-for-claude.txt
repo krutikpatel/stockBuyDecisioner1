@@ -172,3 +172,94 @@ Prompt for story based implementation:
   The current ~60-ticker exclusion list came from a pickle-based backtest. After #1 (extended FMP history) produces a larger result set, re-derive it from by_ticker.csv on the new run. Doing it earlier would just repeat the work.
 
   FMP provider reference section with endpoints, cache details, field routing, and the two known infrastructure notes (SPY/QQQ fetch requirement, cache stats gap).
+---
+
+refer claude.md, codex-backed/TUNING_STATUS.md and then:
+  task:
+  now do following steps in loop for 10 times:
+  -run backtests - use run_fmp_backtest.sh script to run the backtest.
+  -use optimize_loop.py and run_summary.py to make loops efficient and save tokens
+  -iinvestigate the result and suggest improvements. But refer to codex-backed/ITERATIVE_IMPROVEMENTS_FMP_LOG.md to see what has been tried sofar so that you dont repeat yourself. then suggest optimal improvements.
+  -log the improvements in same md file
+  -then imeplement those improvements
+
+  keep in mind that our main working directory for code read/write is codex-backed
+
+  ---
+
+   Working directory: /Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1
+  Scope: codex-backed/ only — do not touch any other directory.
+
+  Session startup — run these once before iteration 1
+
+  cat codex-backed/iterative_improvements_using_backtests/optimization_state.json
+  tail -5 codex-backed/iterative_improvements_using_backtests/history.jsonl
+  cat codex-backed/iterative_improvements_using_backtests/optimization_memory.json
+  cat codex-backed/configs/entry_signal_config.json
+
+  Do not read any markdown files during the loop.
+
+  Goal
+
+  Current best (fmp_baseline_02): 104 trades / 15 years, all BEAR_RISK_OFF.
+  The strategy detects ~19,000 bull-regime candidates (BREAKOUT_MOMENTUM, GROWTH_LEADER_PULLBACK) but routes 0 to actionable — because entry_signal_config.json never approves them.
+
+  Target: Activate BULL_RISK_ON entries to reach ≥ 20 trades/year without dropping bear-regime win rate below 90%.
+  Primary lever: entry_signal_config.json — entry routing, scoring thresholds, and regime gates for bull setups.
+
+  Per-iteration loop (repeat 10 times)
+
+  Step 1 — Choose one change
+  Check optimization_state.json → tried[] and optimization_memory.json → do_not_repeat before proposing. One config key changed per iteration. State your hypothesis: what you're changing, why, and what outcome you expect.
+
+  Step 2 — Validate
+  PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli validate-config --config-dir codex-backed/configs
+
+  Step 3 — Run backtest
+  set -a; source .env; set +a
+  bash codex-backed/scripts/run_fmp_backtest.sh fmp_bull_<N>
+
+  Step 4 — Read results (compact only)
+  codex-backed/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/fmp_bull_<N>
+  Also check by_market_regime and actionable_by_setup from metrics.json to see if bull setups fired.
+
+  Step 5 — Decide
+
+  ┌──────────────────────────────────────────────────┬──────────────────────────────────┐
+  │                    Condition                     │             Decision             │
+  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
+  │ New bull trades appeared AND bear win rate ≥ 90% │ accept                           │
+  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
+  │ Trade count increased, metrics acceptable        │ accept                           │
+  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
+  │ Bear win rate dropped below 90%                  │ reject                           │
+  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
+  │ No new trades, zero change                       │ reject — try a bigger lever next │
+  └──────────────────────────────────────────────────┴──────────────────────────────────┘
+
+  If rejected: revert the config change before proceeding.
+
+  Step 6 — Log
+  codex-backed/.venv/bin/python codex-backed/scripts/optimize_loop.py append-audit \
+    --run-id fmp_bull_<N> \
+    --baseline-run-id <last_accepted_run_id> \
+    --iteration <N> \
+    --change "<one line: what changed and direction>" \
+    --decision <accept|reject> \
+    --next "<what to try next>"
+
+  This updates both history.jsonl and optimization_state.json automatically.
+
+  Step 7 — Report
+  One line: [iter N] <change> → <accept|reject> (trade count: X→Y, bear_wr: Z%, delta_pf: ±W)
+
+  ---
+  Token rules
+
+  - State = optimization_state.json. History = history.jsonl. Never re-read markdown.
+  - Use run_summary.py output only — never dump full metrics.json.
+  - Read entry_signal_config.json once at startup; re-read only if you need to verify a specific field mid-loop.
+
+  Start
+
+  Begin iteration 2 (iterations 0 and 1 are already logged in history).

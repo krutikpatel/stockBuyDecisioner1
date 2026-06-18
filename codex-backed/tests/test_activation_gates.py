@@ -30,7 +30,7 @@ _GATE_SKIP = pytest.mark.skipif(
 
 _CONFIG_SRC = Path(__file__).resolve().parents[1] / "configs"
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
-_AUDIT_LOG = Path(__file__).resolve().parents[1] / "ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md"
+_AUDIT_LOG = Path(__file__).resolve().parents[1] / "ITERATIVE_IMPROVEMENTS_FMP_LOG.md"
 _LEGACY_BASELINE = _FIXTURES / "legacy_baseline_metrics.json"
 _MODE = "fmp_primary_yfinance_fallback"
 _REQUIRED_FIELDS = [

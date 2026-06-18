@@ -764,7 +764,7 @@ Revised against the earlier-optimistic estimate. Each phase merges independently
 
 - Run legacy-mode regression against the recorded fixture from Phase 1 (must pass tolerance).
 - Run full backtest in `fmp_primary_yfinance_fallback` mode on identical universe.
-- Capture metric delta in **a new audit log** `codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md` (do NOT touch `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` — see Section 16.7).
+- Capture metric delta in **a new audit log** `codex-backed/ITERATIVE_IMPROVEMENTS_FMP_LOG.md` (do NOT touch `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` — see Section 16.7).
 - Apply Phase 4 activation gates from Section 15 (decide flip vs rollback based on documented thresholds).
 - Only after gates pass: flip committed `active_mode` to `fmp_primary_yfinance_fallback`.
 
@@ -862,7 +862,7 @@ Running `--data-mode fmp_primary_yfinance_fallback` on the same universe must sa
 | `actionable_count` from a fresh `analyze` run on the default watchlist | ≥1 | If zero, live analyze is unusable in new mode — rollback |
 | `cache_hit_rate` (Section 17) on a second consecutive backtest run | ≥95% | Sanity-check that caching is working before declaring activation |
 
-All gate values are written to `ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md` as the audit trail (Section 16.7).
+All gate values are written to `ITERATIVE_IMPROVEMENTS_FMP_LOG.md` as the audit trail (Section 16.7).
 
 ### Structural / operational
 
@@ -1003,7 +1003,7 @@ This is decoupled from the data refactor but blocks Phase 1 acceptance because c
 
 Per CLAUDE.md: do NOT overwrite `ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md`. Phase 4 produces a new file:
 
-`codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md`
+`codex-backed/ITERATIVE_IMPROVEMENTS_FMP_LOG.md`
 
 Contents:
 1. Date of activation, git SHA, FMP tier and capabilities snapshot

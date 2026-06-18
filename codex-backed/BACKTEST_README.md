@@ -48,7 +48,29 @@ Prices come from `prices.pkl`, fundamentals are not populated.
 
 ## Running a Backtest
 
-All commands run from the repo root. Export your FMP key before every command:
+All commands run from the repo root.
+
+### FMP baseline helper script
+
+Use the helper script for normal FMP baseline runs. It loads `.env`, uses `fmp_primary_yfinance_fallback`, defaults to `--workers 1`, rebuilds the feature cache, and creates a timestamped `fmp_baseline_...` run id when none is provided:
+
+```bash
+codex-backed/scripts/run_fmp_backtest.sh
+```
+
+Pass an explicit run id when comparing named experiments:
+
+```bash
+codex-backed/scripts/run_fmp_backtest.sh fmp_baseline_03
+```
+
+For faster reruns that should reuse the existing feature cache:
+
+```bash
+codex-backed/scripts/run_fmp_backtest.sh fmp_baseline_03 --no-rebuild-feature-cache
+```
+
+For direct CLI usage, export your FMP key before the command:
 
 ```bash
 set -a; source .env; set +a

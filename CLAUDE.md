@@ -186,6 +186,16 @@ All 104 trades use the `quality_dislocation` strategy in `BEAR_RISK_OFF` regime.
 - `codex-backed/HLD.md` — architecture overview and operating model
 - `codex-backed/LLD.md` — module, class, config, and data-flow design
 - `codex-backed/BACKTEST_README.md` — backtest commands and output interpretation
-- `codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md` — FMP activation history, production baseline, and fine-tuning priorities
-- `codex-backed/docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` — completed 50-run exit optimization audit trail
-- `codex-backed/NEXT_IMPROVEMENTS_PLAN.md` — planned next improvements
+- `codex-backed/docs/pre-refactoring-iterative-fine-tuning-logs/ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md` — completed 50-run exit optimization audit trail (legacy, pre-FMP)
+
+### Iterative improvement loop (FMP era)
+
+All files for the active optimization loop live in `codex-backed/iterative_improvements_using_backtests/`:
+
+| File | Purpose |
+|------|---------|
+| `optimization_state.json` | Current best run, accepted metrics, tried array, next queue — read this first when resuming |
+| `history.jsonl` | Append-only per-iteration record (full metrics + delta + decision) — never re-read by Claude unless asked |
+| `optimization_memory.json` | Parameter values known to be rejected — consult before proposing a change |
+| `FMP_BASELINE.md` | Canonical baseline metrics and extended-range experiment notes |
+| `ITERATIVE_IMPROVEMENTS_PLAN.md` | Planned next improvements |

@@ -593,10 +593,10 @@ Manual operator steps (logged in PR description, not automated):
 
 **Status:** `[ ]`
 
-**As a** maintainer, **I want** every Phase 4 acceptance gate from Section 15 evaluated against captured metrics and recorded in `ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md`, **so that** the decision to flip `active_mode` is defensible.
+**As a** maintainer, **I want** every Phase 4 acceptance gate from Section 15 evaluated against captured metrics and recorded in `ITERATIVE_IMPROVEMENTS_FMP_LOG.md`, **so that** the decision to flip `active_mode` is defensible.
 
 **Files:**
-- `codex-backed/ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md` (new — audit log)
+- `codex-backed/ITERATIVE_IMPROVEMENTS_FMP_LOG.md` (new — audit log)
 - `codex-backed/configs/data_provider_config.json` (change — only if all gates pass: set `active_mode` to `fmp_primary_yfinance_fallback`)
 
 **Tests:** `codex-backed/tests/test_activation_gates.py`

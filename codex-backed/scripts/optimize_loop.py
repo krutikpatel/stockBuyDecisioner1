@@ -9,9 +9,10 @@ from typing import Any
 
 
 REPO_DIR = Path(__file__).resolve().parents[1]
+LOOP_DIR = REPO_DIR / "iterative_improvements_using_backtests"
 DEFAULT_RESULTS_DIR = REPO_DIR / "results"
-DEFAULT_LOG_PATH = REPO_DIR / "ITERATIVE_IMPROVEMENTS_50_LOOP_LOG.md"
-DEFAULT_STATE_PATH = REPO_DIR / "optimization_state.json"
+DEFAULT_HISTORY_PATH = LOOP_DIR / "history.jsonl"
+DEFAULT_STATE_PATH = LOOP_DIR / "optimization_state.json"
 
 
 def load_metrics(results_dir: Path, run_id: str) -> dict[str, Any]:
@@ -50,36 +51,30 @@ def build_summary(
     return summary
 
 
-def append_audit_entry(
+def append_history_entry(
     *,
-    log_path: Path,
+    history_path: Path,
     iteration: int,
     summary: dict[str, Any],
+    raw_metrics: dict[str, Any],
+    raw_baseline_metrics: dict[str, Any] | None = None,
 ) -> None:
-    lines = [
-        "",
-        f"## Iteration {iteration}",
-        "",
-        f"Run: `{summary['run']}`",
-    ]
-    if summary.get("change"):
-        lines.append(f"Change: {summary['change']}")
-    lines.extend(
-        [
-            f"Decision: {summary.get('decision') or 'pending'}",
-            "",
-            "Compact Metrics:",
-            "",
-            _format_metric_line("Overall", summary["overall"], summary.get("delta", {}).get("overall")),
-            _format_metric_line("Short-term", summary["short_term"], summary.get("delta", {}).get("short_term")),
-            _format_metric_line("Medium-term", summary["medium_term"], summary.get("delta", {}).get("medium_term")),
-        ]
-    )
-    if summary.get("next"):
-        lines.extend(["", f"Next: {summary['next']}"])
-    lines.append("")
-    with log_path.open("a") as fh:
-        fh.write("\n".join(lines))
+    entry = {
+        "i": iteration,
+        "run_id": summary["run"],
+        "overall": _full_metric_block(raw_metrics.get("overall", {})),
+        "short_term": _full_metric_block(_horizon_raw(raw_metrics, "short_term")),
+        "medium_term": _full_metric_block(_horizon_raw(raw_metrics, "medium_term")),
+        "delta": _full_delta_block(
+            raw_metrics.get("overall", {}),
+            raw_baseline_metrics.get("overall", {}),
+        ) if raw_baseline_metrics else None,
+        "decision": summary.get("decision"),
+        "note": summary.get("change"),
+        "next": summary.get("next"),
+    }
+    with history_path.open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
 
 
 def update_state(
@@ -87,6 +82,8 @@ def update_state(
     state_path: Path,
     iteration: int | None,
     summary: dict[str, Any],
+    raw_metrics: dict[str, Any],
+    raw_baseline_metrics: dict[str, Any] | None = None,
 ) -> None:
     if state_path.exists():
         state = json.loads(state_path.read_text())
@@ -97,13 +94,27 @@ def update_state(
     if iteration is not None:
         state["last_completed_iteration"] = iteration
     state["last_completed_run_id"] = summary["run"]
-    state["last_summary"] = summary
+
+    tried_entry: dict[str, Any] = {
+        "iter": iteration,
+        "run_id": summary["run"],
+        "change": summary.get("change"),
+        "delta_pf": _delta(
+            raw_metrics.get("overall", {}).get("profit_factor"),
+            raw_baseline_metrics.get("overall", {}).get("profit_factor") if raw_baseline_metrics else None,
+        ),
+        "decision": summary.get("decision"),
+    }
+    tried: list = state.get("tried", [])
+    tried.append(tried_entry)
+    state["tried"] = tried
+
     if str(summary.get("decision", "")).lower() in {"accept", "accepted"}:
         state["accepted_best_run_id"] = summary["run"]
         state["accepted_best_metrics"] = {
-            "overall": summary["overall"],
-            "short_term": summary["short_term"],
-            "medium_term": summary["medium_term"],
+            "overall": _full_metric_block(raw_metrics.get("overall", {})),
+            "short_term": _full_metric_block(_horizon_raw(raw_metrics, "short_term")),
+            "medium_term": _full_metric_block(_horizon_raw(raw_metrics, "medium_term")),
         }
     state_path.write_text(json.dumps(state, indent=2) + "\n")
 
@@ -115,10 +126,10 @@ def main() -> int:
     summary_parser = subparsers.add_parser("summarize-run", help="Print compact JSON metrics for a run.")
     _add_common_args(summary_parser)
 
-    audit_parser = subparsers.add_parser("append-audit", help="Append terse audit entry and update optimization state.")
+    audit_parser = subparsers.add_parser("append-audit", help="Append JSONL entry to history.jsonl and update optimization state.")
     _add_common_args(audit_parser)
     audit_parser.add_argument("--iteration", type=int, required=True)
-    audit_parser.add_argument("--log-path", type=Path, default=DEFAULT_LOG_PATH)
+    audit_parser.add_argument("--history-path", type=Path, default=DEFAULT_HISTORY_PATH)
     audit_parser.add_argument("--state-path", type=Path, default=DEFAULT_STATE_PATH)
 
     args = parser.parse_args()
@@ -138,8 +149,20 @@ def main() -> int:
         print(json.dumps(summary, indent=2))
         return 0
 
-    append_audit_entry(log_path=args.log_path, iteration=args.iteration, summary=summary)
-    update_state(state_path=args.state_path, iteration=args.iteration, summary=summary)
+    append_history_entry(
+        history_path=args.history_path,
+        iteration=args.iteration,
+        summary=summary,
+        raw_metrics=metrics,
+        raw_baseline_metrics=baseline_metrics,
+    )
+    update_state(
+        state_path=args.state_path,
+        iteration=args.iteration,
+        summary=summary,
+        raw_metrics=metrics,
+        raw_baseline_metrics=baseline_metrics,
+    )
     print(json.dumps({"status": "ok", "summary": summary}, indent=2))
     return 0
 
@@ -151,6 +174,25 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--change", default=None)
     parser.add_argument("--decision", default=None)
     parser.add_argument("--next", default=None)
+
+
+def _full_metric_block(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "count": row.get("count"),
+        "avg_return_pct": row.get("avg_return_pct"),
+        "median_return_pct": row.get("median_return_pct"),
+        "win_rate_pct": row.get("win_rate_pct"),
+        "profit_factor": row.get("profit_factor"),
+    }
+
+
+def _full_delta_block(row: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "avg_return_pct": _delta(row.get("avg_return_pct"), baseline.get("avg_return_pct")),
+        "median_return_pct": _delta(row.get("median_return_pct"), baseline.get("median_return_pct")),
+        "win_rate_pct": _delta(row.get("win_rate_pct"), baseline.get("win_rate_pct")),
+        "profit_factor": _delta(row.get("profit_factor"), baseline.get("profit_factor")),
+    }
 
 
 def _metric_block(row: dict[str, Any]) -> dict[str, Any]:
@@ -187,13 +229,6 @@ def _delta(value: Any, baseline: Any) -> float | None:
     if value is None or baseline is None:
         return None
     return round(float(value) - float(baseline), 4)
-
-
-def _format_metric_line(label: str, row: dict[str, Any], delta: dict[str, Any] | None) -> str:
-    base = f"- {label}: count {row.get('count')}, avg {row.get('avg')}, median {row.get('median')}, win {row.get('win')}, pf {row.get('pf')}"
-    if not delta:
-        return base
-    return f"{base}; delta avg {delta.get('avg')}, median {delta.get('median')}, win {delta.get('win')}, pf {delta.get('pf')}"
 
 
 if __name__ == "__main__":

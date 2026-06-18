@@ -1,7 +1,7 @@
 """Compact metrics summary for a backtest run.
 
 Usage:
-    claude-backend/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/<run-id>
+    codex-backed/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/<run-id>
 
 Prints the ~10 numbers a tuning iteration actually uses, in a tight block.
 Replaces full metrics.json dumps that wasted ~200 tokens per iteration.

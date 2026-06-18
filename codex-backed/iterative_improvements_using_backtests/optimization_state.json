@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "status": "paused",
+  "last_completed_iteration": 1,
+  "last_completed_run_id": "fmp_2010_extend",
+  "accepted_best_run_id": "fmp_baseline_02",
+  "objective_priority": [
+    "trade_count",
+    "short_term_win_rate",
+    "short_term_avg_return",
+    "overall_win_rate",
+    "overall_avg_return",
+    "profit_factor"
+  ],
+  "constraints": {
+    "ticker_pruning": "frozen",
+    "do_not_add_ticker_exclusions_for_headline_backtest_lift": true,
+    "primary_goal": "activate_bull_market_strategies_to_increase_trade_frequency"
+  },
+  "accepted_best_metrics": {
+    "overall": {
+      "count": 104,
+      "avg_return_pct": 15.6706,
+      "median_return_pct": 2.9757,
+      "win_rate_pct": 98.0769,
+      "profit_factor": 160.642
+    },
+    "short_term": {
+      "count": 52,
+      "avg_return_pct": 18.9528,
+      "median_return_pct": 14.8834,
+      "win_rate_pct": 98.0769,
+      "profit_factor": 226.0108
+    },
+    "medium_term": {
+      "count": 52,
+      "avg_return_pct": 12.3883,
+      "median_return_pct": 0.0537,
+      "win_rate_pct": 98.0769,
+      "profit_factor": 111.5204
+    }
+  },
+  "tried": [
+    {
+      "iter": 0,
+      "run_id": "fmp_baseline_02",
+      "change": "FMP baseline \u2014 bear-only, 104 trades, 2018-2025",
+      "delta_pf": null,
+      "decision": "accept"
+    },
+    {
+      "iter": 1,
+      "run_id": "fmp_2010_extend",
+      "change": "extend date range to 2010 \u2014 diagnostic only",
+      "delta_pf": -149.2391,
+      "decision": "reject"
+    }
+  ],
+  "accepted_config_summary": {
+    "note": "FMP baseline \u2014 current exit config from 50-iteration legacy loop, carried over unchanged",
+    "short_term": {
+      "target_r_multiple": 2.375,
+      "partial_profit_pct": 0.0,
+      "trailing_stop_atr_multiplier": 2.5,
+      "max_simulation_days": 60
+    },
+    "medium_term": {
+      "target_r_multiple": 2.0,
+      "partial_profit_pct": 0.4,
+      "breakeven_after_r_multiple": 1.25,
+      "trailing_stop_atr_multiplier": 3.0,
+      "max_simulation_days": 90
+    }
+  },
+  "next_recommended_tests": [
+    "Activate BULL_RISK_ON entry routing in entry_signal_config.json for BREAKOUT_MOMENTUM",
+    "Activate BULL_RISK_ON entry routing in entry_signal_config.json for GROWTH_LEADER_PULLBACK",
+    "Target: >20 new trades/year from bull regime without degrading bear regime win rate"
+  ],
+  "notes": [
+    "Read this file before the long Markdown audit when resuming.",
+    "Use scripts/optimize_loop.py summarize-run for compact run comparisons.",
+    "Use scripts/optimize_loop.py append-audit for terse iteration logging."
+  ],
+  "updated_at_utc": "2026-06-16T23:31:59.264533+00:00"
+}

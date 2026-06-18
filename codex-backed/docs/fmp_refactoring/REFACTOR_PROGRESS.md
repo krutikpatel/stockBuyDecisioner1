@@ -112,7 +112,7 @@ Updated at the end of each story's implementation turn.
 
 **S4.2** Real-FMP baseline capture: 3 tests implemented, all skip cleanly when `FMP_API_KEY` not set.
 
-**S4.3** Activation gates: `ITERATIVE_IMPROVEMENTS_FMP_BASELINE_LOG.md` created with all 6 gate rows marked PENDING. `test_activation_gates.py` has 7 tests (6 skip w/o key, 1 checks audit log). Mode stays `legacy_yfinance`. Story remains `[ ]` until operator runs gates with a real key.
+**S4.3** Activation gates: `ITERATIVE_IMPROVEMENTS_FMP_LOG.md` created with all 6 gate rows marked PENDING. `test_activation_gates.py` has 7 tests (6 skip w/o key, 1 checks audit log). Mode stays `legacy_yfinance`. Story remains `[ ]` until operator runs gates with a real key.
 
 **S5.1** Watchlist yfinance block removed: `watchlist_config.json` no longer has a `yfinance` sub-object. Validator updated to make the block optional (with same hardcoded defaults in analyze.py). 2 tests pass. `yfinance_live.py` kept as dead-code shim (no imports reference it).
 
@@ -159,4 +159,3 @@ Current status
   - 2 pre-existing test_entry_engine failures — the quality_dislocation routing tests were already broken before this branch due to an earlier entry config tuning change. Not introduced by the FMP work.
   - FMP cache not wired to StatsCollector — the cache_hit_rate gate skips rather than passes because FMP's DiskCache hits/misses aren't reported to run_metrics_data_layer.json. The cache itself works correctly; only the observability metric is missing.
   - Per-minute rate limit on $30 plan — the 429 retry now handles this, but a cold full-universe fundamentals fetch (120 tickers × 5 endpoints = 600 calls) will trigger 2-3 retry pauses. The disk cache means this only happens once.
-
