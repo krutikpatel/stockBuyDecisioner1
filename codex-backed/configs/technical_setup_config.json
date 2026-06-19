@@ -4,7 +4,7 @@
       "description": "Price above SMA50 and SMA200, trend classified as uptrend",
       "all": [
         { "field": "sma50_relative", "operator": ">", "value": 0 },
-        { "field": "sma200_relative", "operator": ">", "value": 0 },
+        { "field": "sma200_relative", "operator": ">", "value": 2 },
         { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] }
       ]
     },
@@ -43,7 +43,7 @@
       "description": "Confirmed downtrend: below both SMAs, trend = downtrend, weak RS",
       "all": [
         { "field": "trend_label", "operator": "==", "value": "downtrend" },
-        { "field": "sma50_relative", "operator": "<", "value": -20 },
+        { "field": "sma50_relative", "operator": "<", "value": -22 },
         { "field": "sma200_relative", "operator": "<", "value": 0 }
       ]
     },

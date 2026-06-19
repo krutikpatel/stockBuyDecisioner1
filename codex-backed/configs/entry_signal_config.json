@@ -34,7 +34,8 @@
           "all": [
             { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
             { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
-            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 }
+            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
+            { "field": "sma50_relative", "operator": "between", "value": [2.0, 3.5] }
           ]
         },
         "entry_engine": "bull_pullback_entry"
@@ -125,7 +126,7 @@
         {
           "id": "deep_dislocation",
           "points": 25,
-          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -30 },
+          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -33 },
           "reason": "Price is meaningfully below the 52-week high"
         },
         {

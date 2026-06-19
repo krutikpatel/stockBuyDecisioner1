@@ -47,6 +47,8 @@ Use `--workers 1` by default — multiprocessing has sandbox friction; single-wo
 
 `set -a; source .env; set +a` exports `FMP_API_KEY` into the process environment. Plain `source .env` only sets a shell variable and Python will not see it.
 
+**IMPORTANT:** Do NOT prefix `bash codex-backed/scripts/run_fmp_backtest.sh` with `set -a; source .env; set +a`. The script sources `.env` itself internally. Always invoke it bare: `bash codex-backed/scripts/run_fmp_backtest.sh <run-id> [--no-rebuild-feature-cache]`
+
 ### Legacy mode (no FMP key needed)
 
 Force legacy yfinance-only mode with `--data-mode legacy_yfinance`. Useful for offline tests or when the FMP key is unavailable:
