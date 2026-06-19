@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/claude-backend/.venv/bin/python *)",
+      "Bash(PYTHONPATH=codex-backed/src claude-backend/.venv/bin/python -m codex_backed.cli validate-config --config-dir codex-backed/configs)",
+      "Bash(claude-backend/.venv/bin/python *)",
+      "Bash(PYTHONPATH=codex-backed/src claude-backend/.venv/bin/python *)",
+      "Bash(PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python *)",
+      "Bash(backend/.venv/bin/python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/.venv/bin/pip install *)",
+      "Bash(/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/.venv/bin/python -m pytest /Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/tests -q)",
+      "Bash(PYTHONPATH=/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/src /Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/.venv/bin/python *)",
+      "Bash(backend/.venv/bin/python -m pytest codex-backed/tests -q)",
+      "Bash(codex-backed/.venv/bin/python -m pytest codex-backed/tests -q)",
+      "Bash(cat)",
+      "Bash(codex-backed/.venv/bin/python /tmp/check_decisions.py)",
+      "Bash(codex-backed/.venv/bin/python -m pytest codex-backed/tests/test_legacy_mode_regression.py -v)",
+      "Bash(codex-backed/.venv/bin/python *)",
+      "Bash(backend/.venv/bin/python *)",
+      "Bash(PYTHONPATH=codex-backed/src backend/.venv/bin/python *)",
+      "Bash(bash codex-backed/scripts/run_fmp_backtest.sh fmp_bull_2)",
+      "Bash(bash codex-backed/scripts/run_fmp_backtest.sh *)",
+      "Bash(set -a)",
+      "Bash(set +a)",
+      "Bash(source .env)",
+      "Bash(bash codex-backed/scripts/run_fmp_backtest.sh *)"
+    ]
+  }
+}
