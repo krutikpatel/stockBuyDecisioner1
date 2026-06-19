@@ -27,6 +27,19 @@
         "entry_engine": "breakout_entry"
       },
       {
+        "id": "bull_pullback_route",
+        "priority": 131,
+        "description": "Pullback-to-support entry for RS leaders in bull regime",
+        "logic": {
+          "all": [
+            { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
+            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 }
+          ]
+        },
+        "entry_engine": "bull_pullback_entry"
+      },
+      {
         "id": "pullback_entry_route",
         "priority": 130,
         "description": "Clean trend pullback with confirmation",
@@ -358,6 +371,52 @@
       "penalty_rules": [],
       "decision_thresholds": [
         { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 45 } }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "bull_pullback_entry": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "sma50_zone",
+          "points": 25,
+          "logic": { "field": "sma50_relative", "operator": "between", "value": [-5, 5] },
+          "reason": "Price is near SMA50 — pullback to key support"
+        },
+        {
+          "id": "sma50_rising",
+          "points": 20,
+          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+          "reason": "SMA50 is rising — uptrend intact"
+        },
+        {
+          "id": "healthy_rsi_pullback",
+          "points": 20,
+          "logic": { "field": "rsi14", "operator": "between", "value": [38, 58] },
+          "reason": "RSI in pullback zone — not oversold, not extended"
+        },
+        {
+          "id": "confirmation",
+          "points": 25,
+          "logic": {
+            "any": [
+              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
+              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+            ]
+          },
+          "reason": "Volume dryup or positive RS confirms pullback quality"
+        },
+        {
+          "id": "not_extended",
+          "points": 10,
+          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "reason": "Entry is not extended above SMA20"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        { "label": "BUY_STARTER", "logic": { "field": "entry_score", "operator": ">=", "value": 70 } },
+        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 40 } }
       ],
       "fallback_label": "NO_TRADE"
     },

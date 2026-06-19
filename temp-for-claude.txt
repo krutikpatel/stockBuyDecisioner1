@@ -187,79 +187,173 @@ refer claude.md, codex-backed/TUNING_STATUS.md and then:
 
   ---
 
-   Working directory: /Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1
-  Scope: codex-backed/ only — do not touch any other directory.
+===== Base
+Expert panel
 
-  Session startup — run these once before iteration 1
+  Before proposing any change, reason from three perspectives in sequence. Label each voice explicitly.
 
-  cat codex-backed/iterative_improvements_using_backtests/optimization_state.json
-  tail -5 codex-backed/iterative_improvements_using_backtests/history.jsonl
-  cat codex-backed/iterative_improvements_using_backtests/optimization_memory.json
-  cat codex-backed/configs/entry_signal_config.json
+    [QUANT] Quantitative analyst.
+    Thinks in distributions, expectancy, and R-multiples. Asks: "What does the empirical exit-type breakdown tell us about where edge is leaking?" Looks at win-rate by exit reason, avg return by exit reason, and the ratio of trailing-stop winners to stop-loss
+  losers. Proposes changes that improve expected value (EV = win_rate × avg_winner − loss_rate × avg_loser) without over-fitting to a single metric.
 
-  Do not read any markdown files during the loop.
+    [DISCRETIONARY] Experienced swing/position trader.
+    Thinks in chart structure, volatility cycles, and trade management. Asks: "Is the stop too tight for the setup's natural noise? Is the target leaving money on the table?" Interprets ATR multiples in terms of realistic price action. Flags when a max-hold
+  duration is cutting a trend that needs more time to breathe.
 
-  Goal
+    [RISK] Risk manager / portfolio allocator.
+    Thinks in drawdown, tail-risk, and frequency-vs-quality trade-offs. Asks: "Does this change widen the loss distribution or narrow it? What is the worst-case scenario if the parameter is wrong?" Prefers changes that reduce max-loss per trade before optimising
+  upside.
 
-  Current best (fmp_baseline_02): 104 trades / 15 years, all BEAR_RISK_OFF.
-  The strategy detects ~19,000 bull-regime candidates (BREAKOUT_MOMENTUM, GROWTH_LEADER_PULLBACK) but routes 0 to actionable — because entry_signal_config.json never approves them.
-
-  Target: Activate BULL_RISK_ON entries to reach ≥ 20 trades/year without dropping bear-regime win rate below 90%.
-  Primary lever: entry_signal_config.json — entry routing, scoring thresholds, and regime gates for bull setups.
-
-  Per-iteration loop (repeat 10 times)
-
-  Step 1 — Choose one change
-  Check optimization_state.json → tried[] and optimization_memory.json → do_not_repeat before proposing. One config key changed per iteration. State your hypothesis: what you're changing, why, and what outcome you expect.
-
-  Step 2 — Validate
-  PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli validate-config --config-dir codex-backed/configs
-
-  Step 3 — Run backtest
-  set -a; source .env; set +a
-  bash codex-backed/scripts/run_fmp_backtest.sh fmp_bull_<N>
-
-  Step 4 — Read results (compact only)
-  codex-backed/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/fmp_bull_<N>
-  Also check by_market_regime and actionable_by_setup from metrics.json to see if bull setups fired.
-
-  Step 5 — Decide
-
-  ┌──────────────────────────────────────────────────┬──────────────────────────────────┐
-  │                    Condition                     │             Decision             │
-  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
-  │ New bull trades appeared AND bear win rate ≥ 90% │ accept                           │
-  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
-  │ Trade count increased, metrics acceptable        │ accept                           │
-  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
-  │ Bear win rate dropped below 90%                  │ reject                           │
-  ├──────────────────────────────────────────────────┼──────────────────────────────────┤
-  │ No new trades, zero change                       │ reject — try a bigger lever next │
-  └──────────────────────────────────────────────────┴──────────────────────────────────┘
-
-  If rejected: revert the config change before proceeding.
-
-  Step 6 — Log
-  codex-backed/.venv/bin/python codex-backed/scripts/optimize_loop.py append-audit \
-    --run-id fmp_bull_<N> \
-    --baseline-run-id <last_accepted_run_id> \
-    --iteration <N> \
-    --change "<one line: what changed and direction>" \
-    --decision <accept|reject> \
-    --next "<what to try next>"
-
-  This updates both history.jsonl and optimization_state.json automatically.
-
-  Step 7 — Report
-  One line: [iter N] <change> → <accept|reject> (trade count: X→Y, bear_wr: Z%, delta_pf: ±W)
+  After all three speak, synthesize into one concrete config change with a single parameter.
 
   ---
+
+  Step 2 — Choose one change
+    One config key, one parameter. State your hypothesis: what changes, why, and what outcome you expect.
+
+  Step 3 — Validate
+    PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli validate-config \
+      --config-dir codex-backed/configs
+
+  Step 4 — Run backtest
+    bash codex-backed/scripts/run_fmp_backtest.sh fmp_exit_<N> --no-rebuild-feature-cache
+
+  Step 5 — Read results (compact only)
+    codex-backed/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/fmp_exit_<N>
+
+    Also extract by_market_regime and by_exit_reason from metrics.json.
+
+  Step 6 — Decide
+    Accept if the new run is better than the previous accepted run on balance — any meaningful improvement in overall metrics (WR, avg return, PF) with no severe regression elsewhere. Reject if the run is clearly worse across the board or introduces a sharp
+  regression in a key metric. If rejected, revert the config change before proceeding.
+
+  Step 7 — Log
+    codex-backed/.venv/bin/python codex-backed/scripts/optimize_loop.py append-audit \
+      --run-id fmp_exit_<N> \
+      --baseline-run-id <last_accepted_run_id> \
+      --iteration <N> \
+      --change "<one line: what changed and direction>" \
+      --decision <accept|reject> \
+      --next "<what to try next>"
+
+  Step 8 — Report
+    One line per expert voice (what each said) + one line: [iter N] <change> → <accept|reject>
+    (overall_wr: A%→B%, avg: C%→D%, pf: E→F, delta vs last accepted)
+
+  ---
+
   Token rules
 
-  - State = optimization_state.json. History = history.jsonl. Never re-read markdown.
-  - Use run_summary.py output only — never dump full metrics.json.
-  - Read entry_signal_config.json once at startup; re-read only if you need to verify a specific field mid-loop.
+    - State = optimization_state.json. Never re-read markdown files.
+    - Use run_summary.py output + targeted metrics.json extracts only — never dump full metrics.json.
+    - Read exit_policy_config.json once at startup; re-read only to verify a specific field.
+    - Expert panel reasoning should be ≤ 3 sentences per voice per iteration.
+
+  ---
 
   Start
 
-  Begin iteration 2 (iterations 0 and 1 are already logged in history).
+  Begin iteration 1. Run the expert panel first, then propose your change.
+
+====== refined
+
+ROLE
+You are running an iterative backtest optimization loop on an exit-policy config. Your objective is to improve out-of-sample expectancy, not to maximize any single in-sample metric. Treat overfitting as the primary enemy: a change that improves metrics by carving the dataset into a narrower regime is a regression, not a win.
+
+INVARIANTS (read once, never violate)
+- One config key, one parameter per iteration. No compound changes.
+- State lives in optimization_state.json. Never re-read markdown.
+- Use run_summary.py + targeted metrics.json extracts (by_market_regime, by_exit_reason) only. Never dump full metrics.json.
+- Read exit_policy_config.json once at startup; re-read only to verify a single field before editing.
+- Expert reasoning: ≤3 sentences per voice.
+
+DECISION RULE (apply literally — no "on balance" hand-waving)
+Compare new run vs. last ACCEPTED run. Compute deltas for: overall WR, avg return, profit factor (PF), max drawdown, trade count, and PF stability across regimes (min regime PF).
+ACCEPT only if ALL hold:
+  1. PF improves OR (PF flat within ±0.05 AND avg return improves).
+  2. No single regime's PF drops by more than 15% relative.
+  3. Trade count does not fall below {MIN_TRADES} (set this to your overfitting floor, e.g. 150). A change that "improves" metrics by shrinking sample size is REJECTED by default.
+  4. Max drawdown does not worsen by more than 10% relative.
+REJECT otherwise, and revert the config change before the next iteration.
+Flag OVERFIT-SUSPECT (still reject) if WR jumps >5pts while trade count drops >20% — that's regime-carving, not edge.
+
+STOPPING CONDITION
+Stop and report final config when any of:
+  - 5 consecutive rejects, OR
+  - last 3 accepts each improved PF by <2% (diminishing returns), OR
+  - iteration cap {N_MAX} reached.
+
+PER-ITERATION SEQUENCE
+
+Step 1 — Expert panel (label each voice, ≤3 sentences each)
+  [QUANT] Distributions, expectancy, R-multiples. Reads WR and avg-return by exit_reason, and the trailing-stop-winner : stop-loss-loser ratio. Targets EV = win_rate×avg_winner − loss_rate×avg_loser without leaning on one metric.
+  [DISCRETIONARY] Chart structure, volatility cycles, trade management. Asks whether the stop is inside the setup's natural ATR noise, whether targets leave trend on the table, and whether max-hold is amputating live trends.
+  [RISK] Drawdown, tail risk, frequency-vs-quality. Asks whether the change widens or narrows the loss distribution and what breaks if the parameter is wrong. Prefers cutting max-loss-per-trade before chasing upside.
+  Each voice must reference the prior iteration's actual numbers, not generic priors.
+
+Step 2 — Synthesize → ONE change
+  State: config key, old value → new value, hypothesis (what changes, why, expected direction of each affected metric). Predict the outcome BEFORE running — this makes overfitting visible when results diverge from the thesis.
+
+Step 3 — Validate
+  PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli validate-config --config-dir codex-backed/configs
+
+Step 4 — Backtest
+  bash codex-backed/scripts/run_fmp_backtest.sh fmp_loop_<CURRENT-DATE-TIME>-<N> --no-rebuild-feature-cache
+
+Step 5 — Read results (compact only)
+  codex-backed/.venv/bin/python codex-backed/scripts/run_summary.py codex-backed/results/fmp_loop_<CURRENT-DATE-TIME>-<N>
+  Extract by_market_regime and by_exit_reason from metrics.json.
+
+Step 6 — Decide
+  Apply DECISION RULE literally. State which clause passed/failed. If reject, revert config now.
+
+Step 7 — Log
+  codex-backed/.venv/bin/python codex-backed/scripts/optimize_loop.py append-audit \
+    --run-id fmp_loop_<CURRENT-DATE-TIME>-<N> --baseline-run-id <last_accepted_run_id> --iteration <N> \
+    --change "<key: old→new>" --decision <accept|reject> \
+    --predicted "<what you expected>" --actual "<what happened, incl. which clause decided it>" \
+    --next "<what to try next, and what NOT to retry and why>"
+
+Step 8 — Report (one line per voice + one summary line)
+  [iter N] <change> → <accept|reject> (WR A%→B%, avg C%→D%, PF E→F, maxDD G%→H%, trades I→J | reason: <decisive clause>)
+
+TOKEN DISCIPLINE (additions)
+- optimization_state.json is the ONLY memory across iterations. After logging an iteration, do NOT re-read prior run summaries or metrics.json files — the deltas you need are already in state. If you need a past number, read it from state, not from disk.
+- Carry forward only the last ACCEPTED run's key metrics (WR, avg, PF, maxDD, trades, min-regime-PF) in state. Do not retain rejected runs' full metrics — store one line: iter, change, reject reason.
+- Per regime/exit_reason extracts: pull only the fields the decision rule needs (PF, WR, avg, count). Do not echo the full nested objects into your reasoning.
+- Do not restate the full panel framework, decision rule, or invariants each iteration — they are fixed. Reference them by name.
+- When reporting, emit only the Step 8 line and the audit append. Do not re-summarize the iteration in prose.
+
+Start
+Begin iteration 1. Run the panel against the current baseline numbers first, then propose your change.
+
+=====
+prefix for next sessions:
+Current state (read optimization_state.json to confirm):
+  - Best accepted run: fmp_exit_12
+  - last_completed_iteration: 22
+  - Overall: 502 trades, PF 4.286, avg 3.567%, WR 74.5%
+  - Short-term: 251 trades, PF 3.728, avg 4.077%, WR 62.9%
+  - Medium-term: 251 trades, PF 5.517, avg 3.057%, WR 86.1%
+
+  Live config (exit_policy_config.json) — accepted state:
+  short_term:  max_sim=40d, trail_atr=3.5, partial_sell=1%, partial_target=0.75R, breakeven@0.75R
+  medium_term: max_sim=150d, trail_atr=10.0 (enabled), partial_sell=1%, partial_target=0.2R, breakeven@0.2R
+
+  Hard constraints (NEVER violate):
+  - short_term.max_simulation_days ≤ 40
+  - medium_term.max_simulation_days ≤ 150
+
+  Known-rejected parameters (do NOT re-test):
+  - short_term.trailing_stop.atr_multiplier < 3.0 — bear quality_dislocation has 2-3 ATR intra-trend pullbacks
+  - short_term.trailing_stop.atr_multiplier = 4.0 — flat PF, declining avg
+  - medium_term.trailing_stop.atr_multiplier = 5.0 — hurts BULL_RISK_ON PF -18.7%
+  - medium_term.trailing_stop.enabled = false — already tested; enabling improved PF
+
+  Untested exit-policy levers (suggested queue):
+  1. medium_term.initial_stop.atr_multiplier: 2.375 → 2.0 or 2.75 (tighter/wider initial stop changes stop-loss exit quality)
+  2. short_term.initial_stop.atr_multiplier: 2.5 → 2.0 or 3.0
+  3. medium_term.partial_profit.target_r_multiple: 0.2 → 0.5 (currently fires very early; raise it to let trades breathe longer before breakeven lock)
+  4. medium_term.time_stop: enable with days_without_progress=25, min_open_return_pct=2.0 (prune stale medium-term trades)
+  5. short_term.time_stop: enable with days_without_progress=12, min_open_return_pct=1.0
+  
