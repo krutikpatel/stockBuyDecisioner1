@@ -266,6 +266,9 @@ INVARIANTS (read once, never violate)
 - Use run_summary.py + targeted metrics.json extracts (by_market_regime, by_exit_reason) only. Never dump full metrics.json.
 - Read exit_policy_config.json once at startup; re-read only to verify a single field before editing.
 - Expert reasoning: ≤3 sentences per voice.
+- you cannot remove tickers from list 
+- short term definition : max 40 to 45 days
+- medium term definition : max 150 days 
 
 DECISION RULE (apply literally — no "on balance" hand-waving)
 Compare new run vs. last ACCEPTED run. Compute deltas for: overall WR, avg return, profit factor (PF), max drawdown, trade count, and PF stability across regimes (min regime PF).
@@ -356,4 +359,200 @@ Current state (read optimization_state.json to confirm):
   3. medium_term.partial_profit.target_r_multiple: 0.2 → 0.5 (currently fires very early; raise it to let trades breathe longer before breakeven lock)
   4. medium_term.time_stop: enable with days_without_progress=25, min_open_return_pct=2.0 (prune stale medium-term trades)
   5. short_term.time_stop: enable with days_without_progress=12, min_open_return_pct=1.0
-  
+
+
+
+ Working directory: /Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1
+  All work scoped to: codex-backed/ (do not touch backend/, frontend/, legacy/)
+
+  ---
+  Current State
+
+  Best accepted run: fmp_loop_20260619-81-103
+  Last completed iteration: 123 (20 consecutive rejects since last accept)
+
+  overall:      n=152  avg=11.639%  WR=55.263%  PF=73.959
+  short_term:   n=76   avg=7.955%   WR=97.368%  PF=55.020
+  medium_term:  n=76   avg=15.324%  WR=13.158%  PF=90.191
+  exit reasons: 12 MAX_SIM_WINDOW avg=115.557%, 3 STOP_LOSS avg=-8.083%, 137 TRAILING_STOP avg=2.969%
+
+  Last accepted change (iter 103): deep_dislocation dist_from_52w_high: <=-25 -> <=-33 in entry_signal_config.json. This removed 3 COF stop-loss trades by raising the threshold. PF jumped from ~37 to 73.959.
+---------
+<> Opus created prompt from analysis on my data:
+--------------------------------------------------
+ROLE
+You are running an iterative backtest optimization loop on the strategy configs
+(entry, exit, technical setup). Objective: improve OUT-OF-SAMPLE,
+drawdown-penalized return — NOT any single in-sample metric, NOT profit factor.
+Overfitting is the primary enemy: a change that improves metrics by carving the
+dataset into a narrower regime, shrinking the sample, or excluding losing names
+is a REGRESSION, not a win.
+
+CONTEXT — WHY (read once)
+A prior loop optimized PROFIT FACTOR on full 2010–2025 in-sample data via
+trade-count-reducing filters and a 65-name exclusion list. Result: PF 73.96 at
+152 trades, median return 0.0026%, a 13% win-rate medium-term book at PF 90 —
+a curve-fit artifact. Do NOT chase PF. Do NOT add tickers to any exclusion list.
+
+THE METRICS SCRIPT IS AUTHORITATIVE
+All metrics and the accept/reject verdict come from robust_metrics.py. You NEVER
+hand-compute MAR, drawdown, Sharpe, PF, or the verdict. The script reads the
+run's per-trade ledger, splits by exit date (train/validate/holdout), and exits:
+  0 = ACCEPT or BASELINE,  2 = REJECT,  3 = HARD-CONSTRAINT fail,  4 = OVERFIT.
+Backtester MUST write a per-trade ledger per run at
+  codex-backed/results/<run_id>/trades.csv
+with columns: ticker, entry_date, exit_date, return_pct, market_regime.
+If that file is missing, STOP and report — do not fabricate metrics.
+
+OBJECTIVE FUNCTION
+Primary (MAXIMIZE): OOS_MAR = validate CAGR / validate MaxDrawdown.
+PF and win_rate are DIAGNOSTICS — reported by the script, never targeted.
+
+HARD CONSTRAINTS (script enforces; any failure => exit 3 => REJECT)
+  trade_count(full) >= 300 ; trade_count(validate) >= 100 ;
+  mean/median ratio <= 8 (else TAIL_DEPENDENT) ; max_drawdown finite ;
+  no new exclusion-list tickers.
+
+INVARIANTS (never violate)
+- One config key, one parameter per iteration. No compound changes.
+- State lives in optimization_state.json + state/last_accepted_metrics.json.
+  Never re-read markdown.
+- Read configs once at startup; re-read only to verify a single field before edit.
+- Expert reasoning: <=3 sentences per voice.
+- You cannot add or remove tickers from the universe during the loop.
+  # one-time exclusion-list removal happens in CLEANUP, before iteration 1.
+- short term: max 40–45 days ; medium term: max 150 days.
+
+WALK-FORWARD (script-enforced; you never pick splits)
+robust_metrics.py rolls a 1-year test fold across 2015–2022 and seals 2023–2025
+as holdout. Selection is on RECENCY-WEIGHTED fold MAR (3-yr half-life), gated by
+worst-fold MAR and a >50% profitable-fold requirement. COVID is one fold, not
+the verdict. You read the script's numbers; you never choose or reason about
+splits yourself.
+
+
+MANDATORY CLEANUP — ONCE, BEFORE ITERATION 1
+  1. Remove the 65-ticker weak_ticker_exclusion_route list; replace with a
+     DYNAMIC liquidity + trend-quality rule any ticker can pass/fail.
+  2. short_term.partial_profit.breakeven_after_r_multiple: 0.05 -> 0.5 (min).
+  3. medium_term.partial_profit.sell_pct: 0 -> 0.33.
+  4. Add a cost model to every trade: commission + spread + ~5 bps slippage.
+  5. Align exit_policy_config max_simulation_days to the 45 / 150 day defs.
+  6. Run the backtest, then score it as the FIRST baseline (see Step 5 form,
+     with no --baseline), and PROMOTE it. This honest run is the last-accepted
+     anchor; expect PF ~1.3–2.0, WR ~50s.
+
+DECISION RULE
+The script applies it literally vs state/last_accepted_metrics.json:
+accept needs validate-MAR improvement CONFIRMED on train, no regime-PF drop
+>15%, trade floors held, validate maxDD not worse >10%, tail guard intact, and
+no OVERFIT-SUSPECT (WR +>5pts while trades -<20%, or trades -<20% for <5% MAR
+gain). You read the verdict; you do not re-derive it.
+
+STOPPING CONDITION
+Stop when any: 5 consecutive rejects; OR validate MAR not improved for 15 iters;
+OR last 3 accepts each improved validate MAR by <2%; OR iteration cap {N_MAX}.
+AT STOP run the FINAL HOLDOUT (Step S). Exit 4 => declare OVERFIT, distrust config.
+
+PER-ITERATION SEQUENCE
+
+Step 1 — Expert panel (label each, <=3 sentences, cite prior iter's actual
+numbers from state, not generic priors)
+  [QUANT] expectancy, R-multiples, mean/median ratio, winner:loser geometry.
+  [DISCRETIONARY] is the stop inside natural ATR noise; do targets leave trend;
+    is max-hold amputating live trends.
+  [RISK] does the change widen or narrow the loss distribution; does the gain
+    survive on validate; cut max-loss-per-trade before chasing upside.
+
+Step 2 — Synthesize -> ONE change
+  State key, old -> new, and predicted direction on BOTH train and validate.
+  Divergence of result from thesis is your overfitting alarm.
+
+Step 3 — Validate config
+  PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli \
+    validate-config --config-dir codex-backed/configs
+
+Step 4 — Backtest (must emit results/<run_id>/trades.csv)
+  bash codex-backed/scripts/run_fmp_backtest.sh fmp_loop_<DATE-TIME>-<N> \
+    --no-rebuild-feature-cache
+
+Step 5 — Score + verdict (authoritative; holdout locked)
+  codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py score \
+  --trades codex-backed/results/fmp_loop_<DATE-TIME>-<N>/trades.csv \
+  --run-id fmp_loop_<DATE-TIME>-<N> \
+  --baseline codex-backed/state/last_accepted_metrics.json \
+  --out codex-backed/state/run_<run_id>_metrics.json --holdout-locked
+  Capture the printed verdict line + exit code. Exit 0=ACCEPT, 2/3=REJECT.
+
+Step 6 — Decide (read, don't re-derive)
+  exit 0 -> ACCEPT ; exit 2/3 -> REJECT (3 = hard-constraint) ;
+  on REJECT, revert the config change NOW before the next iteration.
+
+Step 7 — Decide → promote (if accept) → log  [ONE logger only]
+
+  6→7 handoff: you already have the verdict + exit code from Step 5/6.
+
+  (a) If ACCEPT, promote the run to be the new baseline FIRST
+      (this sets the anchor the next iteration scores against):
+    codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py promote \
+      --metrics codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
+      --baseline codex-backed/state/last_accepted_metrics.json
+
+  (b) If REJECT, revert the config change now. Do NOT promote.
+
+  (c) Log the iteration EXACTLY ONCE (both accept and reject), reading the
+      already-computed metrics file — never recomputing:
+    codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py log \
+      --metrics codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
+      --history codex-backed/history.jsonl --iteration <N> \
+      --change "<key: old→new>" --decision <accept|reject> \
+      --note "<predicted vs actual; decisive clause from script>" \
+      --next "<what to try next; what NOT to retry and why>"
+
+  (d) Record the metrics-json path in optimization_state.json for cross-iter memory.
+
+Step 8 — Report (one line per voice + one summary line; nothing else)
+  [iter N] <change> -> <accept|reject> (VAL MAR A→B, CAGR C%→D%, maxDD E%→F%,
+    trades G→H, PF I→J diag | reason: <decisive clause from script>)
+
+Step S — FINAL HOLDOUT (once, at STOP, on best accepted run)
+  robust_metrics.py score --trades .../trades.csv --run-id <best> --final-holdout ...
+  exit 0 = ROBUST ; exit 4 = OVERFIT, distrust config.
+
+TOKEN DISCIPLINE
+- optimization_state.json + last_accepted_metrics.json are the ONLY cross-iter
+  memory. After logging, do NOT re-read prior run summaries or metrics json.
+- The score step prints everything you need; never echo full metrics objects.
+- Carry forward only last-accepted key metrics (validate MAR/CAGR/maxDD/trades/
+  min-regime-PF/mean-median, PF+WR diagnostics). Rejected runs: one line only.
+- Do not restate framework/rule/invariants each iteration — reference by name.
+- Emit only the Step 8 line + the audit append.
+
+=============
+# how many trades, and what do the monster returns look like?
+python3 -c "
+import csv
+rows=[r for r in csv.DictReader(open('results/fmp_loop_20260619-163/trades.csv'))
+      if r['exit_date'][:4]=='2020']
+rets=sorted(float(r['realized_return_pct']) for r in rows)
+print('2020 trades:', len(rows))
+print('min/median/max return:', rets[0], rets[len(rets)//2], rets[-1])
+print('top 5:', rets[-5:])
+"
+python3 -c "
+import csv
+rows = list(csv.DictReader(open('results/fmp_loop_20260619-163/trades.csv')))
+def fold_stats(year, exclude_crash=False):
+    fr = [r for r in rows if r['exit_date'][:4]==str(year)]
+    if exclude_crash:
+        fr = [r for r in fr if not ('2020-03-01' <= r['entry_date'] <= '2020-05-31')]
+    rets = [float(r['realized_return_pct']) for r in fr]
+    if not rets: return None
+    import statistics
+    return dict(n=len(rets), mean=round(statistics.fmean(rets),2),
+                median=round(statistics.median(rets),3),
+                wins=round(sum(x>0 for x in rets)/len(rets)*100,1))
+print('2020 all:     ', fold_stats(2020))
+print('2020 ex-crash:', fold_stats(2020, exclude_crash=True))
+
+"

@@ -1,0 +1,4 @@
+avg_return_pct,count,median_return_pct,profit_factor,selected_setup,win_rate_pct
+-0.5518,56,0.0,0.3795,BREAKOUT_MOMENTUM,46.4286
+18.1607,88,0.0049,77.1209,BROKEN_CHART_QUALITY_RECOVERY,57.9545
+2.6722,64,0.002,53.558,GROWTH_LEADER_PULLBACK,51.5625

@@ -4,17 +4,6 @@
     "method": "priority_first_match",
     "rules": [
       {
-        "id": "weak_ticker_exclusion_route",
-        "priority": 1000,
-        "description": "Avoid tickers with persistent negative edge in native my_run_02",
-        "logic": {
-          "field": "ticker",
-          "operator": "in",
-          "value": ["SLB", "DLTR", "TXN", "SYK", "BA", "GIS", "SNOW", "BIIB", "ADI", "CHTR", "MSFT", "SRE", "ITW", "AMZN", "TTWO", "AVGO", "KR", "JNJ", "HD", "UNP", "CSX", "BMY", "TGT", "PYPL", "ABT", "KMB", "SPOT", "ASML", "UPS", "GM", "SNAP", "IQV", "LRCX", "RCL", "USB", "NVDA", "ISRG", "AMAT", "MO", "JPM", "PLD", "AXP", "AAPL", "TSM", "INTC", "LULU", "LYV", "BAC", "BK", "ORCL", "BLK", "AMD", "WFC", "F", "ECL", "DIS", "CBRE", "CRM", "NFLX", "NOW", "MMM", "NSC", "BKNG", "MS", "GOOGL"]
-        },
-        "entry_engine": "no_trade"
-      },
-      {
         "id": "breakout_entry_route",
         "priority": 140,
         "description": "Confirmed breakout entry in resilient or liquidity-supportive regimes",
@@ -34,7 +23,7 @@
           "all": [
             { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
             { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
-            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
+            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 4.0 },
             { "field": "sma50_relative", "operator": "between", "value": [2.0, 3.5] }
           ]
         },
@@ -132,7 +121,7 @@
         {
           "id": "oversold",
           "points": 20,
-          "logic": { "field": "rsi14", "operator": "<=", "value": 35 },
+          "logic": { "field": "rsi14", "operator": "<=", "value": 40 },
           "reason": "RSI is deeply oversold"
         },
         {
@@ -156,25 +145,9 @@
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        {
-          "label": "BUY_FULL",
-          "logic": {
-            "all": [
-              { "field": "entry_score", "operator": ">=", "value": 80 },
-              { "field": "entry_score", "operator": "<=", "value": 80 }
-            ]
-          }
-        },
-        {
-          "label": "BUY_STARTER",
-          "logic": {
-            "all": [
-              { "field": "entry_score", "operator": ">=", "value": 70 },
-              { "field": "entry_score", "operator": "<=", "value": 70 }
-            ]
-          }
-        },
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 30 } }
+        { "label": "BUY_FULL",    "logic": { "field": "entry_score", "operator": ">=", "value": 80 } },
+        { "label": "BUY_STARTER", "logic": { "field": "entry_score", "operator": ">=", "value": 70 } },
+        { "label": "WATCHLIST",   "logic": { "field": "entry_score", "operator": ">=", "value": 30 } }
       ],
       "fallback_label": "NO_TRADE"
     },
