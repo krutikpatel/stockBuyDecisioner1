@@ -134,6 +134,7 @@ class TradeSimulator:
             exit_price = final_close
             exit_reason = "MAX_SIM_WINDOW_EXIT"
 
+        realized -= float(exit_policy.get("cost_pct", 0.0))
         mae_pct = round((min_low - entry_price) / entry_price * 100.0, 4)
         mfe_pct = round((max_high - entry_price) / entry_price * 100.0, 4)
         mfe_capture = round(realized / mfe_pct * 100.0, 4) if mfe_pct > 0 else None

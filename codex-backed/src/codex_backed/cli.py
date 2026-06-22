@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -49,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--horizons", default=None, help="Comma-separated horizons. Defaults to watchlist_config.json.")
             sub.add_argument("--period", default=None, help="yfinance lookback period. Defaults to watchlist_config.json.")
             sub.add_argument("--interval", default=None, help="yfinance interval. Defaults to watchlist_config.json.")
+            sub.add_argument("--data-mode", default=None, dest="data_mode", help="Override active_mode from data_provider_config.json.")
         if command == "backtest":
             sub.add_argument("--tickers", default=None, help="Comma-separated ticker list.")
             sub.add_argument("--start", default=None, help="Backtest start date YYYY-MM-DD.")
@@ -63,12 +65,21 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument("--force-refresh", action="store_true", help="Rebuild native feature cache for this run.")
             sub.add_argument("--rebuild-feature-cache", action="store_true", help="Rebuild native feature cache for this run.")
             sub.add_argument("--no-report", action="store_true", help="Skip HTML report generation.")
+            sub.add_argument("--data-mode", default=None, dest="data_mode", help="Override active_mode from data_provider_config.json.")
         if command in {"report", "compare"}:
             sub.add_argument("--run-id", default=None, help="Result run id to inspect.")
         if command == "compare":
             sub.add_argument("--baseline-run-id", default=None, help="Baseline run id.")
 
     return parser
+
+
+def _resolve_data_mode(cli_override: str | None, bundle) -> tuple[str, str]:
+    """Return (effective_mode, origin) where origin is 'cli' or 'config'."""
+    if cli_override:
+        return cli_override, "cli"
+    cfg_mode = bundle.data.get("data_provider", {}).get("active_mode", "legacy_yfinance")
+    return cfg_mode, "config"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,12 +99,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "analyze":
+        data_mode = getattr(args, "data_mode", None)
+        if data_mode is not None and os.environ.get("CODEX_NO_OVERRIDES") == "1":
+            print("Error: --data-mode override rejected (CODEX_NO_OVERRIDES=1 is set)", file=sys.stderr)
+            return 2
+
         output_dir = Path(args.output_dir).resolve()
         paths = create_run_paths(output_dir, run_id=args.run_id)
+        effective_mode, origin = _resolve_data_mode(data_mode, bundle)
         write_manifest(
             paths,
             command=args.command,
-            cli_args=vars(args),
+            cli_args={
+                **vars(args),
+                "effective_data_mode": effective_mode,
+                "mode_override_origin": origin,
+            },
             config_dir=config_dir,
         )
         tickers = [ticker.strip().upper() for ticker in args.tickers.split(",")] if args.tickers else None
@@ -107,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
                     horizons=horizons,
                     period=args.period,
                     interval=args.interval,
+                    data_mode=data_mode,
                 ),
             )
         except Exception as exc:
@@ -116,12 +138,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "backtest":
+        data_mode = getattr(args, "data_mode", None)
+        if data_mode is not None and os.environ.get("CODEX_NO_OVERRIDES") == "1":
+            print("Error: --data-mode override rejected (CODEX_NO_OVERRIDES=1 is set)", file=sys.stderr)
+            return 2
+
         output_dir = Path(args.output_dir).resolve()
         paths = create_run_paths(output_dir, run_id=args.run_id)
+        effective_mode, origin = _resolve_data_mode(data_mode, bundle)
         write_manifest(
             paths,
             command=args.command,
-            cli_args=vars(args),
+            cli_args={
+                **vars(args),
+                "effective_data_mode": effective_mode,
+                "mode_override_origin": origin,
+            },
             config_dir=config_dir,
         )
         tickers = [ticker.strip().upper() for ticker in args.tickers.split(",")] if args.tickers else None
@@ -138,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
                     force_refresh=args.force_refresh,
                     rebuild_feature_cache=args.rebuild_feature_cache,
                     no_report=args.no_report,
+                    data_mode=data_mode,
                 ),
             )
         except Exception as exc:

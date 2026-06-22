@@ -20,6 +20,10 @@ _BACKTEST_CONFIG: dict[str, Any] | None = None
 
 
 def worker_init(config_data: dict[str, dict[str, Any]]) -> None:
+    assert "data_provider_runtime" not in config_data, (
+        "Providers must not be passed to workers. "
+        "Prefetch in the main process; pass feature rows."
+    )
     global _ENTRY_ENGINE, _ENTRY_CONFIG, _TECHNICAL_CONFIG, _RISK_CONFIG, _EXIT_CONFIG, _BACKTEST_CONFIG
     _ENTRY_CONFIG = config_data["entry"]
     _TECHNICAL_CONFIG = config_data["technical_setup"]

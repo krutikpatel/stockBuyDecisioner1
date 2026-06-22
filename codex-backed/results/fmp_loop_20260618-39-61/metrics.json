@@ -1,0 +1,786 @@
+{
+  "overall": {
+    "count": 318,
+    "avg_return_pct": 9.9615,
+    "median_return_pct": 0.0028,
+    "win_rate_pct": 54.717,
+    "profit_factor": 11.2489
+  },
+  "entry_decisions": {
+    "count": 306802,
+    "actionable_count": 324
+  },
+  "by_entry_label": [
+    {
+      "entry_label": "BUY_FULL",
+      "count": 178,
+      "avg_return_pct": 12.8902,
+      "median_return_pct": 0.0034,
+      "win_rate_pct": 56.7416,
+      "profit_factor": 10.2681
+    },
+    {
+      "entry_label": "BUY_STARTER",
+      "count": 140,
+      "avg_return_pct": 6.238,
+      "median_return_pct": 0.0022,
+      "win_rate_pct": 52.1429,
+      "profit_factor": 15.1955
+    }
+  ],
+  "by_entry_strategy": [
+    {
+      "entry_strategy": "bull_pullback_entry",
+      "count": 66,
+      "avg_return_pct": 1.5922,
+      "median_return_pct": 0.002,
+      "win_rate_pct": 51.5152,
+      "profit_factor": 33.2943
+    },
+    {
+      "entry_strategy": "quality_dislocation",
+      "count": 252,
+      "avg_return_pct": 12.1535,
+      "median_return_pct": 0.0034,
+      "win_rate_pct": 55.5556,
+      "profit_factor": 11.0143
+    }
+  ],
+  "by_entry_setup": [
+    {
+      "selected_setup": "BROKEN_CHART_QUALITY_RECOVERY",
+      "count": 252,
+      "avg_return_pct": 12.1535,
+      "median_return_pct": 0.0034,
+      "win_rate_pct": 55.5556,
+      "profit_factor": 11.0143
+    },
+    {
+      "selected_setup": "GROWTH_LEADER_PULLBACK",
+      "count": 66,
+      "avg_return_pct": 1.5922,
+      "median_return_pct": 0.002,
+      "win_rate_pct": 51.5152,
+      "profit_factor": 33.2943
+    }
+  ],
+  "by_horizon": [
+    {
+      "horizon": "medium_term",
+      "count": 159,
+      "avg_return_pct": 11.7946,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 18.239,
+      "profit_factor": 11.3225
+    },
+    {
+      "horizon": "short_term",
+      "count": 159,
+      "avg_return_pct": 8.1285,
+      "median_return_pct": 0.007,
+      "win_rate_pct": 91.195,
+      "profit_factor": 11.1439
+    }
+  ],
+  "by_market_regime": [
+    {
+      "market_regime": "BEAR_RISK_OFF",
+      "count": 252,
+      "avg_return_pct": 12.1535,
+      "median_return_pct": 0.0034,
+      "win_rate_pct": 55.5556,
+      "profit_factor": 11.0143
+    },
+    {
+      "market_regime": "BULL_RISK_ON",
+      "count": 66,
+      "avg_return_pct": 1.5922,
+      "median_return_pct": 0.002,
+      "win_rate_pct": 51.5152,
+      "profit_factor": 33.2943
+    }
+  ],
+  "by_exit_reason": [
+    {
+      "exit_reason": "MAX_SIM_WINDOW_EXIT",
+      "count": 35,
+      "avg_return_pct": 76.4716,
+      "median_return_pct": 63.4454,
+      "win_rate_pct": 94.2857,
+      "profit_factor": null
+    },
+    {
+      "exit_reason": "STOP_LOSS_EXIT",
+      "count": 32,
+      "avg_return_pct": -9.6589,
+      "median_return_pct": -8.5388,
+      "win_rate_pct": 0.0,
+      "profit_factor": 0.0
+    },
+    {
+      "exit_reason": "TRAILING_STOP_EXIT",
+      "count": 251,
+      "avg_return_pct": 3.1887,
+      "median_return_pct": 0.0028,
+      "win_rate_pct": 56.1753,
+      "profit_factor": null
+    }
+  ],
+  "by_ticker": [
+    {
+      "ticker": "ADBE",
+      "count": 4,
+      "avg_return_pct": 0.0018,
+      "median_return_pct": 0.0013,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "AEP",
+      "count": 2,
+      "avg_return_pct": 0.0013,
+      "median_return_pct": 0.0013,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "AIG",
+      "count": 4,
+      "avg_return_pct": -4.6183,
+      "median_return_pct": -4.2713,
+      "win_rate_pct": 25.0,
+      "profit_factor": 0.001
+    },
+    {
+      "ticker": "ANET",
+      "count": 4,
+      "avg_return_pct": 0.0015,
+      "median_return_pct": 0.001,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "APD",
+      "count": 2,
+      "avg_return_pct": 0.0013,
+      "median_return_pct": 0.0013,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "BKR",
+      "count": 4,
+      "avg_return_pct": 0.0031,
+      "median_return_pct": 0.0029,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "BSX",
+      "count": 2,
+      "avg_return_pct": 0.0016,
+      "median_return_pct": 0.0016,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "C",
+      "count": 4,
+      "avg_return_pct": -4.4824,
+      "median_return_pct": 0.0015,
+      "win_rate_pct": 50.0,
+      "profit_factor": 0.0007
+    },
+    {
+      "ticker": "CAT",
+      "count": 2,
+      "avg_return_pct": 49.0411,
+      "median_return_pct": 49.0411,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "CB",
+      "count": 2,
+      "avg_return_pct": 0.0057,
+      "median_return_pct": 0.0057,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "CCL",
+      "count": 8,
+      "avg_return_pct": 0.2853,
+      "median_return_pct": 0.0027,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "CMG",
+      "count": 4,
+      "avg_return_pct": 51.5842,
+      "median_return_pct": 39.4605,
+      "win_rate_pct": 75.0,
+      "profit_factor": 19.6686
+    },
+    {
+      "ticker": "COF",
+      "count": 6,
+      "avg_return_pct": -4.0244,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 33.3333,
+      "profit_factor": 0.0008
+    },
+    {
+      "ticker": "COP",
+      "count": 6,
+      "avg_return_pct": 31.1336,
+      "median_return_pct": 35.8676,
+      "win_rate_pct": 83.3333,
+      "profit_factor": null
+    },
+    {
+      "ticker": "CRWD",
+      "count": 6,
+      "avg_return_pct": 2.9374,
+      "median_return_pct": 0.0046,
+      "win_rate_pct": 66.6667,
+      "profit_factor": null
+    },
+    {
+      "ticker": "CVX",
+      "count": 2,
+      "avg_return_pct": -7.0896,
+      "median_return_pct": -7.0896,
+      "win_rate_pct": 0.0,
+      "profit_factor": 0.0
+    },
+    {
+      "ticker": "DD",
+      "count": 6,
+      "avg_return_pct": 10.0416,
+      "median_return_pct": 0.0036,
+      "win_rate_pct": 66.6667,
+      "profit_factor": null
+    },
+    {
+      "ticker": "DFS",
+      "count": 4,
+      "avg_return_pct": -8.9335,
+      "median_return_pct": -8.6204,
+      "win_rate_pct": 25.0,
+      "profit_factor": 0.0006
+    },
+    {
+      "ticker": "DHR",
+      "count": 2,
+      "avg_return_pct": 0.0019,
+      "median_return_pct": 0.0019,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "DOW",
+      "count": 6,
+      "avg_return_pct": 21.2611,
+      "median_return_pct": 0.0113,
+      "win_rate_pct": 66.6667,
+      "profit_factor": null
+    },
+    {
+      "ticker": "DVN",
+      "count": 12,
+      "avg_return_pct": 14.1439,
+      "median_return_pct": 0.0041,
+      "win_rate_pct": 58.3333,
+      "profit_factor": null
+    },
+    {
+      "ticker": "EA",
+      "count": 2,
+      "avg_return_pct": 0.0014,
+      "median_return_pct": 0.0014,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "EL",
+      "count": 2,
+      "avg_return_pct": 0.001,
+      "median_return_pct": 0.001,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "EMR",
+      "count": 4,
+      "avg_return_pct": 21.5912,
+      "median_return_pct": 11.4598,
+      "win_rate_pct": 75.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "EOG",
+      "count": 8,
+      "avg_return_pct": 9.9738,
+      "median_return_pct": 0.008,
+      "win_rate_pct": 62.5,
+      "profit_factor": null
+    },
+    {
+      "ticker": "EXC",
+      "count": 2,
+      "avg_return_pct": 11.0415,
+      "median_return_pct": 11.0415,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "FANG",
+      "count": 4,
+      "avg_return_pct": 31.2612,
+      "median_return_pct": 25.5523,
+      "win_rate_pct": 75.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "FCX",
+      "count": 16,
+      "avg_return_pct": 57.6765,
+      "median_return_pct": 3.1766,
+      "win_rate_pct": 68.75,
+      "profit_factor": 253.0207
+    },
+    {
+      "ticker": "FDX",
+      "count": 6,
+      "avg_return_pct": 3.5507,
+      "median_return_pct": 0.0044,
+      "win_rate_pct": 66.6667,
+      "profit_factor": null
+    },
+    {
+      "ticker": "GE",
+      "count": 8,
+      "avg_return_pct": -2.3922,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 37.5,
+      "profit_factor": 0.0007
+    },
+    {
+      "ticker": "HAL",
+      "count": 6,
+      "avg_return_pct": -2.6007,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 33.3333,
+      "profit_factor": 0.0023
+    },
+    {
+      "ticker": "HCA",
+      "count": 2,
+      "avg_return_pct": 23.8323,
+      "median_return_pct": 23.8323,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "HLT",
+      "count": 2,
+      "avg_return_pct": 0.0105,
+      "median_return_pct": 0.0105,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "HON",
+      "count": 2,
+      "avg_return_pct": 0.0011,
+      "median_return_pct": 0.0011,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "ICE",
+      "count": 2,
+      "avg_return_pct": 1.401,
+      "median_return_pct": 1.401,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "KLAC",
+      "count": 2,
+      "avg_return_pct": 0.0039,
+      "median_return_pct": 0.0039,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "LMT",
+      "count": 2,
+      "avg_return_pct": 30.3704,
+      "median_return_pct": 30.3704,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "MA",
+      "count": 2,
+      "avg_return_pct": 0.0011,
+      "median_return_pct": 0.0011,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "MAR",
+      "count": 6,
+      "avg_return_pct": 1.3601,
+      "median_return_pct": 0.0101,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "MET",
+      "count": 2,
+      "avg_return_pct": 0.0018,
+      "median_return_pct": 0.0018,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "META",
+      "count": 10,
+      "avg_return_pct": 0.1763,
+      "median_return_pct": 0.001,
+      "win_rate_pct": 50.0,
+      "profit_factor": 1.1699
+    },
+    {
+      "ticker": "MPC",
+      "count": 8,
+      "avg_return_pct": 7.7555,
+      "median_return_pct": 0.0117,
+      "win_rate_pct": 62.5,
+      "profit_factor": null
+    },
+    {
+      "ticker": "MU",
+      "count": 8,
+      "avg_return_pct": 0.0033,
+      "median_return_pct": 0.0021,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "NKE",
+      "count": 2,
+      "avg_return_pct": 70.1835,
+      "median_return_pct": 70.1835,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "NUE",
+      "count": 4,
+      "avg_return_pct": 0.0022,
+      "median_return_pct": 0.0021,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "OXY",
+      "count": 4,
+      "avg_return_pct": 0.0064,
+      "median_return_pct": 0.0059,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PANW",
+      "count": 10,
+      "avg_return_pct": 14.7011,
+      "median_return_pct": 0.0034,
+      "win_rate_pct": 60.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PEG",
+      "count": 2,
+      "avg_return_pct": 46.1443,
+      "median_return_pct": 46.1443,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PFE",
+      "count": 2,
+      "avg_return_pct": 0.0021,
+      "median_return_pct": 0.0021,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PGR",
+      "count": 2,
+      "avg_return_pct": 0.0014,
+      "median_return_pct": 0.0014,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PH",
+      "count": 4,
+      "avg_return_pct": -5.3659,
+      "median_return_pct": -5.0233,
+      "win_rate_pct": 25.0,
+      "profit_factor": 0.0006
+    },
+    {
+      "ticker": "PINS",
+      "count": 2,
+      "avg_return_pct": 0.0031,
+      "median_return_pct": 0.0031,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PNC",
+      "count": 2,
+      "avg_return_pct": 0.0015,
+      "median_return_pct": 0.0015,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "PRU",
+      "count": 2,
+      "avg_return_pct": -5.0751,
+      "median_return_pct": -5.0751,
+      "win_rate_pct": 0.0,
+      "profit_factor": 0.0
+    },
+    {
+      "ticker": "PSX",
+      "count": 4,
+      "avg_return_pct": 18.8081,
+      "median_return_pct": 11.3419,
+      "win_rate_pct": 75.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "REGN",
+      "count": 2,
+      "avg_return_pct": 22.2195,
+      "median_return_pct": 22.2195,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "ROK",
+      "count": 6,
+      "avg_return_pct": 0.0025,
+      "median_return_pct": 0.0014,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "ROKU",
+      "count": 12,
+      "avg_return_pct": 29.8512,
+      "median_return_pct": 0.0022,
+      "win_rate_pct": 50.0,
+      "profit_factor": 28.3317
+    },
+    {
+      "ticker": "ROST",
+      "count": 2,
+      "avg_return_pct": 0.0013,
+      "median_return_pct": 0.0013,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "SCHW",
+      "count": 6,
+      "avg_return_pct": -2.3394,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 33.3333,
+      "profit_factor": 0.0005
+    },
+    {
+      "ticker": "SO",
+      "count": 2,
+      "avg_return_pct": 17.096,
+      "median_return_pct": 17.096,
+      "win_rate_pct": 100.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "SPG",
+      "count": 2,
+      "avg_return_pct": -13.1406,
+      "median_return_pct": -13.1406,
+      "win_rate_pct": 50.0,
+      "profit_factor": 0.0005
+    },
+    {
+      "ticker": "STLD",
+      "count": 6,
+      "avg_return_pct": 11.1136,
+      "median_return_pct": 0.0014,
+      "win_rate_pct": 50.0,
+      "profit_factor": 4.1761
+    },
+    {
+      "ticker": "TMUS",
+      "count": 10,
+      "avg_return_pct": -1.7882,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 40.0,
+      "profit_factor": 0.0015
+    },
+    {
+      "ticker": "TRV",
+      "count": 2,
+      "avg_return_pct": 5.1715,
+      "median_return_pct": 5.1715,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "TSLA",
+      "count": 10,
+      "avg_return_pct": 0.0023,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 40.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "UNH",
+      "count": 2,
+      "avg_return_pct": 1.9595,
+      "median_return_pct": 1.9595,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "VLO",
+      "count": 2,
+      "avg_return_pct": -7.3441,
+      "median_return_pct": -7.3441,
+      "win_rate_pct": 0.0,
+      "profit_factor": 0.0
+    },
+    {
+      "ticker": "VRTX",
+      "count": 6,
+      "avg_return_pct": 17.9252,
+      "median_return_pct": 0.0054,
+      "win_rate_pct": 66.6667,
+      "profit_factor": null
+    },
+    {
+      "ticker": "WELL",
+      "count": 4,
+      "avg_return_pct": 0.0119,
+      "median_return_pct": 0.0107,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "XOM",
+      "count": 4,
+      "avg_return_pct": 6.9281,
+      "median_return_pct": 6.0865,
+      "win_rate_pct": 75.0,
+      "profit_factor": null
+    },
+    {
+      "ticker": "YUM",
+      "count": 2,
+      "avg_return_pct": 0.0056,
+      "median_return_pct": 0.0056,
+      "win_rate_pct": 50.0,
+      "profit_factor": null
+    }
+  ],
+  "input_quality": {
+    "feature_source": "native",
+    "feature_cache_status": "rebuilt",
+    "feature_cache_path": "/Users/krutik/technical/claudeCodeExperiments/stockBuyDecisioner1/codex-backed/cache/features.pkl",
+    "feature_cache_key": "784a67028134dfcb",
+    "feature_rows": 306802,
+    "missing_field_counts": {
+      "sma200_relative": 6778,
+      "sma50_relative": 4000,
+      "rs_vs_spy_20d": 2000,
+      "breakout_volume_multiple": 1600,
+      "sma20_relative": 1600,
+      "volume_dryup_ratio": 1600,
+      "rsi14": 1200,
+      "perf_1w": 400,
+      "sma50_slope": 184,
+      "rsi_slope": 84
+    },
+    "decision_setup_distribution": {
+      "None": 284534,
+      "DOWNTREND_REBOUND_CANDIDATE": 10934,
+      "BREAKOUT_MOMENTUM": 5088,
+      "GROWTH_LEADER_PULLBACK": 3920,
+      "TRUE_BROKEN_CHART_AVOID": 1710,
+      "BROKEN_CHART_QUALITY_RECOVERY": 616
+    },
+    "trade_setup_distribution": {
+      "BROKEN_CHART_QUALITY_RECOVERY": 252,
+      "GROWTH_LEADER_PULLBACK": 66
+    },
+    "actionable_by_setup": [
+      {
+        "selected_setup": "BROKEN_CHART_QUALITY_RECOVERY",
+        "total": 616,
+        "actionable": 258,
+        "actionable_rate_pct": 41.8831
+      },
+      {
+        "selected_setup": "GROWTH_LEADER_PULLBACK",
+        "total": 3920,
+        "actionable": 66,
+        "actionable_rate_pct": 1.6837
+      },
+      {
+        "selected_setup": "BREAKOUT_MOMENTUM",
+        "total": 5088,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "DOWNTREND_REBOUND_CANDIDATE",
+        "total": 10934,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "None",
+        "total": 284534,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      },
+      {
+        "selected_setup": "TRUE_BROKEN_CHART_AVOID",
+        "total": 1710,
+        "actionable": 0,
+        "actionable_rate_pct": 0.0
+      }
+    ],
+    "entry_label_distribution": {
+      "NO_TRADE": 268252,
+      "WATCHLIST": 38226,
+      "BUY_FULL": 180,
+      "BUY_STARTER": 144
+    },
+    "skipped_entry_reasons": {
+      "NO_TRADE": 268252,
+      "WATCHLIST": 38226
+    }
+  }
+}

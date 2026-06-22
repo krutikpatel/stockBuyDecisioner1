@@ -1,0 +1,17 @@
+{
+  "symbol": "AAPL",
+  "heldPercentInsiders": 0.0007,
+  "heldPercentInstitutions": 0.6142,
+  "shortPercentOfFloat": 0.0081,
+  "dividendYield": 0.0047,
+  "trailingPE": 29.54,
+  "forwardPE": 27.2,
+  "pegRatio": 2.46,
+  "priceToSalesTrailing12Months": 7.48,
+  "marketCap": 3000000000000,
+  "beta": 1.29,
+  "sector": "Technology",
+  "industry": "Consumer Electronics",
+  "recommendationMean": 1.9,
+  "targetMeanPrice": 220.0
+}

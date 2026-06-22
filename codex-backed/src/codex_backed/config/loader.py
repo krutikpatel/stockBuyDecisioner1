@@ -17,6 +17,7 @@ REQUIRED_CONFIG_FILES = {
     "market_universe": "market_and_universe_config.json",
     "stock_classification": "stock_classification_config.json",
     "watchlist": "watchlist_config.json",
+    "data_provider": "data_provider_config.json",
 }
 
 VALID_OPERATORS = {
@@ -85,6 +86,7 @@ def validate_config_bundle(bundle: ConfigBundle) -> None:
     _validate_watchlist_config(bundle.get("watchlist"))
     _validate_optimization_config(bundle.get("optimization"))
     _validate_technical_setup_config(bundle.get("technical_setup"))
+    _validate_data_provider_config(bundle.get("data_provider"))
 
 
 def _validate_entry_config(config: dict[str, Any]) -> None:
@@ -280,14 +282,17 @@ def _validate_watchlist_config(config: dict[str, Any]) -> None:
         raise ConfigError("watchlist benchmark_tickers must be a non-empty list")
     _validate_ticker_list(benchmarks, "watchlist benchmark_tickers")
 
-    yfinance_config = _require_dict(config, "yfinance")
-    for key in ("period", "interval"):
-        value = yfinance_config.get(key)
-        if not isinstance(value, str) or not value.strip():
-            raise ConfigError(f"watchlist yfinance.{key} must be a non-empty string")
-    auto_adjust = yfinance_config.get("auto_adjust", False)
-    if not isinstance(auto_adjust, bool):
-        raise ConfigError("watchlist yfinance.auto_adjust must be boolean")
+    yfinance_config = config.get("yfinance")
+    if yfinance_config is not None:
+        if not isinstance(yfinance_config, dict):
+            raise ConfigError("yfinance must be an object")
+        for key in ("period", "interval"):
+            value = yfinance_config.get(key)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ConfigError(f"watchlist yfinance.{key} must be a non-empty string")
+        auto_adjust = yfinance_config.get("auto_adjust", False)
+        if not isinstance(auto_adjust, bool):
+            raise ConfigError("watchlist yfinance.auto_adjust must be boolean")
 
 
 def _validate_ticker_list(tickers: list[Any], path: str) -> None:
@@ -409,3 +414,92 @@ def _validate_percent(value: Any, path: str) -> None:
     _validate_number(value, path)
     if value < 0 or value > 100:
         raise ConfigError(f"{path} must be between 0 and 100")
+
+
+_VALID_PROVIDER_TYPES = {"pickle", "yfinance", "fmp", "composite", "null"}
+_REQUIRED_TIER_CAP_KEYS = {
+    "supports_prices",
+    "supports_fundamentals",
+    "fundamentals_fields",
+    "history_start_date",
+    "price_realtime",
+    "rate_limit_per_minute",
+}
+
+
+def _validate_data_provider_config(config: dict[str, Any]) -> None:
+    active_mode = config.get("active_mode")
+    if not isinstance(active_mode, str) or not active_mode:
+        raise ConfigError("data_provider_config: active_mode must be a non-empty string")
+
+    modes = _require_dict(config, "modes")
+    if active_mode not in modes:
+        raise ConfigError(
+            f"data_provider_config: active_mode '{active_mode}' not found in modes"
+        )
+
+    providers = config.get("providers", {})
+    if not isinstance(providers, dict):
+        raise ConfigError("data_provider_config: providers must be an object")
+
+    for mode_name, mode_cfg in modes.items():
+        if not isinstance(mode_cfg, dict):
+            raise ConfigError(f"data_provider_config: modes.{mode_name} must be an object")
+        _validate_provider_spec(
+            mode_cfg.get("price_provider_backtest", {}),
+            providers,
+            f"modes.{mode_name}.price_provider_backtest",
+        )
+        _validate_provider_spec(
+            mode_cfg.get("price_provider_live", {}),
+            providers,
+            f"modes.{mode_name}.price_provider_live",
+        )
+        _validate_provider_spec(
+            mode_cfg.get("fundamentals_provider", {}),
+            providers,
+            f"modes.{mode_name}.fundamentals_provider",
+        )
+
+    for provider_name, provider_cfg in providers.items():
+        if not isinstance(provider_cfg, dict):
+            raise ConfigError(
+                f"data_provider_config: providers.{provider_name} must be an object"
+            )
+        tier = provider_cfg.get("tier_capabilities")
+        if tier is None:
+            raise ConfigError(
+                f"data_provider_config: providers.{provider_name}.tier_capabilities is required"
+            )
+        if not isinstance(tier, dict):
+            raise ConfigError(
+                f"data_provider_config: providers.{provider_name}.tier_capabilities must be an object"
+            )
+        missing_keys = _REQUIRED_TIER_CAP_KEYS - set(tier.keys())
+        if missing_keys:
+            raise ConfigError(
+                f"data_provider_config: providers.{provider_name}.tier_capabilities "
+                f"missing keys: {sorted(missing_keys)}"
+            )
+        if not isinstance(tier.get("fundamentals_fields"), list):
+            raise ConfigError(
+                f"data_provider_config: providers.{provider_name}.tier_capabilities"
+                ".fundamentals_fields must be a list"
+            )
+
+
+def _validate_provider_spec(
+    spec: dict[str, Any], providers: dict[str, Any], path: str
+) -> None:
+    if not isinstance(spec, dict):
+        raise ConfigError(f"data_provider_config: {path} must be an object")
+    ptype = spec.get("type")
+    if not isinstance(ptype, str) or ptype not in _VALID_PROVIDER_TYPES:
+        raise ConfigError(
+            f"data_provider_config: {path}.type must be one of {sorted(_VALID_PROVIDER_TYPES)}"
+        )
+    config_ref = spec.get("config_ref")
+    if config_ref is not None and config_ref not in providers:
+        raise ConfigError(
+            f"data_provider_config: {path}.config_ref '{config_ref}' not found in providers"
+        )

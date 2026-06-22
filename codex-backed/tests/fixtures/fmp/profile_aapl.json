@@ -1,0 +1,11 @@
+[
+  {
+    "symbol": "AAPL",
+    "mktCap": 3000000000000,
+    "beta": 1.29,
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "priceTarget": 220.0,
+    "ratingScore": 2.1
+  }
+]

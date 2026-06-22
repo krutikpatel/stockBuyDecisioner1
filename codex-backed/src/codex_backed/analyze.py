@@ -6,7 +6,8 @@ from typing import Any, Callable
 
 from codex_backed.backtest.writer import write_csv, write_json
 from codex_backed.config.loader import ConfigBundle
-from codex_backed.data.yfinance_live import fetch_yfinance_bars
+from codex_backed.data.providers import registry as _provider_registry
+from codex_backed.data.providers.observability import StatsCollector
 from codex_backed.entry.engine import EntryDecisionEngine
 from codex_backed.features.builder import build_feature_snapshot_from_mapping
 from codex_backed.features.historical_builder import HistoricalFeatureOptions, build_historical_feature_rows
@@ -26,6 +27,7 @@ class AnalyzeOptions:
     period: str | None = None
     interval: str | None = None
     auto_adjust: bool | None = None
+    data_mode: str | None = None
 
 
 def run_watchlist_analysis(
@@ -33,7 +35,7 @@ def run_watchlist_analysis(
     paths: RunPaths,
     options: AnalyzeOptions,
     *,
-    fetch_bars: FetchBars = fetch_yfinance_bars,
+    fetch_bars: FetchBars | None = None,
     today: date | None = None,
 ) -> dict[str, Any]:
     watchlist_cfg = bundle.get("watchlist")
@@ -47,7 +49,23 @@ def run_watchlist_analysis(
     auto_adjust = yfinance_cfg.get("auto_adjust", False) if options.auto_adjust is None else options.auto_adjust
 
     requested_data_tickers = list(dict.fromkeys([*tickers, *benchmarks]))
-    bars_by_ticker = fetch_bars(
+
+    if fetch_bars is not None:
+        # Test-injection or legacy-explicit path
+        _effective_fetch = fetch_bars
+        _provider_name = "yfinance"
+    else:
+        # Registry path: build provider from config
+        provider_cfg = bundle.data.get("data_provider", {})
+        active_mode = options.data_mode or provider_cfg.get("active_mode", "legacy_yfinance")
+        provider_set = _provider_registry.build_providers(provider_cfg, mode=active_mode)
+        _price_provider = provider_set.price_live
+        _provider_name = _price_provider.name
+
+        def _effective_fetch(t, *, period, interval, auto_adjust=False):
+            return _price_provider.fetch_live_batch(t, period=period, interval=interval)
+
+    bars_by_ticker = _effective_fetch(
         requested_data_tickers,
         period=period,
         interval=interval,
@@ -89,6 +107,10 @@ def run_watchlist_analysis(
     )
     decision_rows.sort(key=lambda row: (row["ticker"], row["horizon"]))
 
+    stats = StatsCollector()
+    stats.record_cache_miss("analyze")  # live data is always fresh
+    stats.write_summary(paths.run_dir)
+
     write_csv(paths.entry_decisions_path, decision_rows)
     write_csv(paths.run_dir / "actionable_watchlist.csv", actionable_rows)
     write_json(
@@ -107,7 +129,7 @@ def run_watchlist_analysis(
             "by_entry_label": _count_by(decision_rows, "entry_label"),
             "by_entry_strategy": _count_by(decision_rows, "entry_strategy"),
             "data_source": {
-                "provider": "yfinance",
+                "provider": _provider_name,
                 "period": period,
                 "interval": interval,
                 "auto_adjust": auto_adjust,
@@ -122,7 +144,7 @@ def run_watchlist_analysis(
         "latest_signal_date": max(row["date"] for row in decision_rows),
         "tickers": len(tickers),
         "horizons": horizons,
-        "data_source": "yfinance",
+        "data_source": _provider_name,
         "cache_used": False,
         "entry_decisions": len(decision_rows),
         "actionable": len(actionable_rows),

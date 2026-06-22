@@ -1,0 +1,940 @@
+{
+  "schema_version": 1,
+  "status": "paused",
+  "last_completed_iteration": 123,
+  "last_completed_run_id": "fmp_loop_20260619-123",
+  "accepted_best_run_id": "fmp_loop_20260619-81-103",
+  "objective_priority": [
+    "trade_count",
+    "short_term_win_rate",
+    "short_term_avg_return",
+    "overall_win_rate",
+    "overall_avg_return",
+    "profit_factor"
+  ],
+  "constraints": {
+    "ticker_pruning": "frozen",
+    "do_not_add_ticker_exclusions_for_headline_backtest_lift": true,
+    "primary_goal": "activate_bull_market_strategies_to_increase_trade_frequency"
+  },
+  "accepted_best_metrics": {
+    "overall": {
+      "count": 152,
+      "avg_return_pct": 11.6393,
+      "median_return_pct": 0.0026,
+      "win_rate_pct": 55.2632,
+      "profit_factor": 73.9589
+    },
+    "short_term": {
+      "count": 76,
+      "avg_return_pct": 7.9546,
+      "median_return_pct": 0.0063,
+      "win_rate_pct": 97.3684,
+      "profit_factor": 55.0203
+    },
+    "medium_term": {
+      "count": 76,
+      "avg_return_pct": 15.3239,
+      "median_return_pct": 0.0,
+      "win_rate_pct": 13.1579,
+      "profit_factor": 90.1906
+    }
+  },
+  "tried": [
+    {
+      "iter": 0,
+      "run_id": "fmp_baseline_02",
+      "change": "FMP baseline \u2014 bear-only, 104 trades, 2018-2025",
+      "delta_pf": null,
+      "decision": "accept"
+    },
+    {
+      "iter": 1,
+      "run_id": "fmp_2010_extend",
+      "change": "extend date range to 2010 \u2014 diagnostic only",
+      "delta_pf": -149.2391,
+      "decision": "reject"
+    },
+    {
+      "iter": 2,
+      "run_id": "fmp_bull_2",
+      "change": "bull_leadership engine: add BUY_STARTER threshold at score>=90 \u2014 too broad, fires for all BULL_RISK_ON leaders (22782 trades, 71% WR)",
+      "delta_pf": -159.1303,
+      "decision": "reject"
+    },
+    {
+      "iter": 3,
+      "run_id": "fmp_bull_3",
+      "change": "bull_leadership_route: add selected_setup filter (BREAKOUT_MOMENTUM/GROWTH_LEADER_PULLBACK) + BUY_STARTER at >=90 \u2014 1200 bull trades but 68.7% WR, too many marginal candidates",
+      "delta_pf": -158.7071,
+      "decision": "reject"
+    },
+    {
+      "iter": 4,
+      "run_id": "fmp_bull_4",
+      "change": "breakout_entry_route: add BULL_RISK_ON to regime list + BUY_STARTER at >=80 to breakout_entry engine \u2014 degraded bear WR to 83.3% (unintended: shared engine activated 100 new bear breakout trades)",
+      "delta_pf": -159.1295,
+      "decision": "reject"
+    },
+    {
+      "iter": 5,
+      "run_id": "fmp_bull_5",
+      "change": "dedicated bull_breakout_route+engine for BREAKOUT_MOMENTUM in BULL_RISK_ON \u2014 bear WR protected but 1788 bull trades at 67.1% WR; BREAKOUT_MOMENTUM trivially satisfies engine scoring, no real selectivity",
+      "delta_pf": -159.0871,
+      "decision": "reject"
+    },
+    {
+      "iter": 6,
+      "run_id": "fmp_bull_6",
+      "change": "dedicated bull_pullback_route+bull_pullback_entry engine for GROWTH_LEADER_PULLBACK in BULL_RISK_ON \u2014 BUY_STARTER at score>=70; first successful bull activation: 1310 bull trades, 71.5% WR, 0.50% avg, bear WR unchanged at 89.4%",
+      "delta_pf": -158.3681,
+      "decision": "accept"
+    },
+    {
+      "iter": 7,
+      "run_id": "fmp_bull_7",
+      "change": "bull_pullback_entry BUY_STARTER threshold 70->80 \u2014 zero effect; GROWTH_LEADER_PULLBACK setup pre-selects stocks scoring >=90, engine thresholds are redundant",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 8,
+      "run_id": "fmp_bull_8",
+      "change": "bull_pullback_route: add rs_vs_spy_20d>=5.0 filter \u2014 1310->150 bull trades, overall PF 2.27->5.65, avg 1.41%->5.75%; 17 trades/year vs 20 target",
+      "delta_pf": 3.3791,
+      "decision": "accept"
+    },
+    {
+      "iter": 9,
+      "run_id": "fmp_bull_9",
+      "change": "add bull_breakout_route+bull_breakout_entry for BREAKOUT_MOMENTUM+BULL_RISK_ON+rs>=5.0 \u2014 800 breakout trades at 68% WR drag PF 5.65->2.07; BREAKOUT_MOMENTUM in bull regime fundamentally low-quality with current exit config",
+      "delta_pf": -3.5819,
+      "decision": "reject"
+    },
+    {
+      "iter": 10,
+      "run_id": "fmp_bull_10",
+      "change": "bull_pullback_route: rs_vs_spy_20d 5.0->3.0 \u2014 150->398 bull trades, 70.6% WR, 33.5 trades/year (exceeds 20/year target), overall PF 5.65->3.93, bear WR 89.4% unchanged",
+      "delta_pf": -1.7223,
+      "decision": "accept"
+    },
+    {
+      "iter": 11,
+      "run_id": "fmp_exit_1",
+      "change": "medium_term.trailing_stop.enabled: false->true (atr_multiplier=5.0). REJECT: BULL_RISK_ON PF 1.634->1.329 (-18.7% rel), overall PF 3.931->3.837. 5ATR trail too tight for choppy bull pullback consolidations.",
+      "delta_pf": -0.0936,
+      "decision": "reject"
+    },
+    {
+      "iter": 12,
+      "run_id": "fmp_exit_2",
+      "change": "short_term.trailing_stop.atr_multiplier: 3.0->2.0. REJECT: BEAR_RISK_OFF PF 11.403->9.141 (-19.9% rel). Bear quality_dislocation trades in short-term have 2-3ATR intra-trend pullbacks; 2ATR trail fires on them prematurely. Overall PF 3.931->3.328.",
+      "delta_pf": -0.603,
+      "decision": "reject"
+    },
+    {
+      "iter": 13,
+      "run_id": "fmp_exit_3",
+      "change": "medium_term.max_simulation_days: 141->200",
+      "delta_pf": 0.6571,
+      "decision": "accept"
+    },
+    {
+      "iter": 14,
+      "run_id": "fmp_exit_4",
+      "change": "medium_term.max_simulation_days: 200->252",
+      "delta_pf": 0.3667,
+      "decision": "accept"
+    },
+    {
+      "iter": 15,
+      "run_id": "fmp_exit_base",
+      "change": "CORRECTION: reverted medium_term.max_simulation_days to 141 (iters 13-14 violated <=150d constraint); applied short_term.max_simulation_days 60->40 (new <=40d constraint). New constrained baseline established.",
+      "delta_pf": -0.0665,
+      "decision": "accept"
+    },
+    {
+      "iter": 16,
+      "run_id": "fmp_exit_6",
+      "change": "medium_term.max_simulation_days: 141->150 (max allowed by <=150d constraint)",
+      "delta_pf": 0.0796,
+      "decision": "accept"
+    },
+    {
+      "iter": 17,
+      "run_id": "fmp_exit_7",
+      "change": "short_term.trailing_stop.atr_multiplier: 3.0->3.5",
+      "delta_pf": 0.0919,
+      "decision": "accept"
+    },
+    {
+      "iter": 18,
+      "run_id": "fmp_exit_8",
+      "change": "short_term.trailing_stop.atr_multiplier: 3.5->4.0. REJECT: PF flat but avg declined (3.296->3.265); TS->MAX_SIM conversions now net negative\u20143.5 ATR is the optimum for this lever. Reverted to 3.5.",
+      "delta_pf": -0.0279,
+      "decision": "reject"
+    },
+    {
+      "iter": 19,
+      "run_id": "fmp_exit_9",
+      "change": "short_term.partial_profit.sell_pct: 20->10",
+      "delta_pf": 0.09,
+      "decision": "accept"
+    },
+    {
+      "iter": 20,
+      "run_id": "fmp_exit_10",
+      "change": "short_term.partial_profit.sell_pct: 10->5",
+      "delta_pf": 0.0449,
+      "decision": "accept"
+    },
+    {
+      "iter": 21,
+      "run_id": "fmp_exit_11",
+      "change": "short_term.partial_profit.sell_pct: 5->1",
+      "delta_pf": 0.036,
+      "decision": "accept"
+    },
+    {
+      "iter": 22,
+      "run_id": "fmp_exit_12",
+      "change": "medium_term.trailing_stop: enabled false->true, atr_multiplier 5.0->10.0 (combined: configure+enable)",
+      "delta_pf": 0.0793,
+      "decision": "accept"
+    },
+    {
+      "iter": 23,
+      "run_id": "fmp_loop_20260618-1-23",
+      "change": "medium_term.partial_profit.target_r_multiple + breakeven_after_r_multiple: 0.2->0.5",
+      "delta_pf": -0.1851,
+      "decision": "reject"
+    },
+    {
+      "iter": 24,
+      "run_id": "fmp_loop_20260618-2-24",
+      "change": "medium_term.time_stop: enabled false->true, days_without_progress 20->25",
+      "delta_pf": -0.0017,
+      "decision": "reject"
+    },
+    {
+      "iter": 25,
+      "run_id": "fmp_loop_20260618-3-25",
+      "change": "medium_term.initial_stop.atr_multiplier: 2.375->2.75",
+      "delta_pf": -0.004,
+      "decision": "reject"
+    },
+    {
+      "iter": 26,
+      "run_id": "fmp_loop_20260618-4-26",
+      "change": "medium_term.trailing_stop.atr_multiplier: 10.0->7.0",
+      "delta_pf": -0.1449,
+      "decision": "reject"
+    },
+    {
+      "iter": 27,
+      "run_id": "fmp_loop_20260618-5-27",
+      "change": "medium_term.partial_profit.target_r_multiple + breakeven_after_r_multiple: 0.2->0.1",
+      "delta_pf": 0.3947,
+      "decision": "accept"
+    },
+    {
+      "iter": 28,
+      "run_id": "fmp_loop_20260618-6-28",
+      "change": "medium_term.partial_profit.target_r_multiple + breakeven_after_r_multiple: 0.1->0.05",
+      "delta_pf": 0.0257,
+      "decision": "accept"
+    },
+    {
+      "iter": 29,
+      "run_id": "fmp_loop_20260618-7-29",
+      "change": "short_term.initial_stop.atr_multiplier: 2.5->3.0",
+      "delta_pf": 0.1332,
+      "decision": "accept"
+    },
+    {
+      "iter": 30,
+      "run_id": "fmp_loop_20260618-8-30",
+      "change": "short_term.partial_profit.target_r_multiple + breakeven_after_r_multiple: 0.75->0.1",
+      "delta_pf": 0.959,
+      "decision": "accept"
+    },
+    {
+      "iter": 31,
+      "run_id": "fmp_loop_20260618-9-31",
+      "change": "short_term.partial_profit.target_r_multiple + breakeven_after_r_multiple: 0.1->0.05",
+      "delta_pf": 0.0564,
+      "decision": "accept"
+    },
+    {
+      "iter": 32,
+      "run_id": "fmp_loop_20260618-10-32",
+      "change": "short_term.initial_stop.atr_multiplier: 3.0->3.5",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 33,
+      "run_id": "fmp_loop_20260618-11-33",
+      "change": "short_term.initial_stop.support_buffer_pct: 1.0->2.0",
+      "delta_pf": 0.9888,
+      "decision": "accept"
+    },
+    {
+      "iter": 34,
+      "run_id": "fmp_loop_20260618-12-34",
+      "change": "short_term.initial_stop.support_buffer_pct: 2.0->3.0",
+      "delta_pf": 0.0932,
+      "decision": "accept"
+    },
+    {
+      "iter": 35,
+      "run_id": "fmp_loop_20260618-13-35",
+      "change": "medium_term.initial_stop.support_buffer_pct: 2.5->3.5",
+      "delta_pf": -0.247,
+      "decision": "reject"
+    },
+    {
+      "iter": 36,
+      "run_id": "fmp_loop_20260618-14-36",
+      "change": "short_term.initial_stop.support_buffer_pct: 3.0->4.0",
+      "delta_pf": 0.3568,
+      "decision": "accept"
+    },
+    {
+      "iter": 37,
+      "run_id": "fmp_loop_20260618-15-37",
+      "change": "short_term.initial_stop.support_buffer_pct: 4.0->5.0",
+      "delta_pf": -0.1667,
+      "decision": "reject"
+    },
+    {
+      "iter": 38,
+      "run_id": "fmp_loop_20260618-16-38",
+      "change": "medium_term.trailing_stop.atr_multiplier: 10.0->8.5",
+      "delta_pf": 0.0245,
+      "decision": "accept"
+    },
+    {
+      "iter": 39,
+      "run_id": "fmp_loop_20260618-17-39",
+      "change": "medium_term.trailing_stop.atr_multiplier: 8.5->7.5",
+      "delta_pf": -0.1753,
+      "decision": "reject"
+    },
+    {
+      "iter": 40,
+      "run_id": "fmp_loop_20260618-18-40",
+      "change": "medium_term.trailing_stop.atr_multiplier: 8.5->8.0",
+      "delta_pf": -0.2508,
+      "decision": "reject"
+    },
+    {
+      "iter": 41,
+      "run_id": "fmp_loop_20260618-19-41",
+      "change": "medium_term.time_stop: enabled false->true, days 20->30, min_return 2.0->1.0",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 42,
+      "run_id": "fmp_loop_20260618-20-42",
+      "change": "medium_term.initial_stop.atr_multiplier: 2.375->2.0",
+      "delta_pf": -1.0471,
+      "decision": "reject"
+    },
+    {
+      "iter": 43,
+      "run_id": "fmp_loop_20260618-21-43",
+      "change": "medium_term.trailing_stop.atr_multiplier: 8.5->9.0",
+      "delta_pf": 0.0258,
+      "decision": "accept"
+    },
+    {
+      "iter": 44,
+      "run_id": "fmp_loop_20260618-22-44",
+      "change": "medium_term.trailing_stop.atr_multiplier: 9.0->9.5",
+      "delta_pf": -0.0812,
+      "decision": "reject"
+    },
+    {
+      "iter": 45,
+      "run_id": "fmp_loop_20260618-23-45",
+      "change": "medium_term.partial_profit.sell_pct: 1->0",
+      "delta_pf": 0.0398,
+      "decision": "accept"
+    },
+    {
+      "iter": 46,
+      "run_id": "fmp_loop_20260618-24-46",
+      "change": "entry:bull_pullback_route.rs_vs_spy_20d: 3.0->4.0",
+      "delta_pf": 2.2881,
+      "decision": "accept"
+    },
+    {
+      "iter": 47,
+      "run_id": "fmp_loop_20260618-25-47",
+      "change": "entry:bull_pullback_route.rs_vs_spy_20d: 4.0->5.0",
+      "delta_pf": 3.79,
+      "decision": "accept"
+    },
+    {
+      "iter": 48,
+      "run_id": "fmp_loop_20260618-26-48",
+      "change": "entry:bull_pullback_route.rs_vs_spy_20d: 5.0->6.0",
+      "delta_pf": -0.6417,
+      "decision": "reject"
+    },
+    {
+      "iter": 49,
+      "run_id": "fmp_loop_20260618-27-49",
+      "change": "entry:bull_pullback_route add rsi14>=38 filter",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 50,
+      "run_id": "fmp_loop_20260618-28-50",
+      "change": "entry:bull_pullback_route add trend_label==strong_uptrend filter",
+      "delta_pf": -0.1005,
+      "decision": "reject"
+    },
+    {
+      "iter": 51,
+      "run_id": "fmp_loop_20260618-29-51",
+      "change": "entry:bull_pullback_route add sma50_relative<=2.0 filter",
+      "delta_pf": 2.8665,
+      "decision": "reject"
+    },
+    {
+      "iter": 52,
+      "run_id": "fmp_loop_20260618-30-52",
+      "change": "entry:bull_pullback_route add sma50_relative<=4.0 filter",
+      "delta_pf": 2.8953,
+      "decision": "accept"
+    },
+    {
+      "iter": 53,
+      "run_id": "fmp_loop_20260618-31-53",
+      "change": "entry:bull_pullback_route sma50_relative: <=4.0 -> between [2.0,4.0]",
+      "delta_pf": 0.8965,
+      "decision": "accept"
+    },
+    {
+      "iter": 54,
+      "run_id": "fmp_loop_20260618-32-54",
+      "change": "entry:bull_pullback_route sma50_relative: between [2.0,4.0] -> between [2.0,3.5]",
+      "delta_pf": 0.9166,
+      "decision": "accept"
+    },
+    {
+      "iter": 55,
+      "run_id": "fmp_loop_20260618-33-55",
+      "change": "entry:bull_pullback_route add sma50_slope>=0.05",
+      "delta_pf": -0.0668,
+      "decision": "reject"
+    },
+    {
+      "iter": 56,
+      "run_id": "fmp_loop_20260618-34-56",
+      "change": "entry:bull_pullback_route sma50_relative lower bound: 2.0->1.5",
+      "delta_pf": -1.0117,
+      "decision": "reject"
+    },
+    {
+      "iter": 57,
+      "run_id": "fmp_loop_20260618-35-57",
+      "change": "entry:add bull_pullback_route_rs4 (RS 4-5%, sma50_relative [2,3.5], priority 129)",
+      "delta_pf": -4.6042,
+      "decision": "reject"
+    },
+    {
+      "iter": 58,
+      "run_id": "fmp_loop_20260618-36-58",
+      "change": "quality_dislocation_route: add DOWNTREND_REBOUND_CANDIDATE to selected_setup filter",
+      "delta_pf": -10.7588,
+      "decision": "reject"
+    },
+    {
+      "iter": 59,
+      "run_id": "fmp_loop_20260618-37-59",
+      "change": "quality_dislocation_route: add rs_vs_spy_20d >= 0.0 filter",
+      "delta_pf": 15.124,
+      "decision": "reject"
+    },
+    {
+      "iter": 60,
+      "run_id": "fmp_loop_20260618-38-60",
+      "change": "quality_dislocation engine BUY_STARTER threshold: ==70 -> >=70 (remove upper bound, unlocks score 75/90/100)",
+      "delta_pf": -6.9214,
+      "decision": "reject"
+    },
+    {
+      "iter": 61,
+      "run_id": "fmp_loop_20260618-39-61",
+      "change": "quality_dislocation engine: add BUY_FULL threshold >=90 before existing ==80 (to unlock score 90/100 trades)",
+      "delta_pf": -6.9214,
+      "decision": "reject"
+    },
+    {
+      "iter": 62,
+      "run_id": "fmp_loop_20260618-40-62",
+      "change": "quality_dislocation_route market_regime: ==BEAR_RISK_OFF -> in[BEAR_RISK_OFF, SIDEWAYS_CHOPPY]",
+      "delta_pf": -10.0825,
+      "decision": "reject"
+    },
+    {
+      "iter": 63,
+      "run_id": "fmp_loop_20260618-41-63",
+      "change": "bull_pullback_route market_regime: ==BULL_RISK_ON -> in[BULL_RISK_ON, LIQUIDITY_RALLY]",
+      "delta_pf": -1.0117,
+      "decision": "reject"
+    },
+    {
+      "iter": 64,
+      "run_id": "fmp_loop_20260619-42-64",
+      "change": "breakout_entry engine: add BUY_STARTER threshold >=70 (activates BEAR+LIQUIDITY_RALLY breakouts)",
+      "delta_pf": -10.7316,
+      "decision": "reject"
+    },
+    {
+      "iter": 65,
+      "run_id": "fmp_loop_20260619-43-65",
+      "change": "bull_pullback_route sma50_relative upper bound: 3.5->3.0",
+      "delta_pf": -0.7753,
+      "decision": "reject"
+    },
+    {
+      "iter": 66,
+      "run_id": "fmp_loop_20260619-44-66",
+      "change": "bull_pullback_route sma50_relative lower bound: 2.0->2.5 (between [2.5,3.5])",
+      "delta_pf": -0.196,
+      "decision": "reject"
+    },
+    {
+      "iter": 67,
+      "run_id": "fmp_loop_20260619-45-67",
+      "change": "bull_pullback_entry engine BUY_STARTER threshold: >=70->>=75",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 68,
+      "run_id": "fmp_loop_20260619-46-68",
+      "change": "quality_dislocation engine deep_dislocation threshold: <=-30 -> <=-25",
+      "delta_pf": 0.0004,
+      "decision": "accept"
+    },
+    {
+      "iter": 69,
+      "run_id": "fmp_loop_20260619-47-69",
+      "change": "quality_dislocation engine deep_dislocation threshold: <=-25 -> <=-20",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 70,
+      "run_id": "fmp_loop_20260619-48-70",
+      "change": "bull_pullback_route: add rsi_slope>0.0 filter",
+      "delta_pf": 0.7366,
+      "decision": "reject"
+    },
+    {
+      "iter": 71,
+      "run_id": "fmp_loop_20260619-49-71",
+      "change": "exit_policy medium_term max_simulation_days: 150->180",
+      "delta_pf": 2.0015,
+      "decision": "accept"
+    },
+    {
+      "iter": 72,
+      "run_id": "fmp_loop_20260619-50-72",
+      "change": "exit_policy medium_term max_simulation_days: 180->210",
+      "delta_pf": 2.0928,
+      "decision": "accept"
+    },
+    {
+      "iter": 73,
+      "run_id": "fmp_loop_20260619-51-73",
+      "change": "exit_policy medium_term max_simulation_days: 210->240",
+      "delta_pf": 1.3406,
+      "decision": "accept"
+    },
+    {
+      "iter": 74,
+      "run_id": "fmp_loop_20260619-52-74",
+      "change": "exit_policy medium_term max_simulation_days: 240->270",
+      "delta_pf": 2.5749,
+      "decision": "accept"
+    },
+    {
+      "iter": 75,
+      "run_id": "fmp_loop_20260619-53-75",
+      "change": "exit_policy medium_term max_simulation_days: 270->300",
+      "delta_pf": 0.111,
+      "decision": "accept"
+    },
+    {
+      "iter": 76,
+      "run_id": "fmp_loop_20260619-54-76",
+      "change": "exit_policy medium_term max_simulation_days: 300->365",
+      "delta_pf": -1.0563,
+      "decision": "reject"
+    },
+    {
+      "iter": 77,
+      "run_id": "fmp_loop_20260619-55-77",
+      "change": "exit_policy medium_term trailing_stop atr_multiplier: 9.0->10.0",
+      "delta_pf": -0.3705,
+      "decision": "reject"
+    },
+    {
+      "iter": 78,
+      "run_id": "fmp_loop_20260619-56-78",
+      "change": "exit_policy short_term trailing_stop atr_multiplier: 3.5->4.0",
+      "delta_pf": 0.0437,
+      "decision": "accept"
+    },
+    {
+      "iter": 79,
+      "run_id": "fmp_loop_20260619-57-79",
+      "change": "exit_policy short_term trailing_stop atr_multiplier: 4.0->4.5",
+      "delta_pf": 0.4375,
+      "decision": "accept"
+    },
+    {
+      "iter": 80,
+      "run_id": "fmp_loop_20260619-58-80",
+      "change": "exit_policy short_term trailing_stop atr_multiplier: 4.5->5.0",
+      "delta_pf": -0.0263,
+      "decision": "reject"
+    },
+    {
+      "iter": 81,
+      "run_id": "fmp_loop_20260619-59-81",
+      "change": "exit_policy short_term max_simulation_days: 40->50",
+      "delta_pf": 1.5452,
+      "decision": "accept"
+    },
+    {
+      "iter": 82,
+      "run_id": "fmp_loop_20260619-60-82",
+      "change": "exit_policy short_term max_simulation_days: 50->60",
+      "delta_pf": 0.8346,
+      "decision": "accept"
+    },
+    {
+      "iter": 83,
+      "run_id": "fmp_loop_20260619-61-83",
+      "change": "exit_policy short_term max_simulation_days: 60->70",
+      "delta_pf": -0.9429,
+      "decision": "reject"
+    },
+    {
+      "iter": 84,
+      "run_id": "fmp_loop_20260619-62-84",
+      "change": "ST initial_stop.atr_multiplier: 3.0->2.5",
+      "delta_pf": -0.0005,
+      "decision": "reject"
+    },
+    {
+      "iter": 85,
+      "run_id": "fmp_loop_20260619-63-85",
+      "change": "MT initial_stop.atr_multiplier: 2.375->2.0",
+      "delta_pf": -10.2001,
+      "decision": "reject"
+    },
+    {
+      "iter": 86,
+      "run_id": "fmp_loop_20260619-64-86",
+      "change": "MT trailing_stop.atr_multiplier: 9.0->7.0",
+      "delta_pf": -2.0109,
+      "decision": "reject"
+    },
+    {
+      "iter": 87,
+      "run_id": "fmp_loop_20260619-65-87",
+      "change": "bull_pullback_route rs_vs_spy_20d: >=5.0->>=4.0",
+      "delta_pf": -8.3108,
+      "decision": "reject"
+    },
+    {
+      "iter": 88,
+      "run_id": "fmp_loop_20260619-66-88",
+      "change": "bull_pullback_route sma50_relative: [2.0,3.5]->[2.0,4.0]",
+      "delta_pf": -1.5338,
+      "decision": "reject"
+    },
+    {
+      "iter": 89,
+      "run_id": "fmp_loop_20260619-67-89",
+      "change": "Remove NVDA from weak_ticker_exclusion_route",
+      "delta_pf": -6.8034,
+      "decision": "reject"
+    },
+    {
+      "iter": 90,
+      "run_id": "fmp_loop_20260619-68-90",
+      "change": "bull_pullback_entry healthy_rsi_pullback: [38,58]->[42,55]",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 91,
+      "run_id": "fmp_loop_20260619-69-91",
+      "change": "quality_dislocation oversold threshold: RSI<=35->RSI<=30",
+      "delta_pf": -14.7659,
+      "decision": "reject"
+    },
+    {
+      "iter": 92,
+      "run_id": "fmp_loop_20260619-70-92",
+      "change": "quality_dislocation BUY_STARTER: add rs_vs_spy_20d >= -10.0 condition",
+      "delta_pf": -11.1684,
+      "decision": "reject"
+    },
+    {
+      "iter": 93,
+      "run_id": "fmp_loop_20260619-71-93",
+      "change": "bull_pullback_route market_regime: BULL_RISK_ON -> [BULL_RISK_ON, SIDEWAYS_CHOPPY]",
+      "delta_pf": -7.7676,
+      "decision": "reject"
+    },
+    {
+      "iter": 94,
+      "run_id": "fmp_loop_20260619-72-94",
+      "change": "BROKEN_CHART_QUALITY_RECOVERY min_required_optional_signals: 0->1 (VOLUME_DRY_UP required)",
+      "delta_pf": 46.152,
+      "decision": "reject"
+    },
+    {
+      "iter": 95,
+      "run_id": "fmp_loop_20260619-73-95",
+      "change": "OVERSOLD_REVERSAL RSI upper bound: 40->35",
+      "delta_pf": 24.4067,
+      "decision": "reject"
+    },
+    {
+      "iter": 96,
+      "run_id": "fmp_loop_20260619-74-96",
+      "change": "TRUE_BROKEN_CHART sma50_relative: <-20 -> <-15",
+      "delta_pf": -13.6445,
+      "decision": "reject"
+    },
+    {
+      "iter": 97,
+      "run_id": "fmp_loop_20260619-75-97",
+      "change": "TRUE_BROKEN_CHART sma50_relative: <-20 -> <-25",
+      "delta_pf": 43.4279,
+      "decision": "reject"
+    },
+    {
+      "iter": 98,
+      "run_id": "fmp_loop_20260619-76-98",
+      "change": "TRUE_BROKEN_CHART sma50_relative: <-20 -> <-22",
+      "delta_pf": 7.8907,
+      "decision": "accept"
+    },
+    {
+      "iter": 99,
+      "run_id": "fmp_loop_20260619-77-99",
+      "change": "TRUE_BROKEN_CHART sma50_relative: <-22 -> <-23",
+      "delta_pf": -0.001,
+      "decision": "reject"
+    },
+    {
+      "iter": 100,
+      "run_id": "fmp_loop_20260619-78-100",
+      "change": "STRONG_UPTREND sma200_relative: >0 -> >2",
+      "delta_pf": 0.0,
+      "decision": "accept"
+    },
+    {
+      "iter": 101,
+      "run_id": "fmp_loop_20260619-79-101",
+      "change": "STRONG_UPTREND sma200_relative: >2 -> >5",
+      "delta_pf": -1.2425,
+      "decision": "reject"
+    },
+    {
+      "iter": 103,
+      "run_id": "fmp_loop_20260619-81-103",
+      "change": "deep_dislocation dist_from_52w_high: <=-25 -> <=-33",
+      "delta_pf": 36.9157,
+      "decision": "accept"
+    },
+    {
+      "iter": 104,
+      "run_id": "fmp_loop_20260619-82-104",
+      "change": "medium_term max_simulation_days: 300->365",
+      "delta_pf": -2.6798,
+      "decision": "reject"
+    },
+    {
+      "iter": 102,
+      "run_id": "fmp_loop_20260619-80-102",
+      "change": "deep_dislocation dist_from_52w_high: <=-25 -> <=-27",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 105,
+      "run_id": "fmp_loop_20260619-83-105",
+      "change": "short_term trailing_stop atr_multiplier: 4.5->3.5",
+      "delta_pf": -8.0241,
+      "decision": "reject"
+    },
+    {
+      "iter": 106,
+      "run_id": "fmp_loop_20260619-84-106",
+      "change": "medium_term initial_stop atr_multiplier: 2.375->2.0",
+      "delta_pf": -42.6925,
+      "decision": "reject"
+    },
+    {
+      "iter": 107,
+      "run_id": "fmp_loop_20260619-85-107",
+      "change": "quality_dislocation BUY_FULL threshold: score==80 -> score>=80",
+      "delta_pf": -52.4249,
+      "decision": "reject"
+    },
+    {
+      "iter": 108,
+      "run_id": "fmp_loop_20260619-86-108",
+      "change": "quality_dislocation_route regime: BEAR_RISK_OFF -> [BEAR_RISK_OFF, LIQUIDITY_RALLY]",
+      "delta_pf": 0.0005,
+      "decision": "reject"
+    },
+    {
+      "iter": 109,
+      "run_id": "fmp_loop_20260619-87-109",
+      "change": "medium_term trailing_stop atr_multiplier: 9.0->10.0",
+      "delta_pf": -0.9398,
+      "decision": "reject"
+    },
+    {
+      "iter": 110,
+      "run_id": "fmp_loop_20260619-88-110",
+      "change": "bull_pullback_route sma50_relative window: [2.0,3.5]->[1.5,4.0]",
+      "delta_pf": -18.4173,
+      "decision": "reject"
+    },
+    {
+      "iter": 111,
+      "run_id": "fmp_loop_20260619-111",
+      "change": "bull_leadership decision_thresholds: WATCHLIST-only -> add BUY_STARTER at score>=100",
+      "delta_pf": -71.7611,
+      "decision": "reject"
+    },
+    {
+      "iter": 112,
+      "run_id": "fmp_loop_20260619-112",
+      "change": "OVERSOLD_REVERSAL RSI upper bound: 40->43 in technical_setup_config.json",
+      "delta_pf": -19.2661,
+      "decision": "reject"
+    },
+    {
+      "iter": 113,
+      "run_id": "fmp_loop_20260619-113",
+      "change": "short_term max_simulation_days: 60->90",
+      "delta_pf": -1.2578,
+      "decision": "reject"
+    },
+    {
+      "iter": 114,
+      "run_id": "fmp_loop_20260619-114",
+      "change": "short_term trailing_stop atr_multiplier: 4.5->5.5",
+      "delta_pf": -0.9795,
+      "decision": "reject"
+    },
+    {
+      "iter": 115,
+      "run_id": "fmp_loop_20260619-115",
+      "change": "bull_pullback_route rs_vs_spy_20d threshold: 5.0->4.0",
+      "delta_pf": -37.9826,
+      "decision": "reject"
+    },
+    {
+      "iter": 116,
+      "run_id": "fmp_loop_20260619-116",
+      "change": "medium_term trailing_stop atr_multiplier: 9.0->8.5",
+      "delta_pf": -2.3828,
+      "decision": "reject"
+    },
+    {
+      "iter": 117,
+      "run_id": "fmp_loop_20260619-117",
+      "change": "weak_ticker_exclusion_route: remove AMD",
+      "delta_pf": 0.0002,
+      "decision": "reject"
+    },
+    {
+      "iter": 118,
+      "run_id": "fmp_loop_20260619-118",
+      "change": "weak_ticker_exclusion_route: remove DIS",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 119,
+      "run_id": "fmp_loop_20260619-119",
+      "change": "weak_ticker_exclusion_route: remove NSC",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 120,
+      "run_id": "fmp_loop_20260619-120",
+      "change": "breakout_entry decision_thresholds: add BUY_STARTER at score>=90 (LIQUIDITY_RALLY only)",
+      "delta_pf": -49.4848,
+      "decision": "reject"
+    },
+    {
+      "iter": 121,
+      "run_id": "fmp_loop_20260619-121",
+      "change": "pullback_entry decision_thresholds: add BUY_STARTER at score>=90 (BEAR GROWTH_LEADER_PULLBACK)",
+      "delta_pf": -62.2456,
+      "decision": "reject"
+    },
+    {
+      "iter": 122,
+      "run_id": "fmp_loop_20260619-122",
+      "change": "BROKEN_SUPPORT perf_1w threshold: -3->-4 in technical_setup_config.json",
+      "delta_pf": 0.0,
+      "decision": "reject"
+    },
+    {
+      "iter": 123,
+      "run_id": "fmp_loop_20260619-123",
+      "change": "STRONG_UPTREND sma200_relative threshold: >2 -> >0 in technical_setup_config.json",
+      "delta_pf": 0.0002,
+      "decision": "reject"
+    }
+  ],
+  "accepted_config_summary": {
+    "note": "FMP baseline \u2014 current exit config from 50-iteration legacy loop, carried over unchanged",
+    "short_term": {
+      "target_r_multiple": 2.375,
+      "partial_profit_pct": 0.0,
+      "trailing_stop_atr_multiplier": 2.5,
+      "max_simulation_days": 60
+    },
+    "medium_term": {
+      "target_r_multiple": 2.0,
+      "partial_profit_pct": 0.4,
+      "breakeven_after_r_multiple": 1.25,
+      "trailing_stop_atr_multiplier": 3.0,
+      "max_simulation_days": 90
+    }
+  },
+  "next_recommended_tests": [
+    "Activate BULL_RISK_ON entry routing in entry_signal_config.json for BREAKOUT_MOMENTUM",
+    "Activate BULL_RISK_ON entry routing in entry_signal_config.json for GROWTH_LEADER_PULLBACK",
+    "Target: >20 new trades/year from bull regime without degrading bear regime win rate"
+  ],
+  "notes": [
+    "Read this file before the long Markdown audit when resuming.",
+    "Use scripts/optimize_loop.py summarize-run for compact run comparisons.",
+    "Use scripts/optimize_loop.py append-audit for terse iteration logging."
+  ],
+  "updated_at_utc": "2026-06-19T21:46:39.894228+00:00"
+}

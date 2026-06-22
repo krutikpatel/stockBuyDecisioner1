@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date as date_type
 from typing import Any
 
 import pandas as pd
 
 from codex_backed.data.bars import find_index_on_or_before
+from codex_backed.data.fundamentals_snapshot import FundamentalsSnapshot
 
 
 @dataclass(frozen=True)
@@ -21,12 +23,14 @@ def build_historical_feature_rows(
     *,
     tickers: list[str],
     options: HistoricalFeatureOptions,
+    fundamentals: Any = None,
 ) -> list[dict[str, Any]]:
     """Build FeatureSnapshot-compatible rows from normalized OHLCV bars."""
 
     spy_features = _build_frame_features(bars_by_ticker.get("SPY", []))
     spy_regime = _build_spy_regime(spy_features)
     rows: list[dict[str, Any]] = []
+    _snap_fields = FundamentalsSnapshot.field_names()
 
     for ticker in tickers:
         bars = bars_by_ticker.get(ticker, [])
@@ -43,6 +47,11 @@ def build_historical_feature_rows(
             regime, confidence = _regime_for_date(spy_regime, date_iso)
             row["market_regime"] = regime
             row["regime_confidence"] = confidence
+            if fundamentals is not None:
+                as_of = date_type.fromisoformat(date_iso)
+                snap = fundamentals.get_snapshot(ticker, as_of)
+                for field_name in _snap_fields:
+                    row[field_name] = getattr(snap, field_name, None)
             for horizon in sorted(options.horizons):
                 rows.append({**row, "horizon": horizon})
 

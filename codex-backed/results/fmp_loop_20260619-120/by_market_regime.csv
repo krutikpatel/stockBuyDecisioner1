@@ -1,0 +1,4 @@
+avg_return_pct,count,market_regime,median_return_pct,profit_factor,win_rate_pct
+18.1607,88,BEAR_RISK_OFF,0.0049,77.1209,57.9545
+2.6722,64,BULL_RISK_ON,0.002,53.558,51.5625
+-0.5518,56,LIQUIDITY_RALLY,0.0,0.3795,46.4286

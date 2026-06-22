@@ -1,0 +1,13 @@
+{
+  "entry_decisions_count": 468,
+  "trades_count": 0,
+  "feature_rows_count": 468,
+  "overall": {
+    "count": 0,
+    "avg_return_pct": null,
+    "median_return_pct": null,
+    "win_rate_pct": null,
+    "profit_factor": null
+  },
+  "by_horizon": []
+}
