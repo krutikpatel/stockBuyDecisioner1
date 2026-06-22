@@ -528,31 +528,178 @@ TOKEN DISCIPLINE
 - Do not restate framework/rule/invariants each iteration — reference by name.
 - Emit only the Step 8 line + the audit append.
 
-=============
-# how many trades, and what do the monster returns look like?
-python3 -c "
-import csv
-rows=[r for r in csv.DictReader(open('results/fmp_loop_20260619-163/trades.csv'))
-      if r['exit_date'][:4]=='2020']
-rets=sorted(float(r['realized_return_pct']) for r in rows)
-print('2020 trades:', len(rows))
-print('min/median/max return:', rets[0], rets[len(rets)//2], rets[-1])
-print('top 5:', rets[-5:])
-"
-python3 -c "
-import csv
-rows = list(csv.DictReader(open('results/fmp_loop_20260619-163/trades.csv')))
-def fold_stats(year, exclude_crash=False):
-    fr = [r for r in rows if r['exit_date'][:4]==str(year)]
-    if exclude_crash:
-        fr = [r for r in fr if not ('2020-03-01' <= r['entry_date'] <= '2020-05-31')]
-    rets = [float(r['realized_return_pct']) for r in fr]
-    if not rets: return None
-    import statistics
-    return dict(n=len(rets), mean=round(statistics.fmean(rets),2),
-                median=round(statistics.median(rets),3),
-                wins=round(sum(x>0 for x in rets)/len(rets)*100,1))
-print('2020 all:     ', fold_stats(2020))
-print('2020 ex-crash:', fold_stats(2020, exclude_crash=True))
+=================================================================
 
-"
+<> Opus snew strategy tuning prompt:
+ROLE
+You are running an iterative backtest optimization loop on the Path B strategy
+configs (quality-first entries + corrected exits + technical setup). Objective:
+improve OUT-OF-SAMPLE, drawdown-penalized return — NOT any single in-sample
+metric, NOT profit factor. Overfitting is the primary enemy: a change that
+improves metrics by carving the dataset into a narrower regime, shrinking the
+sample, concentrating return in one fold, or excluding losing names is a
+REGRESSION, not a win.
+
+PRECONDITION — DO NOT ITERATE WITHOUT A BASELINE
+Before iteration 1, a promoted Path B baseline MUST exist at
+state/last_accepted_metrics.json (run_id: opus_path1_baseline). If it does not,
+STOP and report — establish the baseline first (see ESTABLISH BASELINE below).
+Never start the loop against an empty or technical-strategy baseline.
+
+CONTEXT — WHY (read once)
+This strategy is "Path B": entries gated on a validated 2-factor quality edge
+(roic + sales_growth_yoy, earnings-proximity excluded), with corrected
+non-destructive exits. It REPLACED a technical-trend strategy that was retired
+after unbiased universe testing showed price-trend features had NEGATIVE forward
+edge (high-trend → underperform) while quality/growth survived into 2022–2025.
+Two prior failures shape these rules: (1) a loop that chased PROFIT FACTOR to
+73.96 on 152 trades via trade-count filters and a 65-name exclusion list — a
+curve-fit artifact; (2) a loop whose objective was hijacked by a single 2020
+COVID fold producing MAR in the trillions. Do NOT chase PF. Do NOT add tickers
+to any exclusion list. Do NOT let one fold drive the verdict.
+
+THE METRICS SCRIPT IS AUTHORITATIVE
+All metrics and the accept/reject verdict come from robust_metrics.py. You NEVER
+hand-compute MAR, drawdown, Sharpe, PF, fold stats, or the verdict. The script
+reads the run's native per-trade ledger, walk-forward scores it, and exits:
+  0 = ACCEPT or BASELINE,  2 = REJECT,  3 = HARD-CONSTRAINT fail,  4 = OVERFIT.
+The backtester writes its native ledger per run at
+  codex-backed/results/<run_id>/trades.csv
+The script auto-maps native column names (realized_return_pct -> return_pct,
+etc.) via its COLUMN_ALIASES — do NOT rename ledger columns to match docs. It
+needs, by any accepted alias: ticker, entry_date, exit_date, realized_return_pct,
+market_regime. If the ledger is missing, STOP and report — never fabricate metrics.
+
+OBJECTIVE FUNCTION  (ONE primary — no contradictions)
+Primary (MAXIMIZE): MEDIAN-FOLD MAR across walk-forward test folds.
+  Median is chosen over a weighted mean precisely because one outlier fold (e.g.
+  2020) can hijack a mean but not a median.
+Gated by (must also hold): worst-fold MAR not materially worse, and >50% of folds
+profitable. weighted-fold MAR, PF, win_rate, Sharpe are DIAGNOSTICS — reported,
+never targeted.
+
+HARD CONSTRAINTS (script enforces; any failure => exit 3 => REJECT)
+  trade_count(full) >= 300 ; trade_count(OOS union) >= 100 ;
+  mean/median ratio <= 8 (else TAIL_DEPENDENT) ;
+  >= 4 scored folds ; profitable-fold fraction >= 0.50 (else FOLD_FRAGILE) ;
+  max_drawdown finite ; no new exclusion-list tickers.
+
+INVARIANTS (never violate)
+- One config key, one parameter per iteration. No compound changes.
+- State lives in optimization_state.json + state/last_accepted_metrics.json.
+  Never re-read markdown.
+- Read configs once at startup; re-read only to verify a single field before edit.
+- Expert reasoning: <=3 sentences per voice.
+- You cannot add or remove tickers from the universe during the loop.
+- short term: max 40–45 days ; medium term: max 150 days.
+- Quality gate is the edge; technical rules are TIMING only and must never be
+  weighted as if they were the signal. Do not let an iteration turn a timing
+  knob into a primary driver.
+
+WALK-FORWARD (script-enforced; you never pick splits)
+robust_metrics.py rolls a 1-year test fold across 2015–2024 and seals 2025 as
+holdout. Fold range: 2015–2024 / hold 2025 tentatively. Selection is MEDIAN-FOLD MAR, gated by worst-fold MAR and the
+>50% profitable-fold rule. No single fold (incl. COVID 2020) decides the verdict.
+You read the script's numbers; you never choose or reason about splits yourself.
+
+ESTABLISH BASELINE — ONCE, BEFORE ITERATION 1 (replaces old cleanup)
+Path B configs are already corrected (quality-first entry config with calibrated
+roic/sales_growth thresholds; exit_policy_config_corrected with breakeven@1.0R,
+real partials, rebuilt trailing stops, time-stops enabled, max_sim_days 45/150).
+Do NOT re-apply old technical-strategy cleanup. To establish the anchor:
+  1. Confirm a cost model is active (commission + spread + ~5 bps slippage).
+  2. Run the backtest, emit results/opus_path1_baseline/trades.csv.
+  3. Score it with NO --baseline (Step 5 form) -> verdict BASELINE.
+  4. PROMOTE it. This is the last-accepted anchor. Expect a MODEST result
+     (median-fold MAR positive, PF ~1.2–1.6, WR ~40s–50s, profitable in most
+     folds). A spectacular number here means a bug, not success.
+  5. Sanity-check the baseline's exit-reason mix: MAX_SIM_WINDOW_EXIT should be
+     rare, not dominant. If it dominates, STOP — the exit fix did not take, and
+     optimizing on top of broken exits will mislead every iteration.
+
+DECISION RULE
+The script applies it literally vs state/last_accepted_metrics.json: accept needs
+median-fold MAR improvement, worst-fold MAR not worse by >15%, no regime-PF drop
+>15%, trade floors held, OOS maxDD not worse >10%, tail guard intact, fold-frag
+gate intact, and no OVERFIT-SUSPECT (WR +>5pts while OOS trades -<20%, or OOS
+trades -<20% for <5% primary gain). You read the verdict; you do not re-derive it.
+
+STOPPING CONDITION
+Stop when any: 5 consecutive rejects; OR median-fold MAR not improved for 15
+iters; OR last 3 accepts each improved median-fold MAR by <2%; OR iteration cap
+{N_MAX}. AT STOP run the FINAL HOLDOUT (Step S). Exit 4 => declare OVERFIT,
+distrust config.
+
+PER-ITERATION SEQUENCE
+
+Step 1 — Expert panel (label each, <=3 sentences, cite prior iter's actual
+numbers from state, not generic priors)
+  [QUANT] expectancy, R-multiples, mean/median ratio, winner:loser geometry,
+    per-fold dispersion.
+  [DISCRETIONARY] is the stop inside natural ATR noise; do targets leave trend;
+    is the quality gate too tight (starving trades) or too loose (junk in).
+  [RISK] does the change widen or narrow the loss distribution; does the gain
+    survive on the MEDIAN fold and the WORST fold, not just the mean; cut
+    max-loss-per-trade before chasing upside.
+
+Step 2 — Synthesize -> ONE change
+  State key, old -> new, and predicted direction on median-fold AND worst-fold
+  MAR. Divergence of result from thesis is your overfitting alarm.
+
+Step 3 — Validate config
+  PYTHONPATH=codex-backed/src codex-backed/.venv/bin/python -m codex_backed.cli \
+    validate-config --config-dir codex-backed/configs
+
+Step 4 — Backtest (must emit results/<run_id>/trades.csv)
+  bash codex-backed/scripts/run_fmp_backtest.sh fmp_loop_<DATE-TIME>-<N> \
+    --no-rebuild-feature-cache
+
+Step 5 — Score + verdict (authoritative; holdout locked)
+  codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py score \
+    --trades codex-backed/results/fmp_loop_<DATE-TIME>-<N>/trades.csv \
+    --run-id fmp_loop_<DATE-TIME>-<N> \
+    --baseline codex-backed/state/last_accepted_metrics.json \
+    --out codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
+    --holdout-locked
+  Capture the printed verdict line + exit code. Exit 0=ACCEPT, 2/3=REJECT.
+  (Use the SAME --out path string in Step 7 — it must match exactly.)
+
+Step 6 — Decide (read, don't re-derive)
+  exit 0 -> ACCEPT ; exit 2 -> REJECT ; exit 3 -> REJECT (hard-constraint) ;
+  on REJECT, revert the config change NOW before the next iteration.
+
+Step 7 — promote (if accept) -> log  [ONE logger only]
+  (a) If ACCEPT, promote FIRST (sets the anchor the next iteration scores against):
+    codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py promote \
+      --metrics codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
+      --baseline codex-backed/state/last_accepted_metrics.json
+  (b) If REJECT, revert the config change now. Do NOT promote.
+  (c) Log EXACTLY ONCE (accept AND reject), reading the computed metrics file —
+      never recomputing:
+    codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py log \
+      --metrics codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
+      --history codex-backed/history.jsonl --iteration <N> \
+      --change "<file:field: old→new>" --decision <accept|reject> \
+      --note "<predicted vs actual; decisive clause from script>" \
+      --next "<what to try next; what NOT to retry and why>"
+  (d) Record the metrics-json path in optimization_state.json for cross-iter memory.
+  NOTE: the metrics-json path in (a)(c)(d) and Step 5 --out must be byte-identical.
+
+Step 8 — Report (one line per voice + one summary line; nothing else)
+  [iter N] <change> -> <accept|reject> (medMAR A→B, worstMAR C→D, profFolds E→F,
+    OOS trades G→H, PF I→J diag | reason: <decisive clause from script>)
+
+Step S — FINAL HOLDOUT (once, at STOP, on best accepted run)
+  robust_metrics.py score --trades .../trades.csv --run-id <best> --final-holdout \
+    --out codex-backed/state/final_<best>.json
+  exit 0 = ROBUST ; exit 4 = OVERFIT, distrust config.
+
+TOKEN DISCIPLINE
+- optimization_state.json + last_accepted_metrics.json are the ONLY cross-iter
+  memory. After logging, do NOT re-read prior run summaries or metrics json.
+- The score step prints everything you need; never echo full metrics objects.
+- Carry forward only last-accepted key metrics (median-fold MAR, worst-fold MAR,
+  profitable-fold frac, OOS trades, min-regime-PF, mean/median, PF+WR diagnostics).
+  Rejected runs: one line only (iter, change, reject reason).
+- Do not restate framework/rule/invariants each iteration — reference by name.
+- Emit only the Step 8 line + the audit append.

@@ -42,11 +42,11 @@ TRADING_DAYS = 252
 # Walk-forward layout: each fold TESTS one calendar year it never tuned on.
 WF = {
     "first_test_year": 2015,
-    "last_test_year": 2022,
+    "last_test_year": 2024,
     "train_years": 4,
     "test_years": 1,
 }
-HOLDOUT_YEARS = (2023, 2025)          # sealed final exam
+HOLDOUT_YEARS = (2025, 2025)          # sealed final exam — 2025 only
 RECENCY_HALF_LIFE_YEARS = 3.0         # fold weight = 0.5 ** (age / half_life)
 
 HARD = {
@@ -364,11 +364,11 @@ def decide(new, base):
                 ["No baseline - recorded as honest baseline / last-accepted."], flags)
 
     wf, bwf = new["walk_forward"], base["walk_forward"]
-    new_p, old_p = wf["weighted_fold_mar"], bwf["weighted_fold_mar"]
+    new_p, old_p = wf["median_fold_mar"], bwf["median_fold_mar"]
     p_chg = pct_change(new_p, old_p)
     if new_p is None or old_p is None or new_p <= old_p:
         return ("REJECT", 2,
-                [f"clause1: weighted-fold MAR {old_p}->{new_p} did not improve"], flags)
+                [f"clause1: median-fold MAR {old_p}->{new_p} did not improve"], flags)
 
     wf_chg = pct_change(wf["worst_fold_mar"], bwf["worst_fold_mar"])
     if wf_chg is not None and wf_chg < -ACCEPT["worstfold_drop_max_pct"]:
@@ -408,7 +408,7 @@ def decide(new, base):
                  f"{p_chg:.1f}% weighted-MAR gain"], flags)
 
     return ("ACCEPT", 0,
-            [f"ACCEPT: weighted-fold MAR {old_p}->{new_p} (+{p_chg:.1f}%), "
+            [f"ACCEPT: median-fold MAR {old_p}->{new_p} (+{p_chg:.1f}%), "
              f"worst-fold OK, {wf['profitable_fold_frac']:.0%} folds profitable"],
             flags)
 
@@ -457,8 +457,8 @@ def cmd_score(args):
 
     wf, full = new["walk_forward"], new["full"]
     print(f"[{args.run_id}] {verdict}  ("
-          f"full_trades={full['trade_count']}, wMAR={wf['weighted_fold_mar']}, "
-          f"medMAR={wf['median_fold_mar']}, worstMAR={wf['worst_fold_mar']}, "
+          f"full_trades={full['trade_count']}, medMAR={wf['median_fold_mar']}, "
+          f"wMAR={wf['weighted_fold_mar']}, worstMAR={wf['worst_fold_mar']}, "
           f"profFolds={wf['profitable_fold_frac']:.0%}, "
           f"mean/med={full['mean_median_ratio']}, PF_diag={full['profit_factor']}) "
           f"| {reasons[0]}")
@@ -484,8 +484,8 @@ def cmd_log(args):
         "run_id": m["run_id"],
         "decision": args.decision,
         "change": args.change,
-        "primary_weighted_fold_mar": wf["weighted_fold_mar"],
-        "median_fold_mar": wf["median_fold_mar"],
+        "primary_median_fold_mar": wf["median_fold_mar"],
+        "weighted_fold_mar": wf["weighted_fold_mar"],
         "worst_fold_mar": wf["worst_fold_mar"],
         "profitable_fold_frac": wf["profitable_fold_frac"],
         "n_scored_folds": wf["n_scored_folds"],
