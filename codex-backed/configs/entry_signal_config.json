@@ -1,16 +1,58 @@
 {
-  "entry_labels": ["NO_TRADE", "WATCHLIST", "BUY_STARTER", "BUY_FULL", "BUY_AGGRESSIVE"],
+  "entry_labels": [
+    "NO_TRADE",
+    "WATCHLIST",
+    "BUY_STARTER",
+    "BUY_FULL",
+    "BUY_AGGRESSIVE"
+  ],
   "entry_router": {
     "method": "priority_first_match",
     "rules": [
+      {
+        "id": "quality_combined_route",
+        "priority": 200,
+        "description": "Quality-first eligibility (roic+sales_growth) with light technical timing \u2014 Path B core",
+        "logic": {
+          "all": [
+            {
+              "field": "roic",
+              "operator": ">=",
+              "value": 3.0
+            },
+            {
+              "field": "sales_growth_yoy",
+              "operator": ">=",
+              "value": 0.0
+            },
+            {
+              "field": "earnings_within_30_days",
+              "operator": "==",
+              "value": 0
+            }
+          ]
+        },
+        "entry_engine": "quality_combined"
+      },
       {
         "id": "breakout_entry_route",
         "priority": 140,
         "description": "Confirmed breakout entry in resilient or liquidity-supportive regimes",
         "logic": {
           "all": [
-            { "field": "selected_setup", "operator": "==", "value": "BREAKOUT_MOMENTUM" },
-            { "field": "market_regime", "operator": "in", "value": ["BEAR_RISK_OFF", "LIQUIDITY_RALLY"] }
+            {
+              "field": "selected_setup",
+              "operator": "==",
+              "value": "BREAKOUT_MOMENTUM"
+            },
+            {
+              "field": "market_regime",
+              "operator": "in",
+              "value": [
+                "BEAR_RISK_OFF",
+                "LIQUIDITY_RALLY"
+              ]
+            }
           ]
         },
         "entry_engine": "breakout_entry"
@@ -21,10 +63,29 @@
         "description": "Pullback-to-support entry for RS leaders in bull regime",
         "logic": {
           "all": [
-            { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
-            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
-            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 4.0 },
-            { "field": "sma50_relative", "operator": "between", "value": [2.0, 3.5] }
+            {
+              "field": "selected_setup",
+              "operator": "==",
+              "value": "GROWTH_LEADER_PULLBACK"
+            },
+            {
+              "field": "market_regime",
+              "operator": "==",
+              "value": "BULL_RISK_ON"
+            },
+            {
+              "field": "rs_vs_spy_20d",
+              "operator": ">=",
+              "value": 4.0
+            },
+            {
+              "field": "sma50_relative",
+              "operator": "between",
+              "value": [
+                2.0,
+                3.5
+              ]
+            }
           ]
         },
         "entry_engine": "bull_pullback_entry"
@@ -35,8 +96,16 @@
         "description": "Clean trend pullback with confirmation",
         "logic": {
           "all": [
-            { "field": "selected_setup", "operator": "==", "value": "GROWTH_LEADER_PULLBACK" },
-            { "field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF" }
+            {
+              "field": "selected_setup",
+              "operator": "==",
+              "value": "GROWTH_LEADER_PULLBACK"
+            },
+            {
+              "field": "market_regime",
+              "operator": "==",
+              "value": "BEAR_RISK_OFF"
+            }
           ]
         },
         "entry_engine": "pullback_entry"
@@ -47,8 +116,16 @@
         "description": "Native technical dislocation/rebound setup in supportive regimes",
         "logic": {
           "all": [
-            { "field": "selected_setup", "operator": "==", "value": "BROKEN_CHART_QUALITY_RECOVERY" },
-            { "field": "market_regime", "operator": "==", "value": "BEAR_RISK_OFF" }
+            {
+              "field": "selected_setup",
+              "operator": "==",
+              "value": "BROKEN_CHART_QUALITY_RECOVERY"
+            },
+            {
+              "field": "market_regime",
+              "operator": "==",
+              "value": "BEAR_RISK_OFF"
+            }
           ]
         },
         "entry_engine": "quality_dislocation"
@@ -59,11 +136,34 @@
         "description": "Risk-on technical leader with relative strength",
         "logic": {
           "all": [
-            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
-            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 },
-            { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
-            { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] },
-            { "field": "sma20_relative", "operator": "<=", "value": 8.0 }
+            {
+              "field": "market_regime",
+              "operator": "==",
+              "value": "BULL_RISK_ON"
+            },
+            {
+              "field": "rs_vs_spy_20d",
+              "operator": ">=",
+              "value": 3.0
+            },
+            {
+              "field": "sma50_slope",
+              "operator": ">=",
+              "value": 0.0
+            },
+            {
+              "field": "trend_label",
+              "operator": "in",
+              "value": [
+                "strong_uptrend",
+                "weak_uptrend"
+              ]
+            },
+            {
+              "field": "sma20_relative",
+              "operator": "<=",
+              "value": 8.0
+            }
           ]
         },
         "entry_engine": "bull_leadership"
@@ -74,8 +174,19 @@
         "description": "Oversold tactical rebound with early stabilization",
         "logic": {
           "all": [
-            { "field": "rsi14", "operator": "between", "value": [25, 42] },
-            { "field": "rsi_slope", "operator": ">", "value": 0.0 }
+            {
+              "field": "rsi14",
+              "operator": "between",
+              "value": [
+                25,
+                42
+              ]
+            },
+            {
+              "field": "rsi_slope",
+              "operator": ">",
+              "value": 0.0
+            }
           ]
         },
         "entry_engine": "oversold_rebound"
@@ -86,10 +197,26 @@
         "description": "Strong but extended leadership starter",
         "logic": {
           "all": [
-            { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
-            { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
-            { "field": "sma20_relative", "operator": ">", "value": 8.0 },
-            { "field": "sma50_slope", "operator": ">=", "value": 0.0 }
+            {
+              "field": "market_regime",
+              "operator": "==",
+              "value": "BULL_RISK_ON"
+            },
+            {
+              "field": "rs_vs_spy_20d",
+              "operator": ">=",
+              "value": 5.0
+            },
+            {
+              "field": "sma20_relative",
+              "operator": ">",
+              "value": 8.0
+            },
+            {
+              "field": "sma50_slope",
+              "operator": ">=",
+              "value": 0.0
+            }
           ]
         },
         "entry_engine": "extended_starter"
@@ -106,8 +233,16 @@
           "points": 25,
           "logic": {
             "any": [
-              { "field": "selected_setup", "operator": "==", "value": "BROKEN_CHART_QUALITY_RECOVERY" },
-              { "field": "selected_setup", "operator": "==", "value": "DOWNTREND_REBOUND_CANDIDATE" }
+              {
+                "field": "selected_setup",
+                "operator": "==",
+                "value": "BROKEN_CHART_QUALITY_RECOVERY"
+              },
+              {
+                "field": "selected_setup",
+                "operator": "==",
+                "value": "DOWNTREND_REBOUND_CANDIDATE"
+              }
             ]
           },
           "reason": "Rebound setup is detected from native technicals"
@@ -115,19 +250,35 @@
         {
           "id": "deep_dislocation",
           "points": 25,
-          "logic": { "field": "dist_from_52w_high", "operator": "<=", "value": -33 },
+          "logic": {
+            "field": "dist_from_52w_high",
+            "operator": "<=",
+            "value": -33
+          },
           "reason": "Price is meaningfully below the 52-week high"
         },
         {
           "id": "oversold",
           "points": 20,
-          "logic": { "field": "rsi14", "operator": "<=", "value": 40 },
+          "logic": {
+            "field": "rsi14",
+            "operator": "<=",
+            "value": 40
+          },
           "reason": "RSI is deeply oversold"
         },
         {
           "id": "supportive_rebound_regime",
           "points": 20,
-          "logic": { "field": "market_regime", "operator": "in", "value": ["BEAR_RISK_OFF", "SIDEWAYS_CHOPPY", "LIQUIDITY_RALLY"] },
+          "logic": {
+            "field": "market_regime",
+            "operator": "in",
+            "value": [
+              "BEAR_RISK_OFF",
+              "SIDEWAYS_CHOPPY",
+              "LIQUIDITY_RALLY"
+            ]
+          },
           "reason": "Regime supports dislocation/rebound trades"
         },
         {
@@ -135,9 +286,21 @@
           "points": 10,
           "logic": {
             "any": [
-              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
-              { "field": "updown_volume_ratio", "operator": ">", "value": 1.0 },
-              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+              {
+                "field": "volume_dryup_ratio",
+                "operator": "<=",
+                "value": 0.8
+              },
+              {
+                "field": "updown_volume_ratio",
+                "operator": ">",
+                "value": 1.0
+              },
+              {
+                "field": "rs_vs_spy_20d",
+                "operator": ">=",
+                "value": 0.0
+              }
             ]
           },
           "reason": "Native volume or relative-strength confirmation is present"
@@ -145,9 +308,30 @@
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "BUY_FULL",    "logic": { "field": "entry_score", "operator": ">=", "value": 80 } },
-        { "label": "BUY_STARTER", "logic": { "field": "entry_score", "operator": ">=", "value": 70 } },
-        { "label": "WATCHLIST",   "logic": { "field": "entry_score", "operator": ">=", "value": 30 } }
+        {
+          "label": "BUY_FULL",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 80
+          }
+        },
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 70
+          }
+        },
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 30
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -157,37 +341,67 @@
         {
           "id": "risk_on_regime",
           "points": 20,
-          "logic": { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+          "logic": {
+            "field": "market_regime",
+            "operator": "==",
+            "value": "BULL_RISK_ON"
+          },
           "reason": "Risk-on regime supports leadership entries"
         },
         {
           "id": "relative_strength_leader",
           "points": 30,
-          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 3.0 },
+          "logic": {
+            "field": "rs_vs_spy_20d",
+            "operator": ">=",
+            "value": 3.0
+          },
           "reason": "Outperforming SPY"
         },
         {
           "id": "technical_leader",
           "points": 25,
-          "logic": { "field": "trend_label", "operator": "in", "value": ["strong_uptrend", "weak_uptrend"] },
+          "logic": {
+            "field": "trend_label",
+            "operator": "in",
+            "value": [
+              "strong_uptrend",
+              "weak_uptrend"
+            ]
+          },
           "reason": "Price trend supports leadership"
         },
         {
           "id": "trend_intact",
           "points": 15,
-          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+          "logic": {
+            "field": "sma50_slope",
+            "operator": ">=",
+            "value": 0.0
+          },
           "reason": "Intermediate trend is intact"
         },
         {
           "id": "not_extreme_extension",
           "points": 10,
-          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "logic": {
+            "field": "sma20_relative",
+            "operator": "<=",
+            "value": 8.0
+          },
           "reason": "Price is not excessively extended above SMA20"
         }
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 90 } }
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 90
+          }
+        }
       ],
       "fallback_label": "WATCHLIST"
     },
@@ -197,13 +411,21 @@
         {
           "id": "risk_on_regime",
           "points": 25,
-          "logic": { "field": "market_regime", "operator": "==", "value": "BULL_RISK_ON" },
+          "logic": {
+            "field": "market_regime",
+            "operator": "==",
+            "value": "BULL_RISK_ON"
+          },
           "reason": "Risk-on regime supports starter entries"
         },
         {
           "id": "strong_relative_strength",
           "points": 35,
-          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 5.0 },
+          "logic": {
+            "field": "rs_vs_spy_20d",
+            "operator": ">=",
+            "value": 5.0
+          },
           "reason": "Strong relative strength supports a starter position"
         },
         {
@@ -211,8 +433,16 @@
           "points": 25,
           "logic": {
             "all": [
-              { "field": "sma20_relative", "operator": ">", "value": 8.0 },
-              { "field": "sma50_slope", "operator": ">=", "value": 0.0 }
+              {
+                "field": "sma20_relative",
+                "operator": ">",
+                "value": 8.0
+              },
+              {
+                "field": "sma50_slope",
+                "operator": ">=",
+                "value": 0.0
+              }
             ]
           },
           "reason": "Stock is extended but trend is not broken"
@@ -220,13 +450,24 @@
         {
           "id": "power_extension",
           "points": 15,
-          "logic": { "field": "sma20_relative", "operator": ">", "value": 15.0 },
+          "logic": {
+            "field": "sma20_relative",
+            "operator": ">",
+            "value": 15.0
+          },
           "reason": "Extension is strong enough to confirm power momentum"
         }
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 45 } }
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 45
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -236,19 +477,34 @@
         {
           "id": "rsi_rebound_zone",
           "points": 35,
-          "logic": { "field": "rsi14", "operator": "between", "value": [25, 42] },
+          "logic": {
+            "field": "rsi14",
+            "operator": "between",
+            "value": [
+              25,
+              42
+            ]
+          },
           "reason": "RSI is in rebound zone"
         },
         {
           "id": "rsi_turning_up",
           "points": 25,
-          "logic": { "field": "rsi_slope", "operator": ">", "value": 0.0 },
+          "logic": {
+            "field": "rsi_slope",
+            "operator": ">",
+            "value": 0.0
+          },
           "reason": "RSI is turning up"
         },
         {
           "id": "weekly_stabilization",
           "points": 20,
-          "logic": { "field": "perf_1w", "operator": ">=", "value": 0.0 },
+          "logic": {
+            "field": "perf_1w",
+            "operator": ">=",
+            "value": 0.0
+          },
           "reason": "Price action stabilized this week"
         },
         {
@@ -256,8 +512,16 @@
           "points": 20,
           "logic": {
             "any": [
-              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
-              { "field": "updown_volume_ratio", "operator": ">", "value": 1.0 }
+              {
+                "field": "volume_dryup_ratio",
+                "operator": "<=",
+                "value": 0.8
+              },
+              {
+                "field": "updown_volume_ratio",
+                "operator": ">",
+                "value": 1.0
+              }
             ]
           },
           "reason": "Volume confirms seller exhaustion or buyer pressure"
@@ -265,7 +529,14 @@
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 60 } }
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 60
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -275,19 +546,37 @@
         {
           "id": "sma50_zone",
           "points": 25,
-          "logic": { "field": "sma50_relative", "operator": "between", "value": [-5, 5] },
+          "logic": {
+            "field": "sma50_relative",
+            "operator": "between",
+            "value": [
+              -5,
+              5
+            ]
+          },
           "reason": "Price is near SMA50"
         },
         {
           "id": "sma50_rising",
           "points": 20,
-          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
+          "logic": {
+            "field": "sma50_slope",
+            "operator": ">=",
+            "value": 0.0
+          },
           "reason": "SMA50 is rising"
         },
         {
           "id": "healthy_rsi_pullback",
           "points": 20,
-          "logic": { "field": "rsi14", "operator": "between", "value": [38, 58] },
+          "logic": {
+            "field": "rsi14",
+            "operator": "between",
+            "value": [
+              38,
+              58
+            ]
+          },
           "reason": "RSI is in pullback zone"
         },
         {
@@ -295,8 +584,16 @@
           "points": 25,
           "logic": {
             "any": [
-              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
-              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+              {
+                "field": "volume_dryup_ratio",
+                "operator": "<=",
+                "value": 0.8
+              },
+              {
+                "field": "rs_vs_spy_20d",
+                "operator": ">=",
+                "value": 0.0
+              }
             ]
           },
           "reason": "Pullback has volume or relative-strength confirmation"
@@ -304,13 +601,24 @@
         {
           "id": "not_extended",
           "points": 10,
-          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "logic": {
+            "field": "sma20_relative",
+            "operator": "<=",
+            "value": 8.0
+          },
           "reason": "Entry is not extended"
         }
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 40 } }
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 40
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -320,31 +628,54 @@
         {
           "id": "near_high",
           "points": 25,
-          "logic": { "field": "dist_from_20d_high", "operator": ">=", "value": -1.0 },
+          "logic": {
+            "field": "dist_from_20d_high",
+            "operator": ">=",
+            "value": -1.0
+          },
           "reason": "Price is near a 20-day high"
         },
         {
           "id": "volume_breakout",
           "points": 30,
-          "logic": { "field": "breakout_volume_multiple", "operator": ">=", "value": 1.5 },
+          "logic": {
+            "field": "breakout_volume_multiple",
+            "operator": ">=",
+            "value": 1.5
+          },
           "reason": "Breakout has volume confirmation"
         },
         {
           "id": "positive_rs",
           "points": 25,
-          "logic": { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 },
+          "logic": {
+            "field": "rs_vs_spy_20d",
+            "operator": ">=",
+            "value": 0.0
+          },
           "reason": "Breakout is not lagging SPY"
         },
         {
           "id": "avoid_bear_regime",
           "points": 20,
-          "logic": { "field": "market_regime", "operator": "!=", "value": "BEAR_RISK_OFF" },
+          "logic": {
+            "field": "market_regime",
+            "operator": "!=",
+            "value": "BEAR_RISK_OFF"
+          },
           "reason": "Regime is not bear risk-off"
         }
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 45 } }
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 45
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -354,28 +685,54 @@
         {
           "id": "sma50_zone",
           "points": 25,
-          "logic": { "field": "sma50_relative", "operator": "between", "value": [-5, 5] },
-          "reason": "Price is near SMA50 — pullback to key support"
+          "logic": {
+            "field": "sma50_relative",
+            "operator": "between",
+            "value": [
+              -5,
+              5
+            ]
+          },
+          "reason": "Price is near SMA50 \u2014 pullback to key support"
         },
         {
           "id": "sma50_rising",
           "points": 20,
-          "logic": { "field": "sma50_slope", "operator": ">=", "value": 0.0 },
-          "reason": "SMA50 is rising — uptrend intact"
+          "logic": {
+            "field": "sma50_slope",
+            "operator": ">=",
+            "value": 0.0
+          },
+          "reason": "SMA50 is rising \u2014 uptrend intact"
         },
         {
           "id": "healthy_rsi_pullback",
           "points": 20,
-          "logic": { "field": "rsi14", "operator": "between", "value": [38, 58] },
-          "reason": "RSI in pullback zone — not oversold, not extended"
+          "logic": {
+            "field": "rsi14",
+            "operator": "between",
+            "value": [
+              38,
+              58
+            ]
+          },
+          "reason": "RSI in pullback zone \u2014 not oversold, not extended"
         },
         {
           "id": "confirmation",
           "points": 25,
           "logic": {
             "any": [
-              { "field": "volume_dryup_ratio", "operator": "<=", "value": 0.8 },
-              { "field": "rs_vs_spy_20d", "operator": ">=", "value": 0.0 }
+              {
+                "field": "volume_dryup_ratio",
+                "operator": "<=",
+                "value": 0.8
+              },
+              {
+                "field": "rs_vs_spy_20d",
+                "operator": ">=",
+                "value": 0.0
+              }
             ]
           },
           "reason": "Volume dryup or positive RS confirms pullback quality"
@@ -383,14 +740,32 @@
         {
           "id": "not_extended",
           "points": 10,
-          "logic": { "field": "sma20_relative", "operator": "<=", "value": 8.0 },
+          "logic": {
+            "field": "sma20_relative",
+            "operator": "<=",
+            "value": 8.0
+          },
           "reason": "Entry is not extended above SMA20"
         }
       ],
       "penalty_rules": [],
       "decision_thresholds": [
-        { "label": "BUY_STARTER", "logic": { "field": "entry_score", "operator": ">=", "value": 70 } },
-        { "label": "WATCHLIST", "logic": { "field": "entry_score", "operator": ">=", "value": 40 } }
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 70
+          }
+        },
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 40
+          }
+        }
       ],
       "fallback_label": "NO_TRADE"
     },
@@ -399,6 +774,383 @@
       "score_rules": [],
       "penalty_rules": [],
       "decision_thresholds": [],
+      "fallback_label": "NO_TRADE"
+    },
+    "quality_gate": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "roic_strong",
+          "points": 30,
+          "logic": {
+            "field": "roic",
+            "operator": ">=",
+            "value": 0.2
+          },
+          "reason": "High ROIC \u2014 top-tier capital efficiency (durable factor, IC~0.14 train)"
+        },
+        {
+          "id": "roic_ok",
+          "points": 15,
+          "logic": {
+            "all": [
+              {
+                "field": "roic",
+                "operator": ">=",
+                "value": 0.1
+              },
+              {
+                "field": "roic",
+                "operator": "<",
+                "value": 0.2
+              }
+            ]
+          },
+          "reason": "Moderate ROIC \u2014 acceptable profitability"
+        },
+        {
+          "id": "sales_growth_strong",
+          "points": 30,
+          "logic": {
+            "field": "sales_growth_yoy",
+            "operator": ">=",
+            "value": 0.1
+          },
+          "reason": "Strong revenue growth \u2014 independent growth factor"
+        },
+        {
+          "id": "sales_growth_ok",
+          "points": 15,
+          "logic": {
+            "all": [
+              {
+                "field": "sales_growth_yoy",
+                "operator": ">=",
+                "value": 0.0
+              },
+              {
+                "field": "sales_growth_yoy",
+                "operator": "<",
+                "value": 0.1
+              }
+            ]
+          },
+          "reason": "Moderate revenue growth"
+        },
+        {
+          "id": "margin_confirm",
+          "points": 10,
+          "logic": {
+            "field": "gross_margin",
+            "operator": ">=",
+            "value": 0.4
+          },
+          "reason": "Healthy gross margin confirms business quality"
+        }
+      ],
+      "penalty_rules": [
+        {
+          "id": "weak_roic_penalty",
+          "points": -40,
+          "logic": {
+            "field": "roic",
+            "operator": "<",
+            "value": 0.1
+          },
+          "reason": "Very low ROIC \u2014 bottom-decile quality, reliably underperforms"
+        },
+        {
+          "id": "shrinking_sales_penalty",
+          "points": -30,
+          "logic": {
+            "field": "sales_growth_yoy",
+            "operator": "<",
+            "value": 0.0
+          },
+          "reason": "Declining revenue \u2014 avoid"
+        },
+        {
+          "id": "earnings_proximity_penalty",
+          "points": -100,
+          "logic": {
+            "field": "earnings_within_30_days",
+            "operator": "==",
+            "value": 1
+          },
+          "reason": "Within 30d of earnings \u2014 measurable negative edge; exclude"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "label": "BUY_FULL",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 60
+          }
+        },
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 40
+          }
+        },
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 25
+          }
+        }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "quality_timing": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "not_in_freefall",
+          "points": 35,
+          "logic": {
+            "field": "perf_1w",
+            "operator": ">=",
+            "value": -8.0
+          },
+          "reason": "Not in a high-velocity breakdown this week"
+        },
+        {
+          "id": "stabilizing",
+          "points": 30,
+          "logic": {
+            "field": "rsi14",
+            "operator": ">=",
+            "value": 35.0
+          },
+          "reason": "Not in deep oversold capitulation"
+        },
+        {
+          "id": "not_overextended",
+          "points": 25,
+          "logic": {
+            "field": "sma20_relative",
+            "operator": "<=",
+            "value": 12.0
+          },
+          "reason": "Not chasing an extreme extension above SMA20"
+        },
+        {
+          "id": "near_recent_structure",
+          "points": 10,
+          "logic": {
+            "field": "dist_from_52w_high",
+            "operator": ">=",
+            "value": -40.0
+          },
+          "reason": "Not a totally broken long-term chart"
+        }
+      ],
+      "penalty_rules": [],
+      "decision_thresholds": [
+        {
+          "label": "BUY_FULL",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 70
+          }
+        },
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 45
+          }
+        },
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 25
+          }
+        }
+      ],
+      "fallback_label": "NO_TRADE"
+    },
+    "quality_combined": {
+      "max_score": 100,
+      "score_rules": [
+        {
+          "id": "roic_strong",
+          "points": 30,
+          "logic": {
+            "field": "roic",
+            "operator": ">=",
+            "value": 0.2
+          },
+          "reason": "High ROIC \u2014 top-tier capital efficiency (durable factor, IC~0.14 train)"
+        },
+        {
+          "id": "roic_ok",
+          "points": 15,
+          "logic": {
+            "all": [
+              {
+                "field": "roic",
+                "operator": ">=",
+                "value": 0.1
+              },
+              {
+                "field": "roic",
+                "operator": "<",
+                "value": 0.2
+              }
+            ]
+          },
+          "reason": "Moderate ROIC \u2014 acceptable profitability"
+        },
+        {
+          "id": "sales_growth_strong",
+          "points": 30,
+          "logic": {
+            "field": "sales_growth_yoy",
+            "operator": ">=",
+            "value": 0.1
+          },
+          "reason": "Strong revenue growth \u2014 independent growth factor"
+        },
+        {
+          "id": "sales_growth_ok",
+          "points": 15,
+          "logic": {
+            "all": [
+              {
+                "field": "sales_growth_yoy",
+                "operator": ">=",
+                "value": 0.0
+              },
+              {
+                "field": "sales_growth_yoy",
+                "operator": "<",
+                "value": 0.1
+              }
+            ]
+          },
+          "reason": "Moderate revenue growth"
+        },
+        {
+          "id": "margin_confirm",
+          "points": 10,
+          "logic": {
+            "field": "gross_margin",
+            "operator": ">=",
+            "value": 0.4
+          },
+          "reason": "Healthy gross margin confirms business quality"
+        },
+        {
+          "id": "timing_not_in_freefall",
+          "points": 11,
+          "logic": {
+            "field": "perf_1w",
+            "operator": ">=",
+            "value": -8.0
+          },
+          "reason": "Not in a high-velocity breakdown this week"
+        },
+        {
+          "id": "timing_stabilizing",
+          "points": 10,
+          "logic": {
+            "field": "rsi14",
+            "operator": ">=",
+            "value": 35.0
+          },
+          "reason": "Not in deep oversold capitulation"
+        },
+        {
+          "id": "timing_not_overextended",
+          "points": 8,
+          "logic": {
+            "field": "sma20_relative",
+            "operator": "<=",
+            "value": 12.0
+          },
+          "reason": "Not chasing an extreme extension above SMA20"
+        },
+        {
+          "id": "timing_near_recent_structure",
+          "points": 5,
+          "logic": {
+            "field": "dist_from_52w_high",
+            "operator": ">=",
+            "value": -40.0
+          },
+          "reason": "Not a totally broken long-term chart"
+        }
+      ],
+      "penalty_rules": [
+        {
+          "id": "weak_roic_penalty",
+          "points": -40,
+          "logic": {
+            "field": "roic",
+            "operator": "<",
+            "value": 0.1
+          },
+          "reason": "Very low ROIC \u2014 bottom-decile quality, reliably underperforms"
+        },
+        {
+          "id": "shrinking_sales_penalty",
+          "points": -30,
+          "logic": {
+            "field": "sales_growth_yoy",
+            "operator": "<",
+            "value": 0.0
+          },
+          "reason": "Declining revenue \u2014 avoid"
+        },
+        {
+          "id": "earnings_proximity_penalty",
+          "points": -100,
+          "logic": {
+            "field": "earnings_within_30_days",
+            "operator": "==",
+            "value": 1
+          },
+          "reason": "Within 30d of earnings \u2014 measurable negative edge; exclude"
+        }
+      ],
+      "decision_thresholds": [
+        {
+          "label": "BUY_FULL",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 70
+          }
+        },
+        {
+          "label": "BUY_STARTER",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 50
+          }
+        },
+        {
+          "label": "WATCHLIST",
+          "logic": {
+            "field": "entry_score",
+            "operator": ">=",
+            "value": 30
+          }
+        }
+      ],
       "fallback_label": "NO_TRADE"
     }
   }

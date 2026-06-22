@@ -9,58 +9,63 @@
     "FAILED_SETUP_EXIT",
     "MAX_SIM_WINDOW_EXIT"
   ],
+  "_design_notes": {
+    "purpose": "Non-destructive exit defaults for Path B baseline. Corrections, not optimizations.",
+    "finding_1_breakeven_strangle": "Old breakeven_after_r_multiple=0.05 moved stop to breakeven after a 0.05R move \u2014 trades reaching +2.73% median MFE closed at -0.09%. Fixed: breakeven only after 1.0R, so a winner must earn real cushion before its stop tightens.",
+    "finding_2_clock_dependence": "90% of >20% winners exited via MAX_SIM_WINDOW_EXIT \u2014 the sim clock, not a strategy exit. Fixed: trailing stops widened to let winners run on price action, and max_simulation_days set so the clock is a backstop, not the default.",
+    "finding_3_partial_profit": "Old sell_pct=1 (short) dumped the entire position at 0.05R = instant tiny 'win'. medium sell_pct=0 took nothing. Fixed: take a real partial (33%) at a real target (1.5R) to bank some gain while leaving runner exposure.",
+    "status": "FROZEN defaults for baseline. Do NOT tune until Path B entry edge is measured through these."
+  },
   "default_exit_policy": {
     "short_term": {
-      "max_simulation_days": 50,
-      "cost_pct": 0.10,
+      "max_simulation_days": 45,
       "initial_stop": {
         "method": "atr_or_support",
-        "atr_multiplier": 4.0,
+        "atr_multiplier": 3.0,
         "support_buffer_pct": 4.0
       },
       "partial_profit": {
         "enabled": true,
-        "target_r_multiple": 0.05,
-        "sell_pct": 1,
+        "target_r_multiple": 1.5,
+        "sell_pct": 33,
         "move_stop_to_breakeven": true,
-        "breakeven_after_r_multiple": 0.5
+        "breakeven_after_r_multiple": 1.0
       },
       "trailing_stop": {
         "enabled": true,
         "method": "atr",
-        "atr_multiplier": 5.5,
+        "atr_multiplier": 3.5,
         "activate_after_target_1": true
       },
       "time_stop": {
-        "enabled": false,
-        "days_without_progress": 10,
+        "enabled": true,
+        "days_without_progress": 15,
         "min_open_return_pct": 1.0
       }
     },
     "medium_term": {
       "max_simulation_days": 150,
-      "cost_pct": 0.10,
       "initial_stop": {
         "method": "atr_or_support",
-        "atr_multiplier": 4.0,
-        "support_buffer_pct": 4.0
+        "atr_multiplier": 2.75,
+        "support_buffer_pct": 2.5
       },
       "partial_profit": {
         "enabled": true,
-        "target_r_multiple": 0.05,
-        "sell_pct": 1,
+        "target_r_multiple": 2.0,
+        "sell_pct": 33,
         "move_stop_to_breakeven": true,
-        "breakeven_after_r_multiple": 0.5
+        "breakeven_after_r_multiple": 1.0
       },
       "trailing_stop": {
         "enabled": true,
         "method": "atr",
-        "atr_multiplier": 13.5,
+        "atr_multiplier": 5.0,
         "activate_after_target_1": true
       },
       "time_stop": {
-        "enabled": false,
-        "days_without_progress": 20,
+        "enabled": true,
+        "days_without_progress": 30,
         "min_open_return_pct": 2.0
       }
     }

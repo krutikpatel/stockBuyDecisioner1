@@ -1,0 +1,9 @@
+score,train_spread,train_mono,recent_spread,recent_mono,recent_n
+composite,40.56,False,,,0
+roic,42.98,False,,,0
+gross_margin,19.04,False,,,0
+operating_margin,21.39,False,,,0
+sales_growth_yoy,37.78,False,,,0
+eps_growth_yoy,3.42,False,,,0
+roe,9.4,False,,,0
+composite_ex_earnings,42.14,False,,,0

@@ -1,0 +1,272 @@
+{
+  "run_id": "cleanup_baseline_20260619",
+  "full": {
+    "trade_count": 154,
+    "cagr": 27.0225,
+    "max_drawdown": 37.6186,
+    "mar_ratio": 0.7183,
+    "sharpe": 3.5307,
+    "sortino": 10.9558,
+    "avg_return": 2.4854,
+    "median_return": -0.0456,
+    "mean_median_ratio": 54.56,
+    "win_rate": 34.4156,
+    "profit_factor": 5.0272,
+    "avg_loss": -0.941,
+    "min_regime_pf": 4.3523,
+    "regime_pf": {
+      "BULL_RISK_ON": 12.3866,
+      "BEAR_RISK_OFF": 4.3523
+    },
+    "first_exit": "2013-04-02",
+    "last_exit": "2025-12-01"
+  },
+  "walk_forward": {
+    "folds": [
+      {
+        "test_year": 2015,
+        "train_label": "2011-2014",
+        "weight": 0.1984,
+        "metrics": {
+          "trade_count": 10,
+          "cagr": -1.3343,
+          "max_drawdown": 0.6415,
+          "mar_ratio": -2.0799,
+          "sharpe": -26.47,
+          "sortino": -39.3001,
+          "avg_return": -0.0643,
+          "median_return": -0.0733,
+          "mean_median_ratio": 0.88,
+          "win_rate": 10.0,
+          "profit_factor": 0.037,
+          "avg_loss": -0.0742,
+          "min_regime_pf": 0.037,
+          "regime_pf": {
+            "BULL_RISK_ON": 0.037
+          },
+          "first_exit": "2015-01-05",
+          "last_exit": "2015-06-29"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2016,
+        "train_label": "2012-2015",
+        "weight": 0.25,
+        "metrics": {
+          "trade_count": 10,
+          "cagr": -0.9193,
+          "max_drawdown": 0.6354,
+          "mar_ratio": -1.4467,
+          "sharpe": -11.664,
+          "sortino": -27.4442,
+          "avg_return": -0.05,
+          "median_return": -0.0696,
+          "mean_median_ratio": 0.72,
+          "win_rate": 10.0,
+          "profit_factor": 0.2148,
+          "avg_loss": -0.0708,
+          "min_regime_pf": 0.0,
+          "regime_pf": {
+            "BULL_RISK_ON": 0.0
+          },
+          "first_exit": "2016-02-23",
+          "last_exit": "2016-09-08"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2017,
+        "train_label": "2013-2016",
+        "weight": 0.315,
+        "metrics": {
+          "trade_count": 8,
+          "cagr": 2.6085,
+          "max_drawdown": 0.2346,
+          "mar_ratio": 11.118,
+          "sharpe": 4.9359,
+          "sortino": 96.7241,
+          "avg_return": 0.2439,
+          "median_return": -0.0328,
+          "mean_median_ratio": 7.45,
+          "win_rate": 12.5,
+          "profit_factor": 6.3358,
+          "avg_loss": -0.0522,
+          "min_regime_pf": 6.3358,
+          "regime_pf": {
+            "BULL_RISK_ON": 6.3358
+          },
+          "first_exit": "2017-03-31",
+          "last_exit": "2017-12-29"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2018,
+        "train_label": "2014-2017",
+        "weight": 0.3969,
+        "metrics": {
+          "trade_count": 12,
+          "cagr": -62.1333,
+          "max_drawdown": 37.5369,
+          "mar_ratio": -1.6553,
+          "sharpe": -7.129,
+          "sortino": -6.3982,
+          "avg_return": -3.4957,
+          "median_return": -0.0944,
+          "mean_median_ratio": 37.03,
+          "win_rate": 25.0,
+          "profit_factor": 0.003,
+          "avg_loss": -4.6751,
+          "min_regime_pf": 0.003,
+          "regime_pf": {
+            "BULL_RISK_ON": 0.0129,
+            "BEAR_RISK_OFF": 0.003
+          },
+          "first_exit": "2018-06-27",
+          "last_exit": "2018-12-21"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2019,
+        "train_label": "2015-2018",
+        "weight": 0.5,
+        "metrics": {
+          "trade_count": 4,
+          "cagr": 122.4878,
+          "max_drawdown": 0.1212,
+          "mar_ratio": 1010.8215,
+          "sharpe": 14.1301,
+          "sortino": 8639.8317,
+          "avg_return": 19.811,
+          "median_return": 12.7412,
+          "mean_median_ratio": 1.55,
+          "win_rate": 50.0,
+          "profit_factor": 654.8284,
+          "avg_loss": -0.0606,
+          "min_regime_pf": null,
+          "regime_pf": {},
+          "first_exit": "2018-12-26",
+          "last_exit": "2019-10-22"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2020,
+        "train_label": "2016-2019",
+        "weight": 0.63,
+        "metrics": {
+          "trade_count": 42,
+          "cagr": 4661.9252,
+          "max_drawdown": 0.0914,
+          "mar_ratio": 51005.7458,
+          "sharpe": 6.5347,
+          "sortino": 19353.8798,
+          "avg_return": 6.3567,
+          "median_return": 0.2531,
+          "mean_median_ratio": 25.11,
+          "win_rate": 59.5238,
+          "profit_factor": 188.6312,
+          "avg_loss": -0.0837,
+          "min_regime_pf": 188.6312,
+          "regime_pf": {
+            "BEAR_RISK_OFF": 188.6312
+          },
+          "first_exit": "2020-03-25",
+          "last_exit": "2020-10-22"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2021,
+        "train_label": "2017-2020",
+        "weight": 0.7937,
+        "metrics": {
+          "trade_count": 14,
+          "cagr": 122.5544,
+          "max_drawdown": 0.3697,
+          "mar_ratio": 331.526,
+          "sharpe": 6.1089,
+          "sortino": 2161.2382,
+          "avg_return": 4.7318,
+          "median_return": -0.035,
+          "mean_median_ratio": 135.0,
+          "win_rate": 14.2857,
+          "profit_factor": 89.0335,
+          "avg_loss": -0.0627,
+          "min_regime_pf": 89.0335,
+          "regime_pf": {
+            "BULL_RISK_ON": 89.0335
+          },
+          "first_exit": "2021-01-05",
+          "last_exit": "2021-09-20"
+        },
+        "empty": false
+      },
+      {
+        "test_year": 2022,
+        "train_label": "2018-2021",
+        "weight": 1.0,
+        "metrics": {
+          "trade_count": 22,
+          "cagr": -20.9919,
+          "max_drawdown": 36.8382,
+          "mar_ratio": -0.5698,
+          "sharpe": -1.218,
+          "sortino": -1.7913,
+          "avg_return": -0.5969,
+          "median_return": -0.0918,
+          "mean_median_ratio": 6.5,
+          "win_rate": 40.9091,
+          "profit_factor": 0.7002,
+          "avg_loss": -3.3693,
+          "min_regime_pf": 0.7027,
+          "regime_pf": {
+            "BEAR_RISK_OFF": 0.7027
+          },
+          "first_exit": "2022-01-06",
+          "last_exit": "2022-11-03"
+        },
+        "empty": false
+      }
+    ],
+    "n_scored_folds": 8,
+    "median_fold_mar": 5.2741,
+    "worst_fold_mar": -2.0799,
+    "weighted_fold_mar": 8056.7247,
+    "profitable_fold_frac": 0.5,
+    "oos_union": {
+      "trade_count": 122,
+      "cagr": 42.9454,
+      "max_drawdown": 37.6186,
+      "mar_ratio": 1.1416,
+      "sharpe": 3.7486,
+      "sortino": 11.4972,
+      "avg_return": 2.936,
+      "median_return": -0.0458,
+      "mean_median_ratio": 64.11,
+      "win_rate": 36.0656,
+      "profit_factor": 4.9869,
+      "avg_loss": -1.1519,
+      "min_regime_pf": 4.3593,
+      "regime_pf": {
+        "BULL_RISK_ON": 23.3301,
+        "BEAR_RISK_OFF": 4.3593
+      },
+      "first_exit": "2015-01-05",
+      "last_exit": "2022-11-03"
+    },
+    "recency_half_life_years": 3.0
+  },
+  "holdout": {
+    "_locked": true
+  },
+  "verdict": "REJECT",
+  "verdict_reasons": [
+    "HARD CONSTRAINT: full trades 154 < 300; mean/median 54.56 > 8.0"
+  ],
+  "note_flags": [
+    "TAIL_DEPENDENT"
+  ]
+}

@@ -1,0 +1,5 @@
+score,train_spread,train_mono,recent_spread,recent_mono,recent_n
+composite,17.24,False,29.05,False,402
+roic,17.75,False,9.45,False,402
+sales_growth_yoy,4.29,False,50.45,False,402
+composite_ex_earnings,14.39,False,19.37,False,216
