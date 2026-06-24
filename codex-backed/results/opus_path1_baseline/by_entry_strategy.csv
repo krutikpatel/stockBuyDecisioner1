@@ -1,3 +1,4 @@
 avg_return_pct,count,entry_strategy,median_return_pct,profit_factor,win_rate_pct
-1.1733,180,bull_pullback_entry,0.0,1.5267,38.8889
-16.6412,328,quality_dislocation,7.0452,6.723,62.1951
+0.1536,74,bull_pullback_entry,0.0077,1.0971,54.0541
+1.4299,43168,quality_combined,0.0094,1.8257,54.3736
+13.7145,324,quality_dislocation,0.0279,8.2177,68.2099

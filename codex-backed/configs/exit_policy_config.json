@@ -14,7 +14,8 @@
     "finding_1_breakeven_strangle": "Old breakeven_after_r_multiple=0.05 moved stop to breakeven after a 0.05R move \u2014 trades reaching +2.73% median MFE closed at -0.09%. Fixed: breakeven only after 1.0R, so a winner must earn real cushion before its stop tightens.",
     "finding_2_clock_dependence": "90% of >20% winners exited via MAX_SIM_WINDOW_EXIT \u2014 the sim clock, not a strategy exit. Fixed: trailing stops widened to let winners run on price action, and max_simulation_days set so the clock is a backstop, not the default.",
     "finding_3_partial_profit": "Old sell_pct=1 (short) dumped the entire position at 0.05R = instant tiny 'win'. medium sell_pct=0 took nothing. Fixed: take a real partial (33%) at a real target (1.5R) to bank some gain while leaving runner exposure.",
-    "status": "FROZEN defaults for baseline. Do NOT tune until Path B entry edge is measured through these."
+    "status": "FROZEN defaults for baseline. Do NOT tune until Path B entry edge is measured through these.",
+    "revision_2_protection_gap": "MFE analysis: 57% STOP_LOSS exits, median MFE +3.10% before reversal \u2014 winners bled back to initial stop because target_1 (1.5R/2.0R) and breakeven_after (1.0R) both sat far above the ~1.4 ATR peak. Lowered target_1 to 0.6R (short)/0.8R (medium) and breakeven_after to 0.5R so protection engages near actual peaks. Reasoned defaults, not in-sample fit; loop to refine."
   },
   "default_exit_policy": {
     "short_term": {
@@ -26,10 +27,10 @@
       },
       "partial_profit": {
         "enabled": true,
-        "target_r_multiple": 1.5,
-        "sell_pct": 33,
+        "target_r_multiple": 0.6,
+        "sell_pct": 0.33,
         "move_stop_to_breakeven": true,
-        "breakeven_after_r_multiple": 1.0
+        "breakeven_after_r_multiple": 0.5
       },
       "trailing_stop": {
         "enabled": true,
@@ -52,10 +53,10 @@
       },
       "partial_profit": {
         "enabled": true,
-        "target_r_multiple": 2.0,
-        "sell_pct": 33,
+        "target_r_multiple": 0.8,
+        "sell_pct": 0.33,
         "move_stop_to_breakeven": true,
-        "breakeven_after_r_multiple": 1.0
+        "breakeven_after_r_multiple": 0.5
       },
       "trailing_stop": {
         "enabled": true,

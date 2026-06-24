@@ -18,7 +18,7 @@
             {
               "field": "roic",
               "operator": ">=",
-              "value": 3.0
+              "value": 0.0574
             },
             {
               "field": "sales_growth_yoy",
@@ -29,6 +29,26 @@
               "field": "earnings_within_30_days",
               "operator": "==",
               "value": 0
+            },
+            {
+              "field": "perf_1w",
+              "operator": ">=",
+              "value": -8.0
+            },
+            {
+              "field": "rsi14",
+              "operator": ">=",
+              "value": 35.0
+            },
+            {
+              "field": "sma20_relative",
+              "operator": "<=",
+              "value": 12.0
+            },
+            {
+              "field": "dist_from_52w_high",
+              "operator": ">=",
+              "value": -40.0
             }
           ]
         },
@@ -785,7 +805,7 @@
           "logic": {
             "field": "roic",
             "operator": ">=",
-            "value": 0.2
+            "value": 0.1629
           },
           "reason": "High ROIC \u2014 top-tier capital efficiency (durable factor, IC~0.14 train)"
         },
@@ -797,12 +817,12 @@
               {
                 "field": "roic",
                 "operator": ">=",
-                "value": 0.1
+                "value": 0.0854
               },
               {
                 "field": "roic",
                 "operator": "<",
-                "value": 0.2
+                "value": 0.1629
               }
             ]
           },
@@ -814,7 +834,7 @@
           "logic": {
             "field": "sales_growth_yoy",
             "operator": ">=",
-            "value": 0.1
+            "value": 0.0907
           },
           "reason": "Strong revenue growth \u2014 independent growth factor"
         },
@@ -826,12 +846,12 @@
               {
                 "field": "sales_growth_yoy",
                 "operator": ">=",
-                "value": 0.0
+                "value": 0.0243
               },
               {
                 "field": "sales_growth_yoy",
                 "operator": "<",
-                "value": 0.1
+                "value": 0.0907
               }
             ]
           },
@@ -843,7 +863,7 @@
           "logic": {
             "field": "gross_margin",
             "operator": ">=",
-            "value": 0.4
+            "value": 0.3955
           },
           "reason": "Healthy gross margin confirms business quality"
         }
@@ -855,7 +875,7 @@
           "logic": {
             "field": "roic",
             "operator": "<",
-            "value": 0.1
+            "value": 0.0574
           },
           "reason": "Very low ROIC \u2014 bottom-decile quality, reliably underperforms"
         },
@@ -990,7 +1010,7 @@
           "logic": {
             "field": "roic",
             "operator": ">=",
-            "value": 0.2
+            "value": 0.1629
           },
           "reason": "High ROIC \u2014 top-tier capital efficiency (durable factor, IC~0.14 train)"
         },
@@ -1002,12 +1022,12 @@
               {
                 "field": "roic",
                 "operator": ">=",
-                "value": 0.1
+                "value": 0.0854
               },
               {
                 "field": "roic",
                 "operator": "<",
-                "value": 0.2
+                "value": 0.1629
               }
             ]
           },
@@ -1019,7 +1039,7 @@
           "logic": {
             "field": "sales_growth_yoy",
             "operator": ">=",
-            "value": 0.1
+            "value": 0.0907
           },
           "reason": "Strong revenue growth \u2014 independent growth factor"
         },
@@ -1031,12 +1051,12 @@
               {
                 "field": "sales_growth_yoy",
                 "operator": ">=",
-                "value": 0.0
+                "value": 0.0243
               },
               {
                 "field": "sales_growth_yoy",
                 "operator": "<",
-                "value": 0.1
+                "value": 0.0907
               }
             ]
           },
@@ -1048,49 +1068,9 @@
           "logic": {
             "field": "gross_margin",
             "operator": ">=",
-            "value": 0.4
+            "value": 0.3955
           },
           "reason": "Healthy gross margin confirms business quality"
-        },
-        {
-          "id": "timing_not_in_freefall",
-          "points": 11,
-          "logic": {
-            "field": "perf_1w",
-            "operator": ">=",
-            "value": -8.0
-          },
-          "reason": "Not in a high-velocity breakdown this week"
-        },
-        {
-          "id": "timing_stabilizing",
-          "points": 10,
-          "logic": {
-            "field": "rsi14",
-            "operator": ">=",
-            "value": 35.0
-          },
-          "reason": "Not in deep oversold capitulation"
-        },
-        {
-          "id": "timing_not_overextended",
-          "points": 8,
-          "logic": {
-            "field": "sma20_relative",
-            "operator": "<=",
-            "value": 12.0
-          },
-          "reason": "Not chasing an extreme extension above SMA20"
-        },
-        {
-          "id": "timing_near_recent_structure",
-          "points": 5,
-          "logic": {
-            "field": "dist_from_52w_high",
-            "operator": ">=",
-            "value": -40.0
-          },
-          "reason": "Not a totally broken long-term chart"
         }
       ],
       "penalty_rules": [
@@ -1100,7 +1080,7 @@
           "logic": {
             "field": "roic",
             "operator": "<",
-            "value": 0.1
+            "value": 0.0574
           },
           "reason": "Very low ROIC \u2014 bottom-decile quality, reliably underperforms"
         },

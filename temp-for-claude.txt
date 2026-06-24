@@ -549,14 +549,16 @@ Never start the loop against an empty or technical-strategy baseline.
 CONTEXT — WHY (read once)
 This strategy is "Path B": entries gated on a validated 2-factor quality edge
 (roic + sales_growth_yoy, earnings-proximity excluded), with corrected
-non-destructive exits. It REPLACED a technical-trend strategy that was retired
-after unbiased universe testing showed price-trend features had NEGATIVE forward
-edge (high-trend → underperform) while quality/growth survived into 2022–2025.
-Two prior failures shape these rules: (1) a loop that chased PROFIT FACTOR to
+non-destructive exits. It REPLACED a technical-trend strategy retired after
+unbiased universe testing showed price-trend features had NEGATIVE forward edge
+(high-trend → underperform) while quality/growth survived into 2022–2025.
+Three prior failures shape these rules: (1) a loop that chased PROFIT FACTOR to
 73.96 on 152 trades via trade-count filters and a 65-name exclusion list — a
 curve-fit artifact; (2) a loop whose objective was hijacked by a single 2020
-COVID fold producing MAR in the trillions. Do NOT chase PF. Do NOT add tickers
-to any exclusion list. Do NOT let one fold drive the verdict.
+COVID fold producing MAR in the trillions; (3) a mean/median trade-level guard
+that misfired on a legitimate scratch-heavy trend profile. Do NOT chase PF. Do
+NOT add tickers to any exclusion list. Do NOT let one fold drive the verdict.
+Do NOT treat a high mean/median ratio as a failure — it is normal for this style.
 
 THE METRICS SCRIPT IS AUTHORITATIVE
 All metrics and the accept/reject verdict come from robust_metrics.py. You NEVER
@@ -572,17 +574,31 @@ market_regime. If the ledger is missing, STOP and report — never fabricate met
 
 OBJECTIVE FUNCTION  (ONE primary — no contradictions)
 Primary (MAXIMIZE): MEDIAN-FOLD MAR across walk-forward test folds.
-  Median is chosen over a weighted mean precisely because one outlier fold (e.g.
-  2020) can hijack a mean but not a median.
+  Median is chosen over a weighted mean because one outlier fold (e.g. 2020) can
+  hijack a mean but not a median.
+MAR is BOUNDED: drawdown is floored at 5% (DD_FLOOR_PCT) before dividing, and
+per-fold MAR is capped at 15 (MAR_CAP) as an outlier backstop. This prevents the
+denominator-collapse explosion that scratch-heavy exits cause.
+  SATURATION STOP: if the script prints a SATURATION WARNING (median-fold MAR
+  pinned at/near the cap of 15), the metric has no resolution and the loop is
+  BLIND. STOP immediately and raise DD_FLOOR_PCT until the median sits below the
+  cap with headroom. Do NOT iterate on a saturated metric.
 Gated by (must also hold): worst-fold MAR not materially worse, and >50% of folds
-profitable. weighted-fold MAR, PF, win_rate, Sharpe are DIAGNOSTICS — reported,
-never targeted.
+profitable. weighted-fold MAR, PF, win_rate, Sharpe, mean/median, and top-5%
+profit share are DIAGNOSTICS — reported, never targeted.
 
 HARD CONSTRAINTS (script enforces; any failure => exit 3 => REJECT)
   trade_count(full) >= 300 ; trade_count(OOS union) >= 100 ;
-  mean/median ratio <= 8 (else TAIL_DEPENDENT) ;
-  >= 4 scored folds ; profitable-fold fraction >= 0.50 (else FOLD_FRAGILE) ;
+  >= 4 scored folds ;
+  profitable-fold fraction >= 0.50 (else FOLD_FRAGILE) ;
   max_drawdown finite ; no new exclusion-list tickers.
+TAIL-DEPENDENCE is guarded at the FOLD level (profitable-fold fraction +
+worst-fold MAR) — NOT by any trade-level ratio. mean/median ratio and top-5%
+profit share are ADVISORY FLAGS ONLY (HIGH_MEAN_MEDIAN_ADVISORY,
+PROFIT_CONCENTRATED_ADVISORY); they do NOT fail a run. A scratch-heavy trend book
+legitimately runs a high mean/median ratio (baseline ~160) — this is expected,
+not a defect. The real question "does the edge depend on one fold?" is answered
+by the fold guards.
 
 INVARIANTS (never violate)
 - One config key, one parameter per iteration. No compound changes.
@@ -597,49 +613,55 @@ INVARIANTS (never violate)
   knob into a primary driver.
 
 WALK-FORWARD (script-enforced; you never pick splits)
-robust_metrics.py rolls a 1-year test fold across 2015–2024 and seals 2025 as
-holdout. Fold range: 2015–2024 / hold 2025 tentatively. Selection is MEDIAN-FOLD MAR, gated by worst-fold MAR and the
->50% profitable-fold rule. No single fold (incl. COVID 2020) decides the verdict.
-You read the script's numbers; you never choose or reason about splits yourself.
+robust_metrics.py rolls a 1-year test fold across 2015–2024 and seals 2025 as the
+final-exam holdout (fixed — not tentative). Selection is MEDIAN-FOLD MAR, gated by
+worst-fold MAR and the >50% profitable-fold rule. No single fold (incl. COVID
+2020) decides the verdict. You read the script's numbers; you never choose or
+reason about splits yourself.
 
 ESTABLISH BASELINE — ONCE, BEFORE ITERATION 1 (replaces old cleanup)
-Path B configs are already corrected (quality-first entry config with calibrated
-roic/sales_growth thresholds; exit_policy_config_corrected with breakeven@1.0R,
+Path B configs are already corrected: the quality-first entry config (calibrated
+roic/sales_growth percentile thresholds, earnings-proximity excluded, technical
+rules as timing gates not score drivers) and exit_policy_config_corrected.json
+(current revision — protection triggers lowered to engage near the ~3% MFE peak,
 real partials, rebuilt trailing stops, time-stops enabled, max_sim_days 45/150).
 Do NOT re-apply old technical-strategy cleanup. To establish the anchor:
   1. Confirm a cost model is active (commission + spread + ~5 bps slippage).
   2. Run the backtest, emit results/opus_path1_baseline/trades.csv.
   3. Score it with NO --baseline (Step 5 form) -> verdict BASELINE.
-  4. PROMOTE it. This is the last-accepted anchor. Expect a MODEST result
-     (median-fold MAR positive, PF ~1.2–1.6, WR ~40s–50s, profitable in most
-     folds). A spectacular number here means a bug, not success.
-  5. Sanity-check the baseline's exit-reason mix: MAX_SIM_WINDOW_EXIT should be
-     rare, not dominant. If it dominates, STOP — the exit fix did not take, and
+  4. PROMOTE it. This is the last-accepted anchor. The established baseline is
+     MODEST and healthy: median-fold MAR ~1.3, worst-fold MAR ~ -0.6, ~70%
+     profitable folds, PF ~1.9 (diag), WR ~54% (diag). A spectacular MAR here
+     means a bug (saturation/denominator collapse), not success.
+  5. Sanity-check the baseline's exit-reason mix: it should be trailing-stop /
+     partial dominant with STOP_LOSS ~40-45% and MAX_SIM_WINDOW_EXIT rare (~14%
+     or less). If MAX_SIM dominates, STOP — the exit fix did not take, and
      optimizing on top of broken exits will mislead every iteration.
 
 DECISION RULE
 The script applies it literally vs state/last_accepted_metrics.json: accept needs
 median-fold MAR improvement, worst-fold MAR not worse by >15%, no regime-PF drop
->15%, trade floors held, OOS maxDD not worse >10%, tail guard intact, fold-frag
-gate intact, and no OVERFIT-SUSPECT (WR +>5pts while OOS trades -<20%, or OOS
-trades -<20% for <5% primary gain). You read the verdict; you do not re-derive it.
+>15%, trade floors held, OOS maxDD not worse >10%, profitable-fold gate intact,
+and no OVERFIT-SUSPECT (WR +>5pts while OOS trades -<20%, or OOS trades -<20% for
+<5% primary gain). Trade-level advisory flags do NOT cause rejection. You read the
+verdict; you do not re-derive it.
 
 STOPPING CONDITION
 Stop when any: 5 consecutive rejects; OR median-fold MAR not improved for 15
 iters; OR last 3 accepts each improved median-fold MAR by <2%; OR iteration cap
-{N_MAX}. AT STOP run the FINAL HOLDOUT (Step S). Exit 4 => declare OVERFIT,
-distrust config.
+{N_MAX}; OR a SATURATION WARNING fires (stop and fix the floor before resuming).
+AT STOP run the FINAL HOLDOUT (Step S). Exit 4 => declare OVERFIT, distrust config.
 
 PER-ITERATION SEQUENCE
 
 Step 1 — Expert panel (label each, <=3 sentences, cite prior iter's actual
 numbers from state, not generic priors)
-  [QUANT] expectancy, R-multiples, mean/median ratio, winner:loser geometry,
-    per-fold dispersion.
+  [QUANT] expectancy, R-multiples, per-fold MAR dispersion, winner:loser
+    geometry. (mean/median is context, not a target.)
   [DISCRETIONARY] is the stop inside natural ATR noise; do targets leave trend;
     is the quality gate too tight (starving trades) or too loose (junk in).
   [RISK] does the change widen or narrow the loss distribution; does the gain
-    survive on the MEDIAN fold and the WORST fold, not just the mean; cut
+    survive on the MEDIAN fold and the WORST fold, not just one good fold; cut
     max-loss-per-trade before chasing upside.
 
 Step 2 — Synthesize -> ONE change
@@ -661,14 +683,17 @@ Step 5 — Score + verdict (authoritative; holdout locked)
     --baseline codex-backed/state/last_accepted_metrics.json \
     --out codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
     --holdout-locked
-  Capture the printed verdict line + exit code. Exit 0=ACCEPT, 2/3=REJECT.
-  (Use the SAME --out path string in Step 7 — it must match exactly.)
+  Capture the printed verdict line + exit code. Also watch stderr for a
+  SATURATION WARNING (stop if present). Exit 0=ACCEPT, 2/3=REJECT.
 
 Step 6 — Decide (read, don't re-derive)
   exit 0 -> ACCEPT ; exit 2 -> REJECT ; exit 3 -> REJECT (hard-constraint) ;
   on REJECT, revert the config change NOW before the next iteration.
 
 Step 7 — promote (if accept) -> log  [ONE logger only]
+  The metrics-json path is, for this iteration, exactly:
+    codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json
+  It MUST be byte-identical to Step 5 --out in (a), (c), and (d) below.
   (a) If ACCEPT, promote FIRST (sets the anchor the next iteration scores against):
     codex-backed/.venv/bin/python codex-backed/scripts/robust_metrics.py promote \
       --metrics codex-backed/state/run_fmp_loop_<DATE-TIME>-<N>_metrics.json \
@@ -683,7 +708,6 @@ Step 7 — promote (if accept) -> log  [ONE logger only]
       --note "<predicted vs actual; decisive clause from script>" \
       --next "<what to try next; what NOT to retry and why>"
   (d) Record the metrics-json path in optimization_state.json for cross-iter memory.
-  NOTE: the metrics-json path in (a)(c)(d) and Step 5 --out must be byte-identical.
 
 Step 8 — Report (one line per voice + one summary line; nothing else)
   [iter N] <change> -> <accept|reject> (medMAR A→B, worstMAR C→D, profFolds E→F,
@@ -699,7 +723,7 @@ TOKEN DISCIPLINE
   memory. After logging, do NOT re-read prior run summaries or metrics json.
 - The score step prints everything you need; never echo full metrics objects.
 - Carry forward only last-accepted key metrics (median-fold MAR, worst-fold MAR,
-  profitable-fold frac, OOS trades, min-regime-PF, mean/median, PF+WR diagnostics).
+  profitable-fold frac, OOS trades, min-regime-PF, PF+WR diagnostics).
   Rejected runs: one line only (iter, change, reject reason).
 - Do not restate framework/rule/invariants each iteration — reference by name.
 - Emit only the Step 8 line + the audit append.

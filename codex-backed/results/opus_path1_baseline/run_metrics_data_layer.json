@@ -1,8 +1,8 @@
 {
   "backtest": {
-    "cache_hits": 0,
-    "cache_misses": 1,
-    "cache_hit_rate": 0.0,
+    "cache_hits": 1,
+    "cache_misses": 0,
+    "cache_hit_rate": 1.0,
     "api_errors_by_status": {},
     "latency_p50_ms": null,
     "latency_p99_ms": null,

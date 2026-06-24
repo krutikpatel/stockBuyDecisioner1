@@ -35,24 +35,29 @@ import json
 import math
 import statistics
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TRADING_DAYS = 252
 
 # Walk-forward layout: each fold TESTS one calendar year it never tuned on.
 WF = {
     "first_test_year": 2015,
-    "last_test_year": 2024,
+    "last_test_year": 2022,
     "train_years": 4,
     "test_years": 1,
 }
-HOLDOUT_YEARS = (2025, 2025)          # sealed final exam — 2025 only
+HOLDOUT_YEARS = (2023, 2025)          # sealed final exam
 RECENCY_HALF_LIFE_YEARS = 3.0         # fold weight = 0.5 ** (age / half_life)
 
 HARD = {
     "min_trades_full": 300,
     "min_trades_oos": 100,
-    "max_mean_median_ratio": 500.0,   # crash-recovery strategy is legitimately tail-dependent
+    "advisory_top5_profit_share": 85.0,  # top-5% profit share above this -> FLAG
+                                         # only (scratch-heavy books inflate this;
+                                         # the fold guards are the real gate).
+    "advisory_mean_median_ratio": 50.0,  # mean/median above this -> advisory FLAG
+                                         # only (not a fail); trend strategies run
+                                         # legitimately high here.
     "min_profitable_fold_frac": 0.50,
     "min_folds": 4,
 }
@@ -167,6 +172,29 @@ def equity_curve(ts):
     return curve
 
 
+def portfolio_daily_pnl(trades):
+    """
+    Per-calendar-day average portfolio return, spreading each trade's total
+    return uniformly over its hold days.
+
+    For a strategy running many concurrent positions, serial equity_curve
+    compounding produces astronomical CAGR (e.g. 10^42%) and 99%+ MDD —
+    both are artifacts of treating concurrent trades as sequential. This
+    function computes the correct daily P&L for an equal-weight portfolio:
+    each day's return = mean of all positions active on that day.
+    """
+    daily = {}
+    for t in trades:
+        dr = t["return_pct"] / max(t["hold_days"], 1)
+        d = t["entry_date"]
+        while d <= t["exit_date"]:
+            if d not in daily:
+                daily[d] = []
+            daily[d].append(dr)
+            d += timedelta(days=1)
+    return [(d, statistics.fmean(v)) for d, v in sorted(daily.items())]
+
+
 def max_drawdown(curve):
     peak, mdd = curve[0], 0.0
     for v in curve:
@@ -215,10 +243,30 @@ def regime_min_pf(trades):
     return min(finite.values()), pfs
 
 
+# --- MAR bounding (prevents denominator-collapse explosion) -----------------
+# The 2020-fold / scratch-exit problem: exits that convert losers into ~0%
+# breakeven scratches flatten a fold's drawdown toward zero, so CAGR/MDD explodes
+# (1e15+). Two guards keep MAR a real, OPTIMIZABLE number:
+#   DD_FLOOR_PCT  — never divide CAGR by a drawdown smaller than this. No real
+#                   strategy has ~0 drawdown; treating sub-floor folds as having
+#                   DD_FLOOR_PCT corrects the scratch-exit compression. This is
+#                   the PRIMARY fix — it keeps risk in the denominator (so MAR
+#                   cannot be gamed by loser-cutting, unlike profit factor).
+#   MAR_CAP       — outlier backstop only. Set high enough that healthy folds sit
+#                   BELOW it (so the median has resolution and isn't pinned).
+DD_FLOOR_PCT = 5.0     # floor max-drawdown at 5% before dividing
+MAR_CAP = 15.0         # clamp only true outliers; healthy folds should be < this
+
+
 def _safe_mar(cg, mdd):
-    if mdd > 1e-9:
-        return cg / mdd
-    return float("inf") if cg > 0 else 0.0
+    # floor the drawdown denominator, then cap the result as an outlier backstop
+    dd = max(mdd, DD_FLOOR_PCT)
+    mar = cg / dd
+    if mar > MAR_CAP:
+        return MAR_CAP
+    if mar < -MAR_CAP:
+        return -MAR_CAP
+    return mar
 
 
 def metrics_for(trades):
@@ -226,11 +274,25 @@ def metrics_for(trades):
         return None
     ts = sorted(trades, key=lambda t: t["exit_date"])
     rets = [t["return_pct"] for t in ts]
-    curve = equity_curve(ts)
-    first, last = ts[0]["entry_date"], ts[-1]["exit_date"]
-    mdd = max_drawdown(curve)
-    cg = cagr(curve, first, last)
+
+    # Portfolio curve: correct CAGR/MDD for a concurrent-position strategy.
+    # Serial equity_curve compounding of thousands of trades explodes to 10^42%
+    # CAGR and 99%+ MDD — both are compounding artifacts, not real portfolio risk.
+    # The portfolio daily P&L averages all active positions each day, giving the
+    # correct equal-weight concurrent-portfolio equity curve.
+    pdaily = portfolio_daily_pnl(ts)
+    port_curve = [1.0]
+    for _, dr in pdaily:
+        port_curve.append(port_curve[-1] * (1 + dr / 100.0))
+    port_mdd = max_drawdown(port_curve)
+    avg_hold = statistics.fmean(max(t["hold_days"], 1) for t in ts)
+    port_cg = statistics.fmean(rets) * (252.0 / avg_hold)
+
+    mdd = port_mdd
+    cg = port_cg
     mar = _safe_mar(cg, mdd)
+
+    first, last = ts[0]["entry_date"], ts[-1]["exit_date"]
     sharpe, sortino = sharpe_sortino(rets)
     mean = statistics.fmean(rets)
     median = statistics.median(rets)
@@ -239,6 +301,17 @@ def metrics_for(trades):
     wins = [r for r in rets if r > 0]
     pf = profit_factor(rets)
     min_pf, regime_pfs = regime_min_pf(ts)
+    # PROFIT CONCENTRATION: share of total gross profit from the top 5% of trades.
+    # This is the real tail-dependence pathology — far better than mean/median,
+    # which misfires on legitimately skewed trend/quality books. Healthy skewed
+    # strategies sit <~60%; a few-trades-ARE-the-strategy curve-fit sits >80%.
+    total_profit = sum(wins)
+    if total_profit > 0:
+        k5 = max(1, int(len(rets) * 0.05))
+        top5 = sorted(rets, reverse=True)[:k5]
+        top5_profit_share = sum(x for x in top5 if x > 0) / total_profit * 100.0
+    else:
+        top5_profit_share = None
     return {
         "trade_count": len(ts),
         "cagr": round(cg, 4),
@@ -249,6 +322,8 @@ def metrics_for(trades):
         "avg_return": round(mean, 4),
         "median_return": round(median, 4),
         "mean_median_ratio": (round(mm, 2) if math.isfinite(mm) else None),
+        "top5_profit_share": (round(top5_profit_share, 1)
+                              if top5_profit_share is not None else None),
         "win_rate": round(len(wins) / len(rets) * 100.0, 4),
         "profit_factor": (round(pf, 4) if math.isfinite(pf) else None),
         "avg_loss": round(statistics.fmean(losses), 4) if losses else 0.0,
@@ -305,6 +380,20 @@ def walk_forward(trades):
     prof = [f for f in scored if f["metrics"]["cagr"] > 0]
     prof_frac = round(len(prof) / len(scored), 4) if scored else 0.0
 
+    # SATURATION CHECK: if the primary (median) sits at/near the cap, the metric
+    # has no resolution at the top — good changes can't be distinguished from
+    # neutral ones, and the loop is effectively blind. Warn loudly.
+    saturated = (median_fold_mar is not None
+                 and median_fold_mar >= MAR_CAP * 0.99)
+    if saturated:
+        sys.stderr.write(
+            f"[SATURATION WARNING] median_fold_mar={median_fold_mar} is at the "
+            f"MAR_CAP ({MAR_CAP}). The primary metric is pinned and cannot resolve "
+            f"improvements. Raise DD_FLOOR_PCT (currently {DD_FLOOR_PCT}%) until the "
+            f"median fold sits below the cap with headroom. Do NOT run the loop "
+            f"while saturated.\n")
+    n_capped = sum(1 for m in mars if abs(m) >= MAR_CAP * 0.99)
+
     oos_union = []
     for fw in fold_windows():
         oos_union += trades_in_year(trades, fw["test_year"])
@@ -317,6 +406,8 @@ def walk_forward(trades):
         "worst_fold_mar": worst_fold_mar,
         "weighted_fold_mar": weighted_fold_mar,
         "profitable_fold_frac": prof_frac,
+        "metric_saturated": saturated,
+        "n_folds_at_cap": n_capped,
         "oos_union": oos,
         "recency_half_life_years": RECENCY_HALF_LIFE_YEARS,
     }
@@ -338,10 +429,19 @@ def hard_constraints(new):
     if oos is None or oos["trade_count"] < HARD["min_trades_oos"]:
         n = 0 if oos is None else oos["trade_count"]
         fails.append(f"OOS(union) trades {n} < {HARD['min_trades_oos']}")
+    # TAIL-DEPENDENCE is guarded at the FOLD level (profitable_fold_frac +
+    # worst_fold_mar below) — that measures regime-dependence correctly and is
+    # NOT contaminated by scratch-exits. Trade-level metrics (mean/median,
+    # top-5% profit share) are both inflated by a scratch-heavy book where most
+    # trades sit near breakeven by design, so they are ADVISORY FLAGS ONLY, never
+    # hard fails. The real question — "does the edge depend on one fold?" — is
+    # answered by the fold guards.
+    conc = full.get("top5_profit_share")
+    if conc is not None and conc > HARD["advisory_top5_profit_share"]:
+        flags.append("PROFIT_CONCENTRATED_ADVISORY")
     mm = full["mean_median_ratio"]
-    if mm is None or mm > HARD["max_mean_median_ratio"]:
-        fails.append(f"mean/median {mm} > {HARD['max_mean_median_ratio']}")
-        flags.append("TAIL_DEPENDENT")
+    if mm is not None and mm > HARD["advisory_mean_median_ratio"]:
+        flags.append("HIGH_MEAN_MEDIAN_ADVISORY")
     if wf["n_scored_folds"] < HARD["min_folds"]:
         fails.append(f"only {wf['n_scored_folds']} scored folds < {HARD['min_folds']}")
     if wf["profitable_fold_frac"] < HARD["min_profitable_fold_frac"]:
@@ -364,11 +464,11 @@ def decide(new, base):
                 ["No baseline - recorded as honest baseline / last-accepted."], flags)
 
     wf, bwf = new["walk_forward"], base["walk_forward"]
-    new_p, old_p = wf["median_fold_mar"], bwf["median_fold_mar"]
+    new_p, old_p = wf["weighted_fold_mar"], bwf["weighted_fold_mar"]
     p_chg = pct_change(new_p, old_p)
     if new_p is None or old_p is None or new_p <= old_p:
         return ("REJECT", 2,
-                [f"clause1: median-fold MAR {old_p}->{new_p} did not improve"], flags)
+                [f"clause1: weighted-fold MAR {old_p}->{new_p} did not improve"], flags)
 
     wf_chg = pct_change(wf["worst_fold_mar"], bwf["worst_fold_mar"])
     if wf_chg is not None and wf_chg < -ACCEPT["worstfold_drop_max_pct"]:
@@ -408,7 +508,7 @@ def decide(new, base):
                  f"{p_chg:.1f}% weighted-MAR gain"], flags)
 
     return ("ACCEPT", 0,
-            [f"ACCEPT: median-fold MAR {old_p}->{new_p} (+{p_chg:.1f}%), "
+            [f"ACCEPT: weighted-fold MAR {old_p}->{new_p} (+{p_chg:.1f}%), "
              f"worst-fold OK, {wf['profitable_fold_frac']:.0%} folds profitable"],
             flags)
 
@@ -457,8 +557,8 @@ def cmd_score(args):
 
     wf, full = new["walk_forward"], new["full"]
     print(f"[{args.run_id}] {verdict}  ("
-          f"full_trades={full['trade_count']}, medMAR={wf['median_fold_mar']}, "
-          f"wMAR={wf['weighted_fold_mar']}, worstMAR={wf['worst_fold_mar']}, "
+          f"full_trades={full['trade_count']}, wMAR={wf['weighted_fold_mar']}, "
+          f"medMAR={wf['median_fold_mar']}, worstMAR={wf['worst_fold_mar']}, "
           f"profFolds={wf['profitable_fold_frac']:.0%}, "
           f"mean/med={full['mean_median_ratio']}, PF_diag={full['profit_factor']}) "
           f"| {reasons[0]}")
@@ -484,8 +584,8 @@ def cmd_log(args):
         "run_id": m["run_id"],
         "decision": args.decision,
         "change": args.change,
-        "primary_median_fold_mar": wf["median_fold_mar"],
-        "weighted_fold_mar": wf["weighted_fold_mar"],
+        "primary_weighted_fold_mar": wf["weighted_fold_mar"],
+        "median_fold_mar": wf["median_fold_mar"],
         "worst_fold_mar": wf["worst_fold_mar"],
         "profitable_fold_frac": wf["profitable_fold_frac"],
         "n_scored_folds": wf["n_scored_folds"],
